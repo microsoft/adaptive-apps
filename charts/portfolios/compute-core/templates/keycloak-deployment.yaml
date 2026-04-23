@@ -1,0 +1,115 @@
+{{- if .Values.components.keycloak.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "computeCore.keycloak.serviceName" . }}
+  labels:
+    {{- include "computeCore.labels" . | nindent 4 }}
+    app.kubernetes.io/component: keycloak
+spec:
+  replicas: {{ .Values.keycloak.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "computeCore.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: keycloak
+  template:
+    metadata:
+      labels:
+        {{- include "computeCore.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: keycloak
+    spec:
+      {{- if .Values.serviceAccount.create }}
+      serviceAccountName: {{ default (include "computeCore.fullname" .) .Values.serviceAccount.name }}
+      {{- else if .Values.serviceAccount.name }}
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.keycloak.podSecurityContext | nindent 8 }}
+      containers:
+        - name: keycloak
+          image: "{{ .Values.keycloak.image.repository }}:{{ .Values.keycloak.image.tag }}"
+          imagePullPolicy: {{ .Values.keycloak.image.pullPolicy }}
+          command:
+            - /opt/keycloak/bin/kc.sh
+            - start
+            - --http-enabled=true
+            - --health-enabled=true
+            - --hostname-strict=false
+            - --proxy-headers=xforwarded
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          securityContext:
+            {{- toYaml .Values.keycloak.securityContext | nindent 12 }}
+          env:
+            - name: KC_DB
+              value: postgres
+            {{- if .Values.postgresql.enabled }}
+            - name: KC_DB_URL_HOST
+              value: {{ include "computeCore.keycloak.postgresqlName" . }}
+            - name: KC_DB_URL_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "computeCore.keycloak.postgresqlName" . }}-auth
+                  key: database
+            - name: KC_DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "computeCore.keycloak.postgresqlName" . }}-auth
+                  key: username
+            - name: KC_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "computeCore.keycloak.postgresqlName" . }}-auth
+                  key: password
+            {{- else }}
+            - name: KC_DB_URL_HOST
+              value: {{ .Values.externalDatabase.host | quote }}
+            - name: KC_DB_URL_PORT
+              value: {{ .Values.externalDatabase.port | quote }}
+            - name: KC_DB_URL_DATABASE
+              value: {{ .Values.externalDatabase.database | quote }}
+            - name: KC_DB_USERNAME
+              value: {{ .Values.externalDatabase.username | quote }}
+            - name: KC_DB_PASSWORD
+              value: {{ .Values.externalDatabase.password | quote }}
+            {{- end }}
+            - name: KC_BOOTSTRAP_ADMIN_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "computeCore.keycloak.serviceName" . }}-admin
+                  key: username
+            - name: KC_BOOTSTRAP_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "computeCore.keycloak.serviceName" . }}-admin
+                  key: password
+            - name: KC_CACHE
+              value: ispn
+            - name: KC_CACHE_STACK
+              value: kubernetes
+            - name: JAVA_OPTS_APPEND
+              value: "-Djgroups.dns.query={{ include "computeCore.keycloak.discoveryServiceName" . }}"
+          startupProbe:
+            tcpSocket:
+              port: http
+            failureThreshold: 30
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 6
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 6
+          {{- with .Values.keycloak.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}

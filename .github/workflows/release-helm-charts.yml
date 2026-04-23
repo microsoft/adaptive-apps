@@ -1,0 +1,80 @@
+name: Release Helm Charts
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'charts/portfolios/**'
+
+env:
+  OCI_REGISTRY: ghcr.io
+
+jobs:
+  release:
+    name: Release ${{ matrix.portfolio }}-${{ matrix.chart }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - portfolio: compute-core
+            chart: compute-core
+            chart_path: charts/portfolios/compute-core
+            oci_repo: oci://ghcr.io/${{ github.repository_owner }}/portable-apps/charts/portfolios
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+
+      - name: Login to GitHub Container Registry
+        run: |
+          echo "${{ github.token }}" | helm registry login ${{ env.OCI_REGISTRY }} -u "${{ github.actor }}" --password-stdin
+
+      - name: Lint chart
+        run: helm lint ${{ matrix.chart_path }}
+
+      - name: Package chart
+        id: package
+        run: |
+          set -euo pipefail
+
+          mkdir -p .helm-packages
+          helm package ${{ matrix.chart_path }} --destination .helm-packages
+
+          chart_version="$(helm show chart ${{ matrix.chart_path }} | awk -F': ' '/^version:/ {print $2}')"
+          package_file=".helm-packages/${{ matrix.chart }}-${chart_version}.tgz"
+
+          if [[ ! -f "$package_file" ]]; then
+            echo "Unable to find packaged chart at $package_file"
+            exit 1
+          fi
+
+          echo "version=$chart_version" >> "$GITHUB_OUTPUT"
+          echo "package_file=$package_file" >> "$GITHUB_OUTPUT"
+          echo "release_tag=helm-${{ matrix.portfolio }}-${{ matrix.chart }}-v${chart_version}" >> "$GITHUB_OUTPUT"
+
+      - name: Push chart to GHCR OCI registry
+        run: |
+          helm push "${{ steps.package.outputs.package_file }}" "${{ matrix.oci_repo }}"
+
+      - name: Create GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          allowUpdates: true
+          artifactErrorsFailBuild: true
+          artifacts: ${{ steps.package.outputs.package_file }}
+          tag: ${{ steps.package.outputs.release_tag }}
+          name: Helm ${{ matrix.portfolio }}/${{ matrix.chart }} v${{ steps.package.outputs.version }}
+          body: |
+            Released Helm chart `${{ matrix.chart }}` for capability portfolio `${{ matrix.portfolio }}`.
+
+            OCI reference:
+            `${{ matrix.oci_repo }}/${{ matrix.chart }}:${{ steps.package.outputs.version }}`

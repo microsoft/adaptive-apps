@@ -4,7 +4,8 @@ This directory contains all Radius assets needed to deploy the **portable-apps**
 
 ```
 radius/
-├── app.bicep                          # Radius application model (5 services)
+├── app.bicep                          # Radius application model (no AI agent)
+├── app-with-ai.bicep                  # Radius application model (includes AI agent)
 ├── local-env.bicep                    # Environment for local k3s (Kaito AI recipe)
 ├── aks-env.bicep                      # Environment for AKS / Azure (Azure OpenAI recipe)
 ├── bicepconfig.json                   # Bicep extension references
@@ -133,24 +134,30 @@ Gather the values you will pass on the command line in Step 7 (`authPassword` is
 |-----------|-------------|-------------------|
 | `imageRegistry` | Container registry prefix | `ghcr.io/haishi2016/portable-apps` |
 | `authPassword` | Password for the local frontend login | *(required — no default)* |
-| `aiModel` | Model hint passed to the AI Recipe | `gpt-4o` |
 
 ---
 
-## Step 7 — Deploy the application
+## Step 7 — Deploy the application (without AI)
 
 ```bash
 cd radius/
-rad deploy app.bicep --group trading --environment trading --parameters imageRegistry=ghcr.io/haishi2016/portable-apps --parameters imageTag=latest --parameters authUsername=admin --parameters authPassword=<your-password> --parameters aiModel=gpt-4o
+rad deploy app.bicep --group trading --environment trading --parameters imageRegistry=ghcr.io/haishi2016/portable-apps --parameters imageTag=latest --parameters authUsername=admin --parameters authPassword=<your-password>
 ```
 
 This single command:
 1. Runs the PostgreSQL Recipe → deploys Postgres + seeds the trading schema
 2. Runs the Mosquitto Recipe → deploys the MQTT broker
-3. Deploys the `backend`, `ai-agent`, and `frontend` containers with all
+3. Deploys the `backend` and `frontend` containers with all
    environment variables wired up from the Recipe outputs
-4. The frontend proxies all browser traffic to backend, ai-agent, and MQTT
+4. The frontend proxies all browser traffic to backend and MQTT
    — only port 3000 needs to be exposed
+
+### Optional: deploy with AI agent enabled
+
+```bash
+cd radius/
+rad deploy app-with-ai.bicep --group trading --environment trading --parameters imageRegistry=ghcr.io/haishi2016/portable-apps --parameters imageTag=latest --parameters authUsername=admin --parameters authPassword=<your-password> --parameters aiModel=Qwen/Qwen3-0.6B
+```
 
 Monitor deployment:
 
@@ -176,8 +183,8 @@ Then open **http://localhost:3000** and log in with the `authUsername` / `authPa
 
 ## Deploying to Azure
 
-The same `app.bicep` works on Azure — only the infrastructure setup changes.
-Instead of a local Kaito LLM, the AI recipe provisions an Azure OpenAI account.
+For Azure deployments with AI, use `app-with-ai.bicep`. Instead of a local Kaito
+LLM, the AI recipe provisions an Azure OpenAI account.
 
 ### Azure prerequisites
 
@@ -271,7 +278,7 @@ rad deploy aks-env.bicep \
 ### Azure Step 5 — Deploy the application
 
 ```bash
-rad deploy app.bicep --group trading --environment aks-trading \
+rad deploy app-with-ai.bicep --group trading --environment aks-trading \
   --parameters authPassword=<your-password> \
   --parameters aiModel=gpt-4o
 ```

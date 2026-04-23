@@ -1,10 +1,11 @@
-// app.bicep — Radius application model for portable-apps (no AI agent)
+// app-with-ai.bicep — Radius application model for portable-apps
 //
-// Deploys the stock-trading simulator on Kubernetes via Radius:
+// Deploys the full stock-trading simulator on Kubernetes via Radius:
 //   • Radius.Resources/postgreSqlDatabases  → PostgreSQL 16 (with trading schema)
 //   • Radius.Resources/mqttBrokers          → Eclipse Mosquitto 2 (MQTT + WS)
 //   • Radius.Resources/idProviders          → OIDC identity provider (Keycloak by default)
-//   • Applications.Core/containers           → backend (.NET 8), frontend (Node)
+//   • Radius.Resources/aiAgents             → AI inference endpoint (provider chosen by Recipe)
+//   • Applications.Core/containers     → backend (.NET 8), ai-agent (.NET 8), frontend (Node)
 //
 // BEFORE DEPLOYING this file you must:
 //   1. Generate & register the Bicep extension (see README.md)
@@ -55,8 +56,16 @@ param oidcBrowserAuthEndpoint string = ''
 param oidcIssuerOverride string = ''
 
 // No browser-facing URL parameters needed — the frontend server
-// proxies all backend and MQTT traffic. Only the frontend
+// proxies all backend, AI-agent, and MQTT traffic. Only the frontend
 // port needs to be exposed.
+
+@description('''
+Model or deployment name hint for the AI Recipe.
+  Kaito (kubernetes-kaito.bicep)       : a Kaito preset, e.g. llama-3.1-8b-instruct
+  Azure OpenAI (azure-openai.bicep)    : a model name to deploy, e.g. gpt-4o
+The Recipe uses this value when provisioning the inference backend.
+''')
+param aiModel string = 'Qwen/Qwen3-0.6B'
 
 var otelCollectorConfig = '''
 receivers:
@@ -117,6 +126,15 @@ resource tradingIdP 'Radius.Resources/idProviders@2025-08-01-preview' = {
   properties: {
     environment: environment
     application: tradingApp.id
+  }
+}
+
+resource tradingAI 'Radius.Resources/aiAgents@2025-08-01-preview' = {
+  name: 'trading-ai'
+  properties: {
+    environment: environment
+    application: tradingApp.id
+    model: aiModel
   }
 }
 
@@ -181,6 +199,36 @@ resource otelCollector 'Applications.Core/containers@2023-10-01-preview' = {
   }
 }
 
+resource aiAgent 'Applications.Core/containers@2023-10-01-preview' = {
+  name: 'ai-agent'
+  properties: {
+    application: tradingApp.id
+    container: {
+      image: '${imageRegistry}/ai-agent:${imageTag}'
+      ports: {
+        http: {
+          containerPort: 7000
+        }
+      }
+      env: {
+        ASPNETCORE_URLS: { value: 'http://+:7000' }
+        OTEL_SERVICE_NAME: { value: 'trading-ai-agent' }
+        OTEL_RESOURCE_ATTRIBUTES: { value: 'service.namespace=portable-apps,service.version=1.0.0,deployment.environment=radius' }
+        OTEL_EXPORTER_OTLP_ENDPOINT: { value: 'http://otel-collector:4318' }
+        OTEL_EXPORTER_OTLP_PROTOCOL: { value: 'http/protobuf' }
+        // Radius auto-injects CONNECTION_AI_PROVIDER, CONNECTION_AI_ENDPOINT,
+        // and CONNECTION_AI_MODEL from the aiAgents connection below.
+        // Only the secret requires explicit wiring (secrets are not auto-injected).
+        CONNECTION_AI_SECRETS_APIKEY: { value: tradingAI.properties.secrets.apiKey }
+      }
+    }
+    connections: {
+      ai: { source: tradingAI.id }
+      otel: { source: otelCollector.id }
+    }
+  }
+}
+
 resource backend 'Applications.Core/containers@2023-10-01-preview' = {
   name: 'backend'
   properties: {
@@ -234,6 +282,7 @@ resource frontend 'Applications.Core/containers@2023-10-01-preview' = {
         // In-cluster service URLs — the frontend server proxies all
         // browser traffic to these endpoints, so only port 3000 is exposed.
         BACKEND_URL:    { value: 'http://backend:8080' }
+        AI_AGENT_URL:   { value: 'http://ai-agent:7000' }
         MQTT_WS_URL:    { value: 'ws://${tradingMqtt.properties.host}:${tradingMqtt.properties.wsPort}' }
         // OIDC values from Radius.Resources/idProviders.
         OIDC_ISSUER:    { value: oidcIssuerOverride == '' ? tradingIdP.properties.issuer : oidcIssuerOverride }
@@ -251,6 +300,7 @@ resource frontend 'Applications.Core/containers@2023-10-01-preview' = {
     }
     connections: {
       backend: { source: backend.id }
+      aiAgent: { source: aiAgent.id }
       mqtt:    { source: tradingMqtt.id }
       idp:     { source: tradingIdP.id }
       otel:    { source: otelCollector.id }
