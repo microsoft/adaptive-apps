@@ -1,0 +1,55 @@
+name: Publish Radius Recipes
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'radius/recipes/**'
+
+env:
+  RECIPE_REGISTRY: 'ghcr.io/haishi2016/portable-apps'
+
+jobs:
+  publish-recipes:
+    name: Publish Radius recipes to GHCR
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - file: radius/recipes/postgres/kubernetes-trading-postgres.bicep
+            tag: recipes/postgres:latest
+          - file: radius/recipes/mqtt/kubernetes-mosquitto.bicep
+            tag: recipes/mqtt:latest
+          - file: radius/recipes/idp/kubernetes-keycloak.bicep
+            tag: recipes/idp-keycloak:latest
+          - file: radius/recipes/ai-agent/kubernetes-kaito.bicep
+            tag: recipes/ai-agent-kaito:latest
+          - file: radius/recipes/ai-agent/azure-openai.bicep
+            tag: recipes/ai-agent-azure-openai:latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Radius CLI
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/radius-project/radius/main/deploy/install.sh | bash
+          echo "$HOME/.rad/bin" >> $GITHUB_PATH
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish ${{ matrix.tag }}
+        run: |
+          rad bicep publish \
+            --file ${{ matrix.file }} \
+            --target br:${{ env.RECIPE_REGISTRY }}/${{ matrix.tag }}

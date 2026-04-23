@@ -1,0 +1,68 @@
+# Kaito Workspace – deploys an open-source LLM to Kubernetes (BYO GPU mode)
+# Prerequisites:
+#   1. k3s (or any K8s distro) with the Kaito operator installed
+#      (nodeAutoProvisioning disabled)
+#   2. A single GPU node with the NVIDIA device plugin installed
+#      (nvidia.com/gpu must appear in allocatable)
+#   3. Label the GPU node:
+#        kubectl label node <node-name> kaito-gpu=true
+#
+# WSL2 / k3s notes:
+#   - The nvidia container runtime must be installed (nvidia-container-toolkit).
+#   - Kaito does NOT set runtimeClassName on the StatefulSet it creates.
+#     After the Workspace is created, patch the StatefulSet:
+#       kubectl patch statefulset trading-advisor --type='json' \
+#         -p='[{"op":"add","path":"/spec/template/spec/runtimeClassName","value":"nvidia"}]'
+#     Or make nvidia the default runtime in the k3s containerd config.
+#
+# Apply:  kubectl apply -f kaito-workspace.yaml
+# Status: kubectl get workspace trading-advisor -o yaml
+#
+# Once ready, the model is reachable inside the cluster at:
+#   http://workspace-trading-advisor.default.svc.cluster.local:80/v1
+#
+# Set AI_ENDPOINT to that URL in your ai-agent deployment.
+# -------------------------------------------------------------------------
+apiVersion: kaito.sh/v1beta1
+kind: Workspace
+metadata:
+  name: trading-advisor
+resource:
+  preferredNodes:
+    - "desktop-v6hak8h"                 # BYO GPU node name (kubectl get nodes)
+  labelSelector:
+    matchLabels:
+      nvidia.com/gpu: "true"                 # Matches nvidia.com/gpu=true label on the node
+inference:
+  preset:
+    name: Qwen/Qwen3-0.6B              # 0.6B params, fits in 4GB VRAM.
+                                        # Generic HF model ID — see
+                                        # https://github.com/kaito-project/kaito
+  config: trading-advisor-inference-params   # Reference to ConfigMap below
+---
+# ConfigMap with vLLM inference parameters.
+# See https://kaito-project.github.io/kaito/docs/inference/#inference-with-custom-parameters
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trading-advisor-inference-params
+data:
+  inference_config.yaml: |
+    vllm:
+      max-model-len: 2048              # Cap context length to fit 4GB VRAM
+      gpu-memory-utilization: 0.75         # Aggressively utilize GPU memory for best performance
+      enforce-eager: true                # Eager mode can reduce latency for small models
+---
+# Optional: expose the model outside the cluster for local dev
+apiVersion: v1
+kind: Service
+metadata:
+  name: kaito-external
+spec:
+  type: LoadBalancer        # Use ClusterIP if only accessed from within the cluster
+  selector:
+    app: workspace-trading-advisor
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80

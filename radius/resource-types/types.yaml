@@ -1,0 +1,310 @@
+# types.yaml — All portable-apps Radius Resource Type definitions
+#
+# A single namespace is used for all custom resources:
+#   Radius.Resources → postgreSqlDatabases, mqttBrokers, aiAgents
+#
+# Publish a single Bicep extension bundle from this file:
+#
+#   rad bicep publish-extension \
+#     --file resource-types/types.yaml \
+#     --target types.tgz
+#
+# Register all three resource types in one command:
+#
+#   rad resource-type create --from-file resource-types/types.yaml
+
+namespace: Radius.Resources
+types:
+  postgreSqlDatabases:
+    description: |
+      The Radius.Resources/postgreSqlDatabases Resource Type adds a PostgreSQL database to an application.
+
+      Start by adding a postgreSqlDatabases resource to your application definition Bicep file:
+
+        resource db 'Radius.Resources/postgreSqlDatabases@2025-08-01-preview' = {
+          name: 'db'
+          properties: {
+            environment: environment
+            application: app.id
+            size: 'S'
+          }
+        }
+
+      Then add a connection from a Container resource to the database resource.
+
+        resource myContainer 'Applications.Core/containers@2023-10-01-preview' = {
+          ...
+          connections: {
+            db: {
+              source: db.id
+            }
+          }
+        }
+
+      When a connection is added, Radius injects the following environment variables into
+      the container (prefix `CONNECTION_DB_`):
+        - CONNECTION_DB_HOST
+        - CONNECTION_DB_PORT
+        - CONNECTION_DB_DATABASE
+        - CONNECTION_DB_USERNAME
+
+      You can also reference these properties directly in env var definitions:
+        - `db.properties.host`
+        - `db.properties.port`
+        - `db.properties.database`
+        - `db.properties.username`
+        - `db.properties.secrets.password`
+    apiVersions:
+      '2025-08-01-preview':
+        schema:
+          type: object
+          properties:
+            environment:
+              type: string
+              description: (Required) The Radius Environment ID. Typically set by the rad CLI.
+            application:
+              type: string
+              description: (Required) The Radius Application ID.
+            size:
+              type: string
+              enum:
+                - S
+                - M
+                - L
+              description: (Optional) The memory size tier for the PostgreSQL container. S=512Mi, M=1Gi, L=2Gi. Defaults to S if not provided.
+            host:
+              type: string
+              readOnly: true
+              description: (Read Only) The in-cluster hostname used to connect to the database (Kubernetes DNS format).
+            port:
+              type: integer
+              readOnly: true
+              description: (Read Only) The port used to connect to the database.
+            database:
+              type: string
+              readOnly: true
+              description: (Read Only) The name of the database.
+            username:
+              type: string
+              readOnly: true
+              description: (Read Only) The username used to connect to the database.
+            secrets:
+              type: object
+              readOnly: true
+              properties:
+                password:
+                  type: string
+                  readOnly: true
+                  description: (Read Only) The password used to connect to the database.
+              required:
+                - password
+          required:
+            - environment
+            - application
+
+  mqttBrokers:
+    description: |
+      The Radius.Resources/mqttBrokers Resource Type adds an MQTT message broker to an application.
+      Eclipse Mosquitto is the default implementation deployed by the Kubernetes Recipe.
+
+      Start by adding a mqttBrokers resource to your application definition Bicep file:
+
+        resource mqtt 'Radius.Resources/mqttBrokers@2025-08-01-preview' = {
+          name: 'mqtt'
+          properties: {
+            environment: environment
+            application: app.id
+          }
+        }
+
+      Then connect a Container resource to the broker:
+
+        resource myContainer 'Applications.Core/containers@2023-10-01-preview' = {
+          ...
+          connections: {
+            mqtt: {
+              source: mqtt.id
+            }
+          }
+        }
+
+      When connected, Radius can inject the following environment variables into containers
+      (prefix `CONNECTION_MQTT_`):
+        - CONNECTION_MQTT_HOST
+        - CONNECTION_MQTT_PORT
+        - CONNECTION_MQTT_WSPORT
+
+      You can also reference properties directly in env var definitions:
+        - `mqtt.properties.host`
+        - `mqtt.properties.port`
+        - `mqtt.properties.wsPort`
+    apiVersions:
+      '2025-08-01-preview':
+        schema:
+          type: object
+          properties:
+            environment:
+              type: string
+              description: (Required) The Radius Environment ID. Typically set by the rad CLI.
+            application:
+              type: string
+              description: (Required) The Radius Application ID.
+            host:
+              type: string
+              readOnly: true
+              description: (Read Only) The in-cluster hostname used to connect to the MQTT broker (Kubernetes DNS format).
+            port:
+              type: integer
+              readOnly: true
+              description: (Read Only) The TCP port for MQTT connections (default 1883).
+            wsPort:
+              type: integer
+              readOnly: true
+              description: (Read Only) The WebSocket port for MQTT-over-WebSocket connections (default 9001). Used by browser clients.
+          required:
+            - environment
+            - application
+
+  idProviders:
+    description: |
+      The Radius.Resources/idProviders Resource Type adds an OpenID Connect identity provider to an application.
+      Keycloak is the default implementation deployed by the Kubernetes Recipe.
+    apiVersions:
+      '2025-08-01-preview':
+        schema:
+          type: object
+          properties:
+            environment:
+              type: string
+              description: (Required) The Radius Environment ID. Typically set by the rad CLI.
+            application:
+              type: string
+              description: (Required) The Radius Application ID.
+            issuer:
+              type: string
+              readOnly: true
+              description: (Read Only) The OIDC issuer URL for the identity provider.
+            authEndpoint:
+              type: string
+              readOnly: true
+              description: (Read Only) The authorization endpoint URL for initiating OIDC auth flows.
+            tokenEndpoint:
+              type: string
+              readOnly: true
+              description: (Read Only) The token endpoint URL for exchanging auth codes and refreshing tokens.
+            userInfoEndpoint:
+              type: string
+              readOnly: true
+              description: (Read Only) The user info endpoint URL for retrieving authenticated user details.
+          required:
+            - environment
+            - application
+  aiAgents:
+    description: |
+      The Radius.Resources/aiAgents Resource Type provides an OpenAI-compatible AI inference
+      endpoint to an application. It is provider-agnostic: a Recipe fulfils the type
+      by provisioning the concrete backend infrastructure and returning a uniform set
+      of connection values so that the consuming container never needs to know which
+      AI backend is running.
+
+      Two recipes are provided in this repository:
+
+        kubernetes-kaito.bicep
+          Deploys an open-source LLM in-cluster via the Kaito operator on AKS.
+          Best for: local/dev Kubernetes environments with GPU nodes.
+          Outputs: provider="local", endpoint=http://<kaito-svc>:80/v1, apiKey=""
+
+        azure-openai.bicep
+          Creates an Azure OpenAI account and model deployment.
+          Best for: Azure environments where managed cloud AI is preferred.
+          Outputs: provider="openai", endpoint=https://<account>.openai.azure.com/, apiKey=<key>
+
+      The Recipe is registered per Radius Environment. Switch AI backends by
+      registering a different recipe for the same resource type in your environment:
+
+        rad recipe register default \
+          --environment <env> \
+          --resource-type Radius.Resources/aiAgents \
+          --template-kind bicep \
+          --template-path br:<registry>/ai-agent-recipe:latest
+
+      Application model usage:
+
+        resource tradingAI 'Radius.Resources/aiAgents@2025-08-01-preview' = {
+          name: 'trading-ai'
+          properties: {
+            environment: environment
+            application: app.id
+            model: 'gpt-4o'         // optional hint consumed by the recipe
+          }
+        }
+
+        resource aiAgent 'Applications.Core/containers@2023-10-01-preview' = {
+          ...
+          env: {
+            // Radius auto-injects CONNECTION_AI_PROVIDER, CONNECTION_AI_ENDPOINT,
+            // CONNECTION_AI_MODEL via the connection below. Only the secret
+            // must be wired explicitly.
+            CONNECTION_AI_SECRETS_APIKEY: { value: tradingAI.properties.secrets.apiKey }
+          }
+          connections: {
+            ai: { source: tradingAI.id }
+          }
+        }
+
+      Properties injected automatically via the connection (prefix CONNECTION_AI_):
+        - CONNECTION_AI_ENDPOINT
+        - CONNECTION_AI_PROVIDER
+        - CONNECTION_AI_MODEL
+
+      The ai-agent container reads the following environment variables:
+        CONNECTION_AI_PROVIDER        — "openai" | "azure" | "local"
+        CONNECTION_AI_ENDPOINT        — base URL for the inference API
+        CONNECTION_AI_MODEL           — model / deployment name
+        CONNECTION_AI_SECRETS_APIKEY  — API key (empty for local/Kaito)
+    apiVersions:
+      '2025-08-01-preview':
+        schema:
+          type: object
+          properties:
+            environment:
+              type: string
+              description: (Required) The Radius Environment ID. Typically set by the rad CLI.
+            application:
+              type: string
+              description: (Required) The Radius Application ID.
+            model:
+              type: string
+              description: >
+                (Optional) Model or deployment name to use. Recipes use this as a hint
+                when provisioning the inference backend and write the resolved value back.
+                Examples: gpt-4o, llama-3.1-8b-instruct, phi-3-mini.
+                Defaults to a recipe-specific value when omitted.
+            endpoint:
+              type: string
+              readOnly: true
+              description: >
+                (Read Only) OpenAI-compatible base URL for the inference API.
+                For local/Kaito: http://<service>.<namespace>.svc.cluster.local:80/v1
+                For Azure OpenAI: https://<account>.openai.azure.com/
+            provider:
+              type: string
+              readOnly: true
+              description: >
+                (Read Only) AI provider mode string understood by the ai-agent container.
+                  "openai" — use OpenAI SDK with an API key (Azure OpenAI recipe)
+                  "local"  — use OpenAI SDK against a local endpoint, no key (Kaito recipe)
+            secrets:
+              type: object
+              readOnly: true
+              properties:
+                apiKey:
+                  type: string
+                  readOnly: true
+                  description: >
+                    (Read Only) API key for the inference endpoint.
+                    Empty string for Kaito/local endpoints (no auth required).
+                    Set to the Azure OpenAI account key by the azure-openai recipe.
+          required:
+            - environment
+            - application

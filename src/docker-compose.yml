@@ -1,0 +1,113 @@
+services:
+  zipkin:
+    image: openzipkin/zipkin:3.5.1
+    ports:
+      - "9411:9411"
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --web.enable-remote-write-receiver
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.111.0
+    command:
+      - --config=/etc/otelcol-contrib/config.yaml
+    volumes:
+      - ./observability/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    depends_on:
+      - zipkin
+      - prometheus
+    ports:
+      - "4318:4318"
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: trade
+      POSTGRES_PASSWORD: tradepass
+      POSTGRES_DB: trading
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./db/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+
+  backend:
+    build: ./backend
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      OTEL_SERVICE_NAME: trading-backend
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=portable-apps,service.version=1.0.0,deployment.environment=local
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      CONNECTION_DB_HOST: postgres
+      CONNECTION_DB_PORT: 5432
+      CONNECTION_DB_DATABASE: trading
+      CONNECTION_DB_USERNAME: trade
+      CONNECTION_DB_SECRETS_PASSWORD: tradepass
+      CONNECTION_MQTT_HOST: mosquitto
+      CONNECTION_MQTT_PORT: 1883
+      MQTT_TOPIC: orders/new
+    depends_on:
+      - postgres
+      - mosquitto
+      - otel-collector
+    ports:
+      - "5001:8080"
+
+  ai-agent:
+    build: ./ai-agent
+    environment:
+      ASPNETCORE_URLS: http://+:7000
+      OTEL_SERVICE_NAME: trading-ai-agent
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=portable-apps,service.version=1.0.0,deployment.environment=local
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      CONNECTION_AI_PROVIDER: ${CONNECTION_AI_PROVIDER:-openai}
+      CONNECTION_AI_SECRETS_APIKEY: ${CONNECTION_AI_SECRETS_APIKEY:-}
+      CONNECTION_AI_ENDPOINT: ${CONNECTION_AI_ENDPOINT:-}
+      CONNECTION_AI_MODEL: ${CONNECTION_AI_MODEL:-gpt-4o}
+    ports:
+      - "7001:7000"
+    depends_on:
+      - otel-collector
+
+  frontend:
+    build: ./frontend
+    environment:
+      PORT: 3000
+      OTEL_SERVICE_NAME: trading-frontend
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=portable-apps,service.version=1.0.0,deployment.environment=local
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      BACKEND_URL: http://backend:8080
+      AI_AGENT_URL: http://ai-agent:7000
+      MQTT_WS_URL: ws://mosquitto:9001
+      AUTH_USERNAME: ${AUTH_USERNAME:-admin}
+      AUTH_PASSWORD: ${AUTH_PASSWORD:-admin}
+      SESSION_SECRET: ${SESSION_SECRET:-change-me-in-production}
+      # Azure AD / Microsoft sign-in (leave empty to disable)
+      AAD_CLIENT_ID: ${AAD_CLIENT_ID:-test}
+      AAD_CLIENT_SECRET: ${AAD_CLIENT_SECRET:-test}
+      AAD_TENANT_ID: ${AAD_TENANT_ID:-common}
+      AAD_REDIRECT_URI: ${AAD_REDIRECT_URI:-http://localhost:3000/auth/microsoft/callback}
+    depends_on:
+      - backend
+      - ai-agent
+      - mosquitto
+      - otel-collector
+    ports:
+      - "3000:3000"

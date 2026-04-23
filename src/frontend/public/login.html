@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sign In – Portable Trading App</title>
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+        font-family: Arial, sans-serif;
+        background: #f7f7f7;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+      }
+      .login-card {
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.10);
+        padding: 40px 36px;
+        width: 100%;
+        max-width: 400px;
+      }
+      .login-card h1 {
+        font-size: 22px;
+        color: #1f2937;
+        margin-bottom: 6px;
+      }
+      .login-card p.subtitle {
+        font-size: 14px;
+        color: #6b7280;
+        margin-bottom: 24px;
+      }
+      .divider {
+        display: flex;
+        align-items: center;
+        margin: 24px 0;
+        color: #9ca3af;
+        font-size: 13px;
+      }
+      .divider::before, .divider::after {
+        content: "";
+        flex: 1;
+        border-bottom: 1px solid #e5e7eb;
+      }
+      .divider span { padding: 0 12px; }
+
+      /* Password form */
+      .form-group { margin-bottom: 16px; }
+      .form-group label {
+        display: block;
+        font-size: 13px;
+        font-weight: 600;
+        color: #374151;
+        margin-bottom: 6px;
+      }
+      .form-group input {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        font-size: 14px;
+        outline: none;
+        transition: border-color 0.15s;
+      }
+      .form-group input:focus {
+        border-color: #2563eb;
+        box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+      }
+      .btn {
+        display: block;
+        width: 100%;
+        padding: 10px;
+        border: none;
+        border-radius: 6px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.15s;
+      }
+      .btn-primary {
+        background: #1f2937;
+        color: #fff;
+      }
+      .btn-primary:hover { background: #111827; }
+      .btn-oidc {
+        background: #fff;
+        color: #1f2937;
+        border: 1px solid #d1d5db;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+      }
+      .btn-oidc:hover { background: #f3f4f6; }
+      .btn-oidc svg { width: 20px; height: 20px; }
+
+      .error-msg {
+        background: #fef2f2;
+        color: #991b1b;
+        border: 1px solid #fecaca;
+        border-radius: 6px;
+        padding: 10px 12px;
+        font-size: 13px;
+        margin-bottom: 16px;
+        display: none;
+      }
+      .error-msg.show { display: block; }
+
+      .oidc-section { display: none; }
+      .oidc-section.enabled { display: block; }
+    </style>
+  </head>
+  <body>
+    <div class="login-card">
+      <h1>Portable Trading App</h1>
+      <p class="subtitle">Sign in to continue</p>
+
+      <div id="error-msg" class="error-msg"></div>
+
+      <!-- Password sign-in -->
+      <form id="login-form" method="POST" action="/auth/login">
+        <div class="form-group">
+          <label for="username">Username</label>
+          <input type="text" id="username" name="username" autocomplete="username" required />
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input type="password" id="password" name="password" autocomplete="current-password" required />
+        </div>
+        <button type="submit" class="btn btn-primary">Sign in</button>
+      </form>
+
+      <!-- OIDC sign-in -->
+      <div id="oidc-section" class="oidc-section">
+        <div class="divider"><span>or</span></div>
+        <a href="/auth/microsoft" class="btn btn-oidc" style="text-decoration:none;">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 23 23">
+            <rect x="1" y="1" width="10" height="10" fill="#f25022"/>
+            <rect x="12" y="1" width="10" height="10" fill="#7fba00"/>
+            <rect x="1" y="12" width="10" height="10" fill="#00a4ef"/>
+            <rect x="12" y="12" width="10" height="10" fill="#ffb900"/>
+          </svg>
+          Sign in with OIDC
+        </a>
+      </div>
+    </div>
+
+    <script>
+      // Show error if redirected with ?error
+      const params = new URLSearchParams(window.location.search);
+      if (params.has("error")) {
+        const msg = document.getElementById("error-msg");
+        msg.textContent = params.get("error") || "Login failed. Please try again.";
+        msg.classList.add("show");
+      }
+
+      // Check if OIDC login is enabled
+      fetch("/auth/providers")
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.microsoft) {
+            document.getElementById("oidc-section").classList.add("enabled");
+          }
+        })
+        .catch(() => {});
+    </script>
+  </body>
+</html>

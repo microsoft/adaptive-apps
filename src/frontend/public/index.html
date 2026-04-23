@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Portable Trading App</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        background: #f7f7f7;
+        color: #222;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      header {
+        background: #1f2937;
+        color: #fff;
+        padding: 16px 24px;
+        flex-shrink: 0;
+      }
+      .app-layout {
+        display: flex;
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
+      }
+      /* ── Symbols sidebar ── */
+      .symbols-sidebar {
+        width: 280px;
+        min-width: 280px;
+        background: #1f2937;
+        color: #fff;
+        overflow-y: auto;
+        padding: 16px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .symbols-sidebar h2 {
+        margin: 0 0 8px 4px;
+        font-size: 15px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: #9ca3af;
+      }
+      .symbol-card {
+        background: #111827;
+        border-radius: 8px;
+        padding: 12px 14px;
+        cursor: pointer;
+        transition: background 0.15s;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .symbol-card:hover {
+        background: #1e293b;
+      }
+      .symbol-card .sym-name {
+        font-weight: 700;
+        font-size: 15px;
+      }
+      .symbol-card .sym-price {
+        font-size: 15px;
+        font-weight: 600;
+        text-align: right;
+      }
+      .symbol-card .sym-change {
+        font-size: 12px;
+        font-weight: 600;
+        margin-top: 2px;
+      }
+      .sym-up { color: #22c55e; }
+      .sym-down { color: #ef4444; }
+      /* ── Chat sidebar (right) ── */
+      .chat-sidebar {
+        width: 300px;
+        min-width: 300px;
+        background: #1f2937;
+        color: #fff;
+        overflow: hidden;
+        padding: 16px 12px;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+      .chat-sidebar h2 {
+        margin: 0 0 12px 4px;
+        font-size: 15px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: #9ca3af;
+      }
+      .chat-sidebar .chat-log {
+        flex: 1;
+        height: auto;
+        min-height: 0;
+        background: #111827;
+        border: none;
+        border-radius: 8px;
+        color: #e5e7eb;
+        padding: 12px;
+        margin-bottom: 10px;
+        overflow-y: auto;
+      }
+      .chat-sidebar .chat-message strong {
+        color: #60a5fa;
+      }
+      .chat-sidebar .chat-input-row {
+        display: flex;
+        gap: 8px;
+      }
+      .chat-sidebar .chat-input-row input {
+        flex: 1;
+        padding: 8px 10px;
+        border: none;
+        border-radius: 6px;
+        background: #111827;
+        color: #e5e7eb;
+        font-size: 13px;
+        outline: none;
+      }
+      .chat-sidebar .chat-input-row input::placeholder {
+        color: #6b7280;
+      }
+      .chat-sidebar .chat-input-row button {
+        padding: 8px 14px;
+        border: none;
+        border-radius: 6px;
+        background: #3b82f6;
+        color: #fff;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .chat-sidebar .chat-input-row button:hover {
+        background: #2563eb;
+      }
+      /* ── Main content ── */
+      main {
+        flex: 1;
+        padding: 24px;
+        overflow-y: auto;
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 16px;
+        align-content: start;
+      }
+      section {
+        background: #fff;
+        border-radius: 8px;
+        padding: 16px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      }
+      h2 {
+        margin-top: 0;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 8px;
+        border-bottom: 1px solid #e5e7eb;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .row input,
+      .row select,
+      .row button {
+        padding: 8px;
+        font-size: 14px;
+      }
+      .form-field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .form-field label {
+        font-size: 12px;
+        font-weight: 600;
+        color: #374151;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      .status {
+        font-size: 13px;
+        color: #374151;
+      }
+      .chat-log {
+        height: 200px;
+        overflow-y: auto;
+        border: 1px solid #e5e7eb;
+        padding: 8px;
+        background: #f9fafb;
+        font-size: 14px;
+      }
+      .chat-message {
+        margin-bottom: 8px;
+      }
+      .chat-message strong {
+        display: block;
+        color: #111827;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <h1>Simplified Stock Trading App</h1>
+          <div class="status" id="status">Connecting...</div>
+        </div>
+        <div id="user-info" style="display:flex;align-items:center;gap:12px;font-size:14px;">
+          <span id="user-name"></span>
+          <a href="/auth/logout" style="color:#9ca3af;text-decoration:none;border:1px solid #4b5563;padding:4px 12px;border-radius:4px;">Sign out</a>
+        </div>
+      </div>
+    </header>
+    <div class="app-layout">
+    <aside class="symbols-sidebar">
+      <h2>Market Watch</h2>
+      <div id="symbols"></div>
+    </aside>
+    <main>
+      <section>
+        <h2>Create Order</h2>
+        <form id="order-form">
+          <div class="row">
+            <div class="form-field">
+              <label for="symbol-input">Symbol</label>
+              <input id="symbol-input" placeholder="AAPL" required />
+            </div>
+            <div class="form-field">
+              <label for="side-input">Side</label>
+              <select id="side-input">
+                <option value="BUY">BUY</option>
+                <option value="SELL">SELL</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label for="type-input">Order Type</label>
+              <select id="type-input">
+                <option value="MARKET">Market</option>
+                <option value="LIMIT">Limit</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label for="qty-input">Amount</label>
+              <input id="qty-input" type="number" min="1" value="10" required />
+            </div>
+            <div class="form-field">
+              <label for="price-input">Price</label>
+              <input id="price-input" type="number" min="0.01" step="0.01" value="100" required />
+            </div>
+            <div class="form-field" style="align-self:flex-end;">
+              <button type="submit">Send Order</button>
+            </div>
+          </div>
+        </form>
+        <p class="status" id="order-status">Orders are sent via MQTT.</p>
+      </section>
+
+      <section>
+        <h2>Orders</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Symbol</th>
+              <th>Side</th>
+              <th>Type</th>
+              <th>Qty</th>
+              <th>Price</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="orders"></tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>Positions</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Symbol</th>
+              <th>Qty</th>
+              <th>Avg Price</th>
+            </tr>
+          </thead>
+          <tbody id="positions"></tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>Trades</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Symbol</th>
+              <th>Side</th>
+              <th>Qty</th>
+              <th>Price</th>
+            </tr>
+          </thead>
+          <tbody id="trades"></tbody>
+        </table>
+      </section>
+    </main>
+    <aside class="chat-sidebar">
+      <h2>AI Assistant</h2>
+      <div class="chat-log" id="chat-log"></div>
+      <div class="chat-input-row">
+        <input id="chat-input" placeholder="Ask for advice..." />
+        <button id="chat-send">Ask</button>
+      </div>
+    </aside>
+    </div><!-- .app-layout -->
+
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <script>
+      let config = null;
+      let mqttClient = null;
+      // Simulated base prices for each symbol
+      const symbolPrices = {};
+
+      const statusEl = document.getElementById("status");
+      const orderStatusEl = document.getElementById("order-status");
+
+      // Seed a simulated price for a symbol
+      function seedPrice(sym) {
+        if (!symbolPrices[sym]) {
+          // Realistic-ish base prices
+          const bases = { AAPL: 242, MSFT: 430, GOOGL: 196, AMZN: 233, TSLA: 385, NVDA: 138, META: 720, NFLX: 1040, AMD: 117, INTC: 23 };
+          symbolPrices[sym] = {
+            price: bases[sym] || (50 + Math.random() * 200),
+            prevPrice: 0,
+          };
+          symbolPrices[sym].prevPrice = symbolPrices[sym].price;
+        }
+      }
+
+      // Tick prices randomly
+      function tickPrices() {
+        Object.keys(symbolPrices).forEach((sym) => {
+          const entry = symbolPrices[sym];
+          entry.prevPrice = entry.price;
+          const pctChange = (Math.random() - 0.48) * 0.4; // slight upward bias
+          entry.price = Math.max(1, entry.price * (1 + pctChange / 100));
+        });
+        renderSymbols();
+      }
+
+      function renderSymbols() {
+        const container = document.getElementById("symbols");
+        container.innerHTML = "";
+        Object.keys(symbolPrices).forEach((sym) => {
+          const entry = symbolPrices[sym];
+          const change = entry.price - entry.prevPrice;
+          const changePct = (change / entry.prevPrice) * 100;
+          const up = change >= 0;
+          const card = document.createElement("div");
+          card.className = "symbol-card";
+          card.innerHTML = `
+            <div class="sym-name">${sym}</div>
+            <div>
+              <div class="sym-price ${up ? 'sym-up' : 'sym-down'}">
+                $${entry.price.toFixed(2)}
+              </div>
+              <div class="sym-change ${up ? 'sym-up' : 'sym-down'}">
+                ${up ? '&#9650;' : '&#9660;'} ${changePct >= 0 ? '+' : ''}${changePct.toFixed(2)}%
+              </div>
+            </div>
+          `;
+          card.addEventListener("click", () => {
+            document.getElementById("symbol-input").value = sym;
+            document.getElementById("price-input").value = entry.price.toFixed(2);
+          });
+          container.appendChild(card);
+        });
+      }
+
+      function appendChatMessage(role, text) {
+        const log = document.getElementById("chat-log");
+        const message = document.createElement("div");
+        message.className = "chat-message";
+        message.innerHTML = `<strong>${role}</strong><div>${text}</div>`;
+        log.appendChild(message);
+        log.scrollTop = log.scrollHeight;
+      }
+
+      async function fetchJson(url) {
+        const res = await fetch(url);
+        if (!res.ok) {
+          throw new Error(`Request failed: ${res.status}`);
+        }
+        return res.json();
+      }
+
+      async function loadData() {
+        const [symbols, orders, trades, positions] = await Promise.all([
+          fetchJson(`${config.backendUrl}/api/symbols`),
+          fetchJson(`${config.backendUrl}/api/orders`),
+          fetchJson(`${config.backendUrl}/api/trades`),
+          fetchJson(`${config.backendUrl}/api/positions`),
+        ]);
+
+        // Seed prices for any new symbols
+        symbols.forEach((sym) => seedPrice(sym));
+        renderSymbols();
+
+        const ordersEl = document.getElementById("orders");
+        ordersEl.innerHTML = "";
+        orders.forEach((order) => {
+          const row = document.createElement("tr");
+          row.innerHTML = `
+            <td>${order.symbol}</td>
+            <td>${order.side}</td>
+            <td>${order.orderType || 'MARKET'}</td>
+            <td>${order.quantity}</td>
+            <td>${order.price}</td>
+            <td style="color:${order.status === 'processed' ? '#22c55e' : order.status === 'rejected' ? '#ef4444' : 'inherit'}; font-weight:600;">${order.status}</td>
+          `;
+          ordersEl.appendChild(row);
+        });
+
+        const tradesEl = document.getElementById("trades");
+        tradesEl.innerHTML = "";
+        trades.forEach((trade) => {
+          const row = document.createElement("tr");
+          row.innerHTML = `
+            <td>${trade.symbol}</td>
+            <td>${trade.side}</td>
+            <td>${trade.quantity}</td>
+            <td>${trade.price}</td>
+          `;
+          tradesEl.appendChild(row);
+        });
+
+        const positionsEl = document.getElementById("positions");
+        positionsEl.innerHTML = "";
+        positions.forEach((position) => {
+          const row = document.createElement("tr");
+          row.innerHTML = `
+            <td>${position.symbol}</td>
+            <td>${position.quantity}</td>
+            <td>${position.avgPrice}</td>
+          `;
+          positionsEl.appendChild(row);
+        });
+      }
+
+      async function sendOrder(event) {
+        event.preventDefault();
+
+        const symbol = document.getElementById("symbol-input").value.trim().toUpperCase();
+        const side = document.getElementById("side-input").value;
+        const orderType = document.getElementById("type-input").value;
+        const quantity = Number(document.getElementById("qty-input").value);
+        const price = Number(document.getElementById("price-input").value);
+
+        if (!symbol || !quantity || !price) {
+          orderStatusEl.textContent = "Fill in all order fields.";
+          return;
+        }
+
+        const order = {
+          symbol,
+          side,
+          orderType,
+          quantity,
+          price,
+          clientOrderId: `web-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        };
+
+        if (!mqttClient) {
+          orderStatusEl.textContent = "MQTT not connected.";
+          return;
+        }
+
+        mqttClient.publish(config.mqttTopic, JSON.stringify(order));
+        orderStatusEl.textContent = `Order sent for ${symbol}.`;
+        setTimeout(loadData, 500);
+      }
+
+      async function sendChat() {
+        const input = document.getElementById("chat-input");
+        const question = input.value.trim();
+        if (!question) {
+          return;
+        }
+        input.value = "";
+        appendChatMessage("You", question);
+
+        try {
+          const res = await fetch(`${config.aiAgentUrl}/advice`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ question }),
+          });
+          const data = await res.json();
+          appendChatMessage("Advisor", data.answer || "No response.");
+        } catch (err) {
+          appendChatMessage("Advisor", "Unable to reach the AI agent.");
+        }
+      }
+
+      async function init() {
+        config = await fetchJson("/config");
+
+        // Display logged-in user
+        try {
+          const me = await fetchJson("/auth/me");
+          document.getElementById("user-name").textContent = me.displayName;
+        } catch (e) { /* ignore */ }
+
+        mqttClient = mqtt.connect(config.mqttWsUrl);
+        mqttClient.on("connect", () => {
+          statusEl.textContent = "Connected to MQTT bus.";
+        });
+        mqttClient.on("error", () => {
+          statusEl.textContent = "MQTT connection error.";
+        });
+
+        document.getElementById("order-form").addEventListener("submit", sendOrder);
+        document.getElementById("chat-send").addEventListener("click", sendChat);
+
+        loadData().catch(() => {
+          statusEl.textContent = "Waiting for backend data...";
+        });
+        setInterval(() => loadData().catch(() => {}), 3000);
+        // Simulate live price ticks every 15 seconds
+        setInterval(tickPrices, 15000);
+      }
+
+      init().catch(() => {
+        statusEl.textContent = "Failed to initialize frontend config.";
+      });
+    </script>
+  </body>
+</html>
