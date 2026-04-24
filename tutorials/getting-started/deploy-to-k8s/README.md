@@ -120,8 +120,21 @@ Deploy the non-AI app model to the Radius environment created above.
       --parameters imageRegistry=ghcr.io/haishi2016/portable-apps \
       --parameters imageTag=latest \
       --parameters authUsername=admin \
-      --parameters authPassword=admin
+      --parameters authPassword=admin \
+      --parameters oidcIssuer=http://compute-core-keycloak.compute-core.svc.cluster.local:8080/realms/master \
+      --parameters oidcAuthEndpoint=http://compute-core-keycloak.compute-core.svc.cluster.local:8080/realms/master/protocol/openid-connect/auth \
+      --parameters oidcTokenEndpoint=http://compute-core-keycloak.compute-core.svc.cluster.local:8080/realms/master/protocol/openid-connect/token \
+      --parameters oidcUserInfoEndpoint=http://compute-core-keycloak.compute-core.svc.cluster.local:8080/realms/master/protocol/openid-connect/userinfo \
+      --parameters oidcClientId=<KeyCloak client id> \
+      --parameters oidcClientSecret=<KeyCloak client secret>
     ```
+2. Add an entry in your hosts file to map service hostname to callback address. 
+
+    ```bash
+    127.0.0.1 compute-core-keycloak.compute-core.svc.cluster.local
+    ```
+
+    > **NOTE**: This is needed when the KeyCloak service is configured as a ClusterIP service. This should be optimized in future versions.
 
 2. Expose the frontend:
 
@@ -130,3 +143,4 @@ Deploy the non-AI app model to the Radius environment created above.
     ```
 
 3. Open the app at `http://localhost:3000`.
+4. Login using local account admin/admin, or click on "Sign in with OIDC" button to use KeyCloak to login with federated credential.

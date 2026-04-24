@@ -22,7 +22,9 @@ Adaptive Apps redefine how applications are built and operated by enabling them 
 
 Adaptive Apps is comprised of four layers: application model, programming model, application platform and AI-powered tooling. Rather than redefining these concepts from the ground up, Adaptive Apps leverage proven open-source and cloud-native technologies, such as [Radius](https://docs.radapp.io/), [Dapr](https://dapr.io/), and Azure Arc, and orchestrate them into an end-to-end solution.
 
-![Portable Apps Architecture](./docs/images/portable-apps-architecture.png)
+<p align="center">
+    <img src="./docs/images/portable-apps-architecture.png" width="75%" />
+</p>
 
 ### **Platform-agnostic application model**
 
@@ -91,3 +93,7 @@ As an initial capability, Adaptive Apps provide AI-based refactoring tools that 
 ## Getting Started
 
 Follow our [getting-started tutorial](./tutorials/getting-started/README.md) to deploy a Adaptive App across cloud and edge environments.
+
+## Topics
+
+* [Authentication](./docs/authentication/README.md)

@@ -46,7 +46,10 @@ keycloak:
     runAsNonRoot: true
     runAsUser: 1000
 
-  hostAliases: []
+  hostAliases: 
+    - ip: "192.168.50.239"
+      hostnames:
+        - "win-4pdsijrpinj.corp.local"
 
   customCert:
     crt: ""

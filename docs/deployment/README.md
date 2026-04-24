@@ -22,6 +22,17 @@ helm install compute-core charts/portfolios/compute-core \
 	--create-namespace
 ```
 
+To configure Keycloak with [Active Directory federation](../authentication/keycloak-active-directory.md), you'll need to mount a trusted certificate (see step 9-10 [here](../authentication/adds-vm.md)) as well as hostname alias (see collateral/sample-values.yaml as an example):
+
+```bash
+helm install compute-core charts/portfolios/compute-core \
+	--namespace compute-core \
+	--create-namespace \
+    -f <values file> \
+    --set-file keycloak.customCert.crt=collateral/dc.crt \
+    --set keycloak.customCert.fileName=dc.crt
+```
+
 ### Install compute-core portfolio chart from GHCR
 
 ```bash

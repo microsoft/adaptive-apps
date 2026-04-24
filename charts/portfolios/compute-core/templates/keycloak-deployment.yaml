@@ -23,6 +23,16 @@ spec:
       {{- else if .Values.serviceAccount.name }}
       serviceAccountName: {{ .Values.serviceAccount.name }}
       {{- end }}
+      {{- with .Values.keycloak.hostAliases }}
+      hostAliases:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.keycloak.customCert.crt }}
+      volumes:
+        - name: keycloak-custom-cert
+          secret:
+            secretName: {{ include "computeCore.keycloak.serviceName" . }}-custom-cert
+      {{- end }}
       securityContext:
         {{- toYaml .Values.keycloak.podSecurityContext | nindent 8 }}
       containers:
@@ -42,6 +52,12 @@ spec:
               protocol: TCP
           securityContext:
             {{- toYaml .Values.keycloak.securityContext | nindent 12 }}
+          {{- if .Values.keycloak.customCert.crt }}
+          volumeMounts:
+            - name: keycloak-custom-cert
+              mountPath: {{ .Values.keycloak.customCert.mountPath | quote }}
+              readOnly: true
+          {{- end }}
           env:
             - name: KC_DB
               value: postgres
@@ -89,6 +105,10 @@ spec:
               value: ispn
             - name: KC_CACHE_STACK
               value: kubernetes
+            {{- if .Values.keycloak.customCert.crt }}
+            - name: KC_TRUSTSTORE_PATHS
+              value: {{ .Values.keycloak.customCert.mountPath | quote }}
+            {{- end }}
             - name: JAVA_OPTS_APPEND
               value: "-Djgroups.dns.query={{ include "computeCore.keycloak.discoveryServiceName" . }}"
           startupProbe:

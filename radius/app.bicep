@@ -54,6 +54,18 @@ param oidcBrowserAuthEndpoint string = ''
 @description('Optional OIDC issuer override (must match the issuer claim in ID tokens).')
 param oidcIssuerOverride string = ''
 
+@description('OIDC authorization endpoint URL (e.g., https://keycloak.example.com/realms/master/protocol/openid-connect/auth).')
+param oidcAuthEndpoint string = ''
+
+@description('OIDC token endpoint URL (e.g., https://keycloak.example.com/realms/master/protocol/openid-connect/token).')
+param oidcTokenEndpoint string = ''
+
+@description('OIDC user info endpoint URL (e.g., https://keycloak.example.com/realms/master/protocol/openid-connect/userinfo).')
+param oidcUserInfoEndpoint string = ''
+
+@description('OIDC issuer URL (e.g., https://keycloak.example.com/realms/master). Used if oidcIssuerOverride is not set.')
+param oidcIssuer string = ''
+
 // No browser-facing URL parameters needed — the frontend server
 // proxies all backend and MQTT traffic. Only the frontend
 // port needs to be exposed.
@@ -106,14 +118,6 @@ resource tradingDb 'Radius.Resources/postgreSqlDatabases@2025-08-01-preview' = {
 
 resource tradingMqtt 'Radius.Resources/mqttBrokers@2025-08-01-preview' = {
   name: 'trading-mqtt'
-  properties: {
-    environment: environment
-    application: tradingApp.id
-  }
-}
-
-resource tradingIdP 'Radius.Resources/idProviders@2025-08-01-preview' = {
-  name: 'trading-idp'
   properties: {
     environment: environment
     application: tradingApp.id
@@ -235,12 +239,12 @@ resource frontend 'Applications.Core/containers@2023-10-01-preview' = {
         // browser traffic to these endpoints, so only port 3000 is exposed.
         BACKEND_URL:    { value: 'http://backend:8080' }
         MQTT_WS_URL:    { value: 'ws://${tradingMqtt.properties.host}:${tradingMqtt.properties.wsPort}' }
-        // OIDC values from Radius.Resources/idProviders.
-        OIDC_ISSUER:    { value: oidcIssuerOverride == '' ? tradingIdP.properties.issuer : oidcIssuerOverride }
-        OIDC_AUTH_ENDPOINT: { value: tradingIdP.properties.authEndpoint }
+        // OIDC values provided as parameters (from helm-deployed portfolio or external provider).
+        OIDC_ISSUER:    { value: oidcIssuerOverride != '' ? oidcIssuerOverride : oidcIssuer }
+        OIDC_AUTH_ENDPOINT: { value: oidcAuthEndpoint }
         OIDC_BROWSER_AUTH_ENDPOINT: { value: oidcBrowserAuthEndpoint }
-        OIDC_TOKEN_ENDPOINT: { value: tradingIdP.properties.tokenEndpoint }
-        OIDC_USERINFO_ENDPOINT: { value: tradingIdP.properties.userInfoEndpoint }
+        OIDC_TOKEN_ENDPOINT: { value: oidcTokenEndpoint }
+        OIDC_USERINFO_ENDPOINT: { value: oidcUserInfoEndpoint }
         OIDC_CLIENT_ID: { value: oidcClientId }
         OIDC_CLIENT_SECRET: { value: oidcClientSecret }
         APP_BASE_URL: { value: appBaseUrl }
@@ -252,7 +256,6 @@ resource frontend 'Applications.Core/containers@2023-10-01-preview' = {
     connections: {
       backend: { source: backend.id }
       mqtt:    { source: tradingMqtt.id }
-      idp:     { source: tradingIdP.id }
       otel:    { source: otelCollector.id }
     }
   }

@@ -1,4 +1,4 @@
-# Setting up a lab for testing Microsoft Entra Connect
+# Setting up Microsoft Entra Connect
 
 This document contains instructions of setting up a minimum test lab to sync from a Microsoft Entra tenant to a local Active Directory using Microsoft Entra Connect.
 
@@ -10,18 +10,7 @@ This document contains instructions of setting up a minimum test lab to sync fro
 
 ## Setting up Active Directory Domain Services (ADDS) on a VM
 
-### Prerequisites
-
-* A hypervisor such as Hyper-V and VirtualBox.
-
-### Steps
-
-1. Download a Windows Server 2025 evaluation ISO image from: https://www.microsoft.com/en-us/evalcenter/evaluate-windows-server-2025.
-2. Create a new VM with the above image (2GB RAM, 100GB Disk is enough).
-    * Choose **Windows Server 2025 Standard Evaluation (Desktop Experience)**
-3. Add **Active Directory Domain Services** role to the server.
-4. Prompt the server to a domain controlloer of:
-   * A new forest with root domain name **corp.local**
+See instructions [here](./adds-vm.md).
 
 ## Setting up directory sync
 

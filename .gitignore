@@ -215,3 +215,6 @@ node_modules/
 
 # Radius generated artefacts
 radius/types.tgz
+
+**/*.cer
+**/*.crt
