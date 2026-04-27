@@ -7,7 +7,7 @@ You can deploy KeyCloak by installing one of the Adaptive Apps capability portfo
 1. Port forward to KeyCloak portal
 
     ```bash
-    kubectl port-forward -n compute-core svc/compute-core-keycloak 8080:8080
+    kubectl port-forward -n min svc/min-keycloak 8080:8080
     ```
 
 2. Open `http://localhost:8080` and sign in with the chart values:

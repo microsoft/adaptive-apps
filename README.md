@@ -56,15 +56,31 @@ An application targets a specific capability portfolio and can be deployed to an
 
 #### **Defined portfolios**
 
-As a starting point, we define two portfolios:
+As a starting point, we define six portfolios with clear inheritance:
 
-*  `compute-core` 
-    
-    Core capabilities that support a typical enterprise application, including compute, identiy, messaging, state and observability.
+* `min`
 
-* `compute-ai`
+    Baseline capabilities for adaptive application hosting (currently includes Keycloak and its PostgreSQL backend).
 
-    Extends `compute-core` with additional AI-related capabilities like manging agents and AI models.
+* `core`
+
+    Builds on `min` and adds core enterprise capabilities over time.
+
+* `ent`
+
+    Builds on `core` and represents the enterprise tier.
+
+* `min-ai`
+
+    Builds on `min` and serves as the baseline AI-enabled tier.
+
+* `core-ai`
+
+    Builds on `min-ai`.
+
+* `ent-ai`
+
+    Builds on `core-ai`.
 
 
 #### **Capability portfolio deployment**

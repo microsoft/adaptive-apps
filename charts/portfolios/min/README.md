@@ -1,11 +1,11 @@
-# compute-core Capability Portfolio Chart
+# min Capability Portfolio Chart
 
-This folder contains a single Helm chart for the `compute-core` portfolio.
+This folder contains a single Helm chart for the `min` portfolio.
 
 ## Portfolio chart
 
-- Chart path: `charts/portfolios/compute-core`
-- Chart name: `compute-core`
+- Chart path: `charts/portfolios/min`
+- Chart name: `min`
 
 ## Included components
 
@@ -48,10 +48,10 @@ keycloak:
 
 This adds an `/etc/hosts` entry inside the Keycloak pod.
 
-Additional `compute-core` capabilities can be added as optional components under the same chart.
+Additional `min` capabilities can be added as optional components under the same chart.
 
 ## Release target
 
 The portfolio chart is published as an OCI artifact to:
 
-- `ghcr.io/<owner>/portable-apps/charts/portfolios/compute-core`
+- `ghcr.io/<owner>/portable-apps/charts/portfolios/min`

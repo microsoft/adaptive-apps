@@ -83,7 +83,7 @@ const APP_BASE_URL = process.env.APP_BASE_URL || "";
 // or a specific tenant ID
 const AAD_TENANT_ID = process.env.AAD_TENANT_ID || "common";
 
-const redirectPath = "/auth/microsoft/callback";
+const redirectPath = "/auth/oidc/callback";
 const OIDC_REDIRECT_URI =
   process.env.OIDC_REDIRECT_URI ||
   process.env.AAD_REDIRECT_URI ||
@@ -228,7 +228,7 @@ app.post(
   (req, res) => res.redirect("/")
 );
 
-// Microsoft login
+// OIDC login
 if (microsoftEnabled) {
   const completeOidcLogin = (req, res, next) => {
     passport.authenticate("microsoft", (err, user, info) => {
@@ -254,15 +254,24 @@ if (microsoftEnabled) {
     })(req, res, next);
   };
 
-  app.get(
-    "/auth/microsoft",
-    passport.authenticate("microsoft", { prompt: "select_account" })
-  );
+  const startOidcLogin = passport.authenticate("microsoft", { prompt: "select_account" });
+
+  // Preferred generic OIDC route.
+  app.get("/auth/oidc", startOidcLogin);
+
+  // Backward-compatible legacy route name.
+  app.get("/auth/microsoft", startOidcLogin);
 
   // Most OIDC providers (including Keycloak default) return the code via GET.
+  app.get("/auth/oidc/callback", completeOidcLogin);
+
+  // Backward-compatible legacy callback path.
   app.get("/auth/microsoft/callback", completeOidcLogin);
 
   // Keep POST callback for providers configured with response_mode=form_post.
+  app.post("/auth/oidc/callback", completeOidcLogin);
+
+  // Backward-compatible legacy callback path.
   app.post("/auth/microsoft/callback", completeOidcLogin);
 }
 

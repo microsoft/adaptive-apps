@@ -2,9 +2,9 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "computeCore.keycloak.serviceName" . }}
+  name: {{ include "min.keycloak.serviceName" . }}
   labels:
-    {{- include "computeCore.labels" . | nindent 4 }}
+    {{- include "min.labels" . | nindent 4 }}
     app.kubernetes.io/component: keycloak
 spec:
   type: {{ .Values.keycloak.service.type }}
@@ -14,6 +14,6 @@ spec:
       targetPort: http
       protocol: TCP
   selector:
-    {{- include "computeCore.selectorLabels" . | nindent 4 }}
+    {{- include "min.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: keycloak
 {{- end }}

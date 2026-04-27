@@ -2,9 +2,9 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "computeCore.keycloak.serviceName" . }}
+  name: {{ include "min.keycloak.serviceName" . }}
   labels:
-    {{- include "computeCore.labels" . | nindent 4 }}
+    {{- include "min.labels" . | nindent 4 }}
     app.kubernetes.io/component: keycloak
   {{- with .Values.keycloak.ingress.annotations }}
   annotations:
@@ -24,7 +24,7 @@ spec:
             pathType: {{ .pathType }}
             backend:
               service:
-                name: {{ include "computeCore.keycloak.serviceName" $ }}
+                name: {{ include "min.keycloak.serviceName" $ }}
                 port:
                   number: {{ $.Values.keycloak.service.port }}
           {{- end }}

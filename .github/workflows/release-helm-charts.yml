@@ -22,9 +22,29 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - portfolio: compute-core
-            chart: compute-core
-            chart_path: charts/portfolios/compute-core
+          - portfolio: min
+            chart: min
+            chart_path: charts/portfolios/min
+            oci_repo: oci://ghcr.io/${{ github.repository_owner }}/portable-apps/charts/portfolios
+          - portfolio: core
+            chart: core
+            chart_path: charts/portfolios/core
+            oci_repo: oci://ghcr.io/${{ github.repository_owner }}/portable-apps/charts/portfolios
+          - portfolio: ent
+            chart: ent
+            chart_path: charts/portfolios/ent
+            oci_repo: oci://ghcr.io/${{ github.repository_owner }}/portable-apps/charts/portfolios
+          - portfolio: min-ai
+            chart: min-ai
+            chart_path: charts/portfolios/min-ai
+            oci_repo: oci://ghcr.io/${{ github.repository_owner }}/portable-apps/charts/portfolios
+          - portfolio: core-ai
+            chart: core-ai
+            chart_path: charts/portfolios/core-ai
+            oci_repo: oci://ghcr.io/${{ github.repository_owner }}/portable-apps/charts/portfolios
+          - portfolio: ent-ai
+            chart: ent-ai
+            chart_path: charts/portfolios/ent-ai
             oci_repo: oci://ghcr.io/${{ github.repository_owner }}/portable-apps/charts/portfolios
 
     steps:
@@ -37,6 +57,9 @@ jobs:
       - name: Login to GitHub Container Registry
         run: |
           echo "${{ github.token }}" | helm registry login ${{ env.OCI_REGISTRY }} -u "${{ github.actor }}" --password-stdin
+
+      - name: Build chart dependencies
+        run: helm dependency build ${{ matrix.chart_path }}
 
       - name: Lint chart
         run: helm lint ${{ matrix.chart_path }}

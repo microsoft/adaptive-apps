@@ -2,21 +2,21 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ include "computeCore.keycloak.postgresqlName" . }}
+  name: {{ include "min.keycloak.postgresqlName" . }}
   labels:
-    {{- include "computeCore.labels" . | nindent 4 }}
+    {{- include "min.labels" . | nindent 4 }}
     app.kubernetes.io/component: keycloak
 spec:
-  serviceName: {{ include "computeCore.keycloak.postgresqlName" . }}
+  serviceName: {{ include "min.keycloak.postgresqlName" . }}
   replicas: 1
   selector:
     matchLabels:
-      {{- include "computeCore.selectorLabels" . | nindent 6 }}
+      {{- include "min.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: postgresql
   template:
     metadata:
       labels:
-        {{- include "computeCore.selectorLabels" . | nindent 8 }}
+        {{- include "min.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: postgresql
     spec:
       containers:
@@ -31,17 +31,17 @@ spec:
             - name: POSTGRES_DB
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "computeCore.keycloak.postgresqlName" . }}-auth
+                  name: {{ include "min.keycloak.postgresqlName" . }}-auth
                   key: database
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "computeCore.keycloak.postgresqlName" . }}-auth
+                  name: {{ include "min.keycloak.postgresqlName" . }}-auth
                   key: username
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "computeCore.keycloak.postgresqlName" . }}-auth
+                  name: {{ include "min.keycloak.postgresqlName" . }}-auth
                   key: password
           volumeMounts:
             - name: data

@@ -1,10 +1,10 @@
 {{/* Expand the name of the chart. */}}
-{{- define "computeCore.name" -}}
+{{- define "min.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{/* Create a default fully qualified app name. */}}
-{{- define "computeCore.fullname" -}}
+{{- define "min.fullname" -}}
 {{- if .Values.fullnameOverride -}}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
 {{- else -}}
@@ -18,9 +18,9 @@
 {{- end -}}
 
 {{/* Shared labels */}}
-{{- define "computeCore.labels" -}}
+{{- define "min.labels" -}}
 helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | quote }}
-app.kubernetes.io/name: {{ include "computeCore.name" . }}
+app.kubernetes.io/name: {{ include "min.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
@@ -30,22 +30,22 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end -}}
 
 {{/* Selector labels */}}
-{{- define "computeCore.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "computeCore.name" . }}
+{{- define "min.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "min.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
 {{/* Keycloak service name */}}
-{{- define "computeCore.keycloak.serviceName" -}}
-{{ include "computeCore.fullname" . }}-keycloak
+{{- define "min.keycloak.serviceName" -}}
+{{ include "min.fullname" . }}-keycloak
 {{- end -}}
 
 {{/* Keycloak discovery service name */}}
-{{- define "computeCore.keycloak.discoveryServiceName" -}}
-{{ printf "%s-discovery" (include "computeCore.keycloak.serviceName" .) }}
+{{- define "min.keycloak.discoveryServiceName" -}}
+{{ printf "%s-discovery" (include "min.keycloak.serviceName" .) }}
 {{- end -}}
 
 {{/* PostgreSQL resource base name */}}
-{{- define "computeCore.keycloak.postgresqlName" -}}
-{{ printf "%s-postgresql" (include "computeCore.keycloak.serviceName" .) }}
+{{- define "min.keycloak.postgresqlName" -}}
+{{ printf "%s-postgresql" (include "min.keycloak.serviceName" .) }}
 {{- end -}}

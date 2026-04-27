@@ -75,36 +75,52 @@ Set up Radius on the local cluster and register the custom resource types used b
 
 ## 3. Install Adaptive App Capability Portfolio
 
-Start with the `compute-core` portfolio Helm chart. The first bundled component is Keycloak.
+Start with the `min` portfolio Helm chart. The first bundled component is Keycloak.
 
 1. Create namespace:
 
     ```bash
-    kubectl create namespace compute-core
+    kubectl create namespace min
     ```
 
-2. Install the `compute-core` portfolio from the local chart:
+2. Install the `min` portfolio from the local chart:
 
     ```bash
-    helm install compute-core ./charts/portfolios/compute-core --namespace compute-core
+    helm install min ./charts/portfolios/min --namespace min
     ```
 
 3. Verify deployments:
 
     ```bash
-    kubectl get pods -n compute-core
-    kubectl get svc -n compute-core
+    kubectl get pods -n min
+    kubectl get svc -n min
     ```
 
     You should see services like:
 
     ```bash
-    NAME                               TYPE        
-    compute-core-keycloak              ClusterIP   
-    compute-core-keycloak-discovery    ClusterIP
-    compute-core-keycloak-postgresql   ClusterIP 
+    NAME                      TYPE        
+    min-keycloak              ClusterIP   
+    min-keycloak-discovery    ClusterIP
+    min-keycloak-postgresql   ClusterIP 
     ```
 
+4. In a separate Terminal, expose Keycloak with port-forward (keep this terminal running):
+
+    ```bash
+    kubectl port-forward -n min svc/min-keycloak 8080:8080
+    ```
+
+5. Open a browser and navigate to `localhost:8080`. Log in to KeyCloak portal with user `admin` and password `admin` (which are defined in the `values.yaml` for the Helm chart).
+
+6. Click on "Clients" in the left pane, and click on the "Create Client" button to create a new client. Set up a name for the client and accept all default values across screens except for:
+
+    * `Cleint authentication`: set to **On**.
+    * `Valid redirect URIs`: set to `http://localhost:3000/*` (or more specifically `http://localhost:3000/auth/oidc/callback`). 
+    
+    Click "Save" to save the client definition.
+
+7. Go to "Credentials" tab and copy the client secret. You'll need both client id and secret for the next step.
 
 ## 4. Install the app
 
@@ -115,32 +131,67 @@ Deploy the non-AI app model to the Radius environment created above.
     ```bash
     cd radius
     rad deploy app.bicep \
-      --group trading \
-      --environment trading \
-      --parameters imageRegistry=ghcr.io/haishi2016/portable-apps \
-      --parameters imageTag=latest \
-      --parameters authUsername=admin \
-      --parameters authPassword=admin \
-      --parameters oidcIssuer=http://compute-core-keycloak.compute-core.svc.cluster.local:8080/realms/master \
-      --parameters oidcAuthEndpoint=http://compute-core-keycloak.compute-core.svc.cluster.local:8080/realms/master/protocol/openid-connect/auth \
-      --parameters oidcTokenEndpoint=http://compute-core-keycloak.compute-core.svc.cluster.local:8080/realms/master/protocol/openid-connect/token \
-      --parameters oidcUserInfoEndpoint=http://compute-core-keycloak.compute-core.svc.cluster.local:8080/realms/master/protocol/openid-connect/userinfo \
-      --parameters oidcClientId=<KeyCloak client id> \
-      --parameters oidcClientSecret=<KeyCloak client secret>
-    ```
-2. Add an entry in your hosts file to map service hostname to callback address. 
-
-    ```bash
-    127.0.0.1 compute-core-keycloak.compute-core.svc.cluster.local
+    --group trading \
+    --environment trading \
+    --parameters imageRegistry=ghcr.io/haishi2016/portable-apps \
+    --parameters imageTag=latest \
+    --parameters authUsername=admin \
+    --parameters authPassword=admin \
+    --parameters oidcIssuer=http://min-keycloak.min.svc.cluster.local:8080/realms/master \
+    --parameters oidcIssuerOverride=http://localhost:8080/realms/master \
+    --parameters oidcBrowserAuthEndpoint=http://localhost:8080/realms/master/protocol/openid-connect/auth \
+    --parameters oidcTokenEndpoint=http://min-keycloak.min.svc.cluster.local:8080/realms/master/protocol/openid-connect/token \
+    --parameters oidcUserInfoEndpoint=http://min-keycloak.min.svc.cluster.local:8080/realms/master/protocol/openid-connect/userinfo \
+    --parameters oidcClientId=<Keycloak client id> \
+    --parameters oidcClientSecret=<Keycloak client secret>
     ```
 
-    > **NOTE**: This is needed when the KeyCloak service is configured as a ClusterIP service. This should be optimized in future versions.
+    > **NOTE:** The Keycloak service is `ClusterIP`, which is ideal for in-cluster calls from the frontend pod. This setup uses two different URLs: Browser redirects to `http://localhost:8080` (via `oidcBrowserAuthEndpoint`); Token and userinfo requests go to the in-cluster `min-keycloak.min.svc.cluster.local` (via explicit `oidcTokenEndpoint` and `oidcUserInfoEndpoint`). This causes an issuer mismatch: Keycloak issues a token with iss claim set to `http://localhost:8080/realms/master` (the URL used during authentication), but the frontend validates the token against `oidcIssuer=http://min-keycloak.min.svc.cluster.local:8080/realms/master` by default. Use `oidcIssuerOverride=http://localhost:8080/realms/master` to tell the frontend which issuer to expect. In production, Keycloak is typically deployed behind an ingress with a single DNS name used everywhere, avoiding this split-URL issue. See [keycloak-ingress.md](../../../docs/authentication/keycloak-ingress.md) for setup details.
 
-2. Expose the frontend:
+3. Expose the frontend:
 
     ```bash
     rad resource expose Applications.Core/containers frontend -a portable-apps --port 3000 --remote-port 3000
     ```
 
-3. Open the app at `http://localhost:3000`.
-4. Login using local account admin/admin, or click on "Sign in with OIDC" button to use KeyCloak to login with federated credential.
+4. Open the app at `http://localhost:3000`.
+5. Login using local account admin/admin, or click on "Sign in with OIDC" button to use KeyCloak to login with federated credential.
+
+## 5. Clean up
+
+1. Delete the app:
+
+    ```
+    rad app delete portable-apps
+    ```
+
+2. Delete the K3s cluster:
+
+    ```
+    k3d cluster delete localk8s
+    ```
+
+## Troubleshoot
+
+1. Sometimes K3s DNS resolution is not initialized correctly when launched in WSL, leading DNS resolution failures in pods. Try to recreate the cluster using resolv file on the host:
+
+    ```bash
+    k3d cluster delete localk8s
+    k3d cluster create localk8s --k3s-arg "--resolv-conf=/etc/reslov.conf@server:0"
+    ```
+2. If you have podman also enabled, it may interfer with K3s and Docker operations, depending on how your system is configured. Make sure podman is stopped:
+    ```bash
+    systemctl --user stop podman.socket
+    systemctl --user stop podman.service 
+    ```
+    And check if your `DOCKER_HOST` is pointing to podman. If so, unset it:
+    ```bash
+    unset DOCKER_HOST
+    ```
+3. To observe Keycloak client authentication events, in Keycloak portal, go to **Realm settings** -> **Events** -> **User event settings** and turn **Save events** to **On**.
+
+## Additional Topics
+
+* [Deploy Keycloak behind an ingress](../../../docs/authentication/keycloak-ingress.md)
+* [Configure Keycloak federation with a local Active Directory](../../../docs/authentication/keycloak-active-directory.md)
+* [Configure credential sync from local Active Directory to an Azure Entra tenant](../../../docs/authentication/microsoft-entra-connect.md)

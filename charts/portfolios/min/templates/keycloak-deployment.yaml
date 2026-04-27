@@ -2,24 +2,24 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "computeCore.keycloak.serviceName" . }}
+  name: {{ include "min.keycloak.serviceName" . }}
   labels:
-    {{- include "computeCore.labels" . | nindent 4 }}
+    {{- include "min.labels" . | nindent 4 }}
     app.kubernetes.io/component: keycloak
 spec:
   replicas: {{ .Values.keycloak.replicaCount }}
   selector:
     matchLabels:
-      {{- include "computeCore.selectorLabels" . | nindent 6 }}
+      {{- include "min.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: keycloak
   template:
     metadata:
       labels:
-        {{- include "computeCore.selectorLabels" . | nindent 8 }}
+        {{- include "min.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: keycloak
     spec:
       {{- if .Values.serviceAccount.create }}
-      serviceAccountName: {{ default (include "computeCore.fullname" .) .Values.serviceAccount.name }}
+      serviceAccountName: {{ default (include "min.fullname" .) .Values.serviceAccount.name }}
       {{- else if .Values.serviceAccount.name }}
       serviceAccountName: {{ .Values.serviceAccount.name }}
       {{- end }}
@@ -31,7 +31,7 @@ spec:
       volumes:
         - name: keycloak-custom-cert
           secret:
-            secretName: {{ include "computeCore.keycloak.serviceName" . }}-custom-cert
+            secretName: {{ include "min.keycloak.serviceName" . }}-custom-cert
       {{- end }}
       securityContext:
         {{- toYaml .Values.keycloak.podSecurityContext | nindent 8 }}
@@ -63,21 +63,21 @@ spec:
               value: postgres
             {{- if .Values.postgresql.enabled }}
             - name: KC_DB_URL_HOST
-              value: {{ include "computeCore.keycloak.postgresqlName" . }}
+              value: {{ include "min.keycloak.postgresqlName" . }}
             - name: KC_DB_URL_DATABASE
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "computeCore.keycloak.postgresqlName" . }}-auth
+                  name: {{ include "min.keycloak.postgresqlName" . }}-auth
                   key: database
             - name: KC_DB_USERNAME
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "computeCore.keycloak.postgresqlName" . }}-auth
+                  name: {{ include "min.keycloak.postgresqlName" . }}-auth
                   key: username
             - name: KC_DB_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "computeCore.keycloak.postgresqlName" . }}-auth
+                  name: {{ include "min.keycloak.postgresqlName" . }}-auth
                   key: password
             {{- else }}
             - name: KC_DB_URL_HOST
@@ -94,12 +94,12 @@ spec:
             - name: KC_BOOTSTRAP_ADMIN_USERNAME
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "computeCore.keycloak.serviceName" . }}-admin
+                  name: {{ include "min.keycloak.serviceName" . }}-admin
                   key: username
             - name: KC_BOOTSTRAP_ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "computeCore.keycloak.serviceName" . }}-admin
+                  name: {{ include "min.keycloak.serviceName" . }}-admin
                   key: password
             - name: KC_CACHE
               value: ispn
@@ -110,7 +110,7 @@ spec:
               value: {{ .Values.keycloak.customCert.mountPath | quote }}
             {{- end }}
             - name: JAVA_OPTS_APPEND
-              value: "-Djgroups.dns.query={{ include "computeCore.keycloak.discoveryServiceName" . }}"
+              value: "-Djgroups.dns.query={{ include "min.keycloak.discoveryServiceName" . }}"
           startupProbe:
             tcpSocket:
               port: http

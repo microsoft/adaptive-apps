@@ -11,7 +11,7 @@ Once an Adaptive App capability profile is deployed, you can acess KeyCloak port
 1. Port forward to KeyCloak portal
 
     ```bash
-    kubectl port-forward -n compute-core svc/compute-core-keycloak 8080:8080
+    kubectl port-forward -n min svc/min-keycloak 8080:8080
     ```
 
 2. Open `http://localhost:8080` and sign in with the chart values:
@@ -45,5 +45,5 @@ In Azure environments, Adaptive Apps leverages workload identity integration wit
 
 ## Additional Topics
 
-* [Configure KeyCloak with local Active Directory](./keycloak-active-directory.md)
-* [Sync Active Directory Credentials to Azure Entra tenant](./microsoft-entra-connect.md)
+* [Configure KeyCloak federation with local Active Directory](./keycloak-active-directory.md)
+* [Sync local Active Directory credentials to an Azure Entra tenant](./microsoft-entra-connect.md)

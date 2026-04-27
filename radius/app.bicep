@@ -54,17 +54,37 @@ param oidcBrowserAuthEndpoint string = ''
 @description('Optional OIDC issuer override (must match the issuer claim in ID tokens).')
 param oidcIssuerOverride string = ''
 
-@description('OIDC authorization endpoint URL (e.g., https://keycloak.example.com/realms/master/protocol/openid-connect/auth).')
+@description('Optional OIDC authorization endpoint override. When empty, derived from oidcIssuer.')
 param oidcAuthEndpoint string = ''
 
-@description('OIDC token endpoint URL (e.g., https://keycloak.example.com/realms/master/protocol/openid-connect/token).')
+@description('Optional OIDC token endpoint override. When empty, derived from oidcIssuer.')
 param oidcTokenEndpoint string = ''
 
-@description('OIDC user info endpoint URL (e.g., https://keycloak.example.com/realms/master/protocol/openid-connect/userinfo).')
+@description('Optional OIDC user info endpoint override. When empty, derived from oidcIssuer.')
 param oidcUserInfoEndpoint string = ''
 
 @description('OIDC issuer URL (e.g., https://keycloak.example.com/realms/master). Used if oidcIssuerOverride is not set.')
 param oidcIssuer string = ''
+
+var effectiveOidcIssuer = oidcIssuerOverride != '' ? oidcIssuerOverride : oidcIssuer
+var issuerBaseForDerivedEndpoints = endsWith(effectiveOidcIssuer, '/')
+  ? substring(effectiveOidcIssuer, 0, max(length(effectiveOidcIssuer) - 1, 0))
+  : effectiveOidcIssuer
+var effectiveOidcAuthEndpoint = oidcAuthEndpoint != ''
+  ? oidcAuthEndpoint
+  : issuerBaseForDerivedEndpoints != ''
+    ? '${issuerBaseForDerivedEndpoints}/protocol/openid-connect/auth'
+    : ''
+var effectiveOidcTokenEndpoint = oidcTokenEndpoint != ''
+  ? oidcTokenEndpoint
+  : issuerBaseForDerivedEndpoints != ''
+    ? '${issuerBaseForDerivedEndpoints}/protocol/openid-connect/token'
+    : ''
+var effectiveOidcUserInfoEndpoint = oidcUserInfoEndpoint != ''
+  ? oidcUserInfoEndpoint
+  : issuerBaseForDerivedEndpoints != ''
+    ? '${issuerBaseForDerivedEndpoints}/protocol/openid-connect/userinfo'
+    : ''
 
 // No browser-facing URL parameters needed — the frontend server
 // proxies all backend and MQTT traffic. Only the frontend
@@ -240,11 +260,11 @@ resource frontend 'Applications.Core/containers@2023-10-01-preview' = {
         BACKEND_URL:    { value: 'http://backend:8080' }
         MQTT_WS_URL:    { value: 'ws://${tradingMqtt.properties.host}:${tradingMqtt.properties.wsPort}' }
         // OIDC values provided as parameters (from helm-deployed portfolio or external provider).
-        OIDC_ISSUER:    { value: oidcIssuerOverride != '' ? oidcIssuerOverride : oidcIssuer }
-        OIDC_AUTH_ENDPOINT: { value: oidcAuthEndpoint }
+        OIDC_ISSUER:    { value: effectiveOidcIssuer }
+        OIDC_AUTH_ENDPOINT: { value: effectiveOidcAuthEndpoint }
         OIDC_BROWSER_AUTH_ENDPOINT: { value: oidcBrowserAuthEndpoint }
-        OIDC_TOKEN_ENDPOINT: { value: oidcTokenEndpoint }
-        OIDC_USERINFO_ENDPOINT: { value: oidcUserInfoEndpoint }
+        OIDC_TOKEN_ENDPOINT: { value: effectiveOidcTokenEndpoint }
+        OIDC_USERINFO_ENDPOINT: { value: effectiveOidcUserInfoEndpoint }
         OIDC_CLIENT_ID: { value: oidcClientId }
         OIDC_CLIENT_SECRET: { value: oidcClientSecret }
         APP_BASE_URL: { value: appBaseUrl }
