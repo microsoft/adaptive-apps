@@ -160,6 +160,9 @@ if (microsoftEnabled) {
     new OpenIDConnectStrategy(
       oidcOptions,
       (iss, profile, done) => {
+        // Debug: log the full profile for troubleshooting claims/mappings
+        console.log("OIDC profile received:", JSON.stringify(profile, null, 2));
+
         const user = {
           id: profile.id || profile.oid || profile.sub || profile._json?.sub,
           displayName:
@@ -167,6 +170,9 @@ if (microsoftEnabled) {
             profile.name ||
             profile._json?.name ||
             profile._json?.preferred_username ||
+            profile._json?.email ||
+            profile.username ||
+            profile._json?.username ||
             profile.id,
           email:
             profile.emails?.[0]?.value ||

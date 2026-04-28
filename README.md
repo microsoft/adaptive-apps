@@ -58,9 +58,9 @@ An application targets a specific capability portfolio and can be deployed to an
 
 As a starting point, we define six portfolios with clear inheritance:
 
-* `min`
+* [`min`](./docs/portfolios/min.md)
 
-    Baseline capabilities for adaptive application hosting (currently includes Keycloak and its PostgreSQL backend).
+    Baseline capabilities for adaptive application hosting (currently includes Keycloak and its PostgreSQL backend) [...read more](./docs/portfolios/min.md)
 
 * `core`
 

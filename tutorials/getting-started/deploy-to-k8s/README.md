@@ -190,8 +190,14 @@ Deploy the non-AI app model to the Radius environment created above.
     ```
 3. To observe Keycloak client authentication events, in Keycloak portal, go to **Realm settings** -> **Events** -> **User event settings** and turn **Save events** to **On**.
 
+4. If you need to change/customize the application containers like the frontend container or the backend container, you can build your own images and then override the `imageRegistry` parameter and `imageTag` parameter to point to your own images. If the images are not pushed to a public repository, you can manually import them to K3s:
+    ```bash
+    k3d image import <your image tag> -c localk8s
+    ```
+
 ## Additional Topics
 
 * [Deploy Keycloak behind an ingress](../../../docs/authentication/keycloak-ingress.md)
+* [Configure KeyCloak federation with Azure Entra ID](../../../docs/authentication/keycloak-entra.md)
 * [Configure Keycloak federation with a local Active Directory](../../../docs/authentication/keycloak-active-directory.md)
 * [Configure credential sync from local Active Directory to an Azure Entra tenant](../../../docs/authentication/microsoft-entra-connect.md)
