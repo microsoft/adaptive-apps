@@ -45,5 +45,6 @@ In Azure environments, Adaptive Apps leverages workload identity integration wit
 
 ## Additional Topics
 
+* [Configure KeyCloak federation with Azure Entra](./keycloak-entra.md)
 * [Configure KeyCloak federation with local Active Directory](./keycloak-active-directory.md)
 * [Sync local Active Directory credentials to an Azure Entra tenant](./microsoft-entra-connect.md)

@@ -1,0 +1,22 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: keycloak
+  namespace: min
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - keycloak.example.com
+      secretName: keycloak-tls
+  rules:
+    - host: keycloak.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: min-keycloak
+                port:
+                  number: 8080
