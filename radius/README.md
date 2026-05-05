@@ -324,13 +324,13 @@ rad group delete trading
 │  │          │───────▶┌──────────┐              │  Mosquitto     │  │
 │  │          │/mqtt   │ ai-agent │              │  :1883 / :9001 │  │
 │  │          │──ws──▶ │  :7000   │              └────────────────┘  │
-│  └──────────┘        └──────────┘  ◀── Radius.Resources/aiAgents  │
+│  └──────────┘        └──────────┘  ◀── Radius.Resources/aiModels  │
 │   (only :3000           │               recipe                    │
 │    exposed)             │  CONNECTION_AI_*  (auto-injected)        │
 │                     ┌───▼────────────────────┐                     │
 │                     │  trading-ai             │                     │
 │                     │  Radius.Resources/      │                     │
-│                     │  aiAgents               │                     │
+│                     │  aiModels               │                     │
 │                     └────────────────────────┘                      │
 └──────────────────────────────────────────────────────────────────────┘
 ```
@@ -341,8 +341,8 @@ rad group delete trading
 |---------------|--------|-------------|
 | `Radius.Resources/postgreSqlDatabases` | `kubernetes-trading-postgres.bicep` | PostgreSQL 16-alpine with custom init SQL that creates the trading schema and seeds a demo account |
 | `Radius.Resources/mqttBrokers` | `kubernetes-mosquitto.bicep` | Eclipse Mosquitto 2 with both a plain TCP listener (1883) and a WebSocket listener (9001) |
-| `Radius.Resources/aiAgents` | `kubernetes-kaito.bicep` | Open-source LLM served in-cluster via the Kaito operator (AKS + GPU). Outputs `provider=local`. |
-| `Radius.Resources/aiAgents` | `azure-openai.bicep` | Azure OpenAI account + model deployment. Outputs `provider=openai` and an API key. |
+| `Radius.Resources/aiModels` | `kubernetes-kaito.bicep` | Open-source LLM served in-cluster via the Kaito operator (AKS + GPU). Outputs `provider=local`. |
+| `Radius.Resources/aiModels` | `azure-openai.bicep` | Azure OpenAI account + model deployment. Outputs `provider=openai` and an API key. |
 
 ---
 

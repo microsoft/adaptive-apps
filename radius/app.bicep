@@ -1,10 +1,14 @@
-// app.bicep — Radius application model for portable-apps (no AI agent)
+// app.bicep — Radius application model for portable-apps
 //
-// Deploys the stock-trading simulator on Kubernetes via Radius:
+// Deploys the full stock-trading simulator on Kubernetes via Radius:
 //   • Radius.Resources/postgreSqlDatabases  → PostgreSQL 16 (with trading schema)
 //   • Radius.Resources/mqttBrokers          → Eclipse Mosquitto 2 (MQTT + WS)
 //   • Radius.Resources/idProviders          → OIDC identity provider (Keycloak by default)
-//   • Applications.Core/containers           → backend (.NET 8), frontend (Node)
+//   • Applications.Core/containers           → backend (.NET 8), ai-agent (.NET 8), frontend (Node)
+//
+// AI inference settings are supplied as optional parameters and injected directly
+// into the ai-agent container. Use ai-with-local-model.bicep instead when you want
+// Radius to provision the AI backend automatically via a Recipe.
 //
 // BEFORE DEPLOYING this file you must:
 //   1. Generate & register the Bicep extension (see README.md)
@@ -65,6 +69,19 @@ param oidcUserInfoEndpoint string = ''
 
 @description('OIDC issuer URL (e.g., https://keycloak.example.com/realms/master). Used if oidcIssuerOverride is not set.')
 param oidcIssuer string = ''
+
+@description('AI provider mode understood by the ai-agent container ("openai", "azure", or "local"). Leave empty when AI is not used.')
+param aiProvider string = ''
+
+@description('Base URL for the AI inference API (e.g. https://<account>.openai.azure.com/ or http://kaito-svc/v1). Leave empty when AI is not used.')
+param aiEndpoint string = ''
+
+@description('Model or deployment name for the AI inference API (e.g. gpt-4o, llama-3.1-8b-instruct). Leave empty when AI is not used.')
+param aiModelName string = ''
+
+@description('API key for the AI inference endpoint. Leave empty for local/unauthenticated endpoints.')
+@secure()
+param aiApiKey string = ''
 
 var effectiveOidcIssuer = oidcIssuerOverride != '' ? oidcIssuerOverride : oidcIssuer
 var issuerBaseForDerivedEndpoints = endsWith(effectiveOidcIssuer, '/')
@@ -205,6 +222,37 @@ resource otelCollector 'Applications.Core/containers@2023-10-01-preview' = {
   }
 }
 
+resource aiAgent 'Applications.Core/containers@2023-10-01-preview' = {
+  name: 'ai-agent'
+  properties: {
+    application: tradingApp.id
+    container: {
+      image: '${imageRegistry}/ai-agent:${imageTag}'
+      ports: {
+        http: {
+          containerPort: 7000
+        }
+      }
+      env: {
+        ASPNETCORE_URLS: { value: 'http://+:7000' }
+        OTEL_SERVICE_NAME: { value: 'trading-ai-agent' }
+        OTEL_RESOURCE_ATTRIBUTES: { value: 'service.namespace=portable-apps,service.version=1.0.0,deployment.environment=radius' }
+        OTEL_EXPORTER_OTLP_ENDPOINT: { value: 'http://otel-collector:4318' }
+        OTEL_EXPORTER_OTLP_PROTOCOL: { value: 'http/protobuf' }
+        // LLM connection values supplied as parameters and injected directly.
+        // Use ai-with-local-model.bicep to have Radius provision the AI backend via a Recipe.
+        CONNECTION_AI_PROVIDER:      { value: aiProvider }
+        CONNECTION_AI_ENDPOINT:      { value: aiEndpoint }
+        CONNECTION_AI_MODEL:         { value: aiModelName }
+        CONNECTION_AI_SECRETS_APIKEY: { value: aiApiKey }
+      }
+    }
+    connections: {
+      otel: { source: otelCollector.id }
+    }
+  }
+}
+
 resource backend 'Applications.Core/containers@2023-10-01-preview' = {
   name: 'backend'
   properties: {
@@ -258,6 +306,7 @@ resource frontend 'Applications.Core/containers@2023-10-01-preview' = {
         // In-cluster service URLs — the frontend server proxies all
         // browser traffic to these endpoints, so only port 3000 is exposed.
         BACKEND_URL:    { value: 'http://backend:8080' }
+        AI_AGENT_URL:   { value: 'http://ai-agent:7000' }
         MQTT_WS_URL:    { value: 'ws://${tradingMqtt.properties.host}:${tradingMqtt.properties.wsPort}' }
         // OIDC values provided as parameters (from helm-deployed portfolio or external provider).
         OIDC_ISSUER:    { value: effectiveOidcIssuer }
@@ -275,6 +324,7 @@ resource frontend 'Applications.Core/containers@2023-10-01-preview' = {
     }
     connections: {
       backend: { source: backend.id }
+      aiAgent: { source: aiAgent.id }
       mqtt:    { source: tradingMqtt.id }
       otel:    { source: otelCollector.id }
     }

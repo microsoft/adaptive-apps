@@ -62,8 +62,8 @@ resource aksEnv 'Applications.Core/environments@2023-10-01-preview' = {
           templatePath: '${recipeRegistry}/mqtt:latest'
         }
       }
-      // ── AI agent — Azure OpenAI ─────────────────────────────────────────
-      'Radius.Resources/aiAgents': {
+      // ── AI model — Azure OpenAI ─────────────────────────────────────────
+      'Radius.Resources/aiModels': {
         default: {
           templateKind: 'bicep'
           templatePath: '${recipeRegistry}/ai-agent-azure-openai:latest'

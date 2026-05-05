@@ -1,5 +1,5 @@
 // kubernetes-kaito.bicep
-// Radius Recipe: Radius.Resources/aiAgents  (environment: local Kubernetes with Kaito)
+// Radius Recipe: Radius.Resources/aiModels  (environment: local Kubernetes with Kaito)
 //
 // Deploys an open-source LLM inference server on Kubernetes using the Kaito operator
 // in "bring your own GPU" (BYO) mode — node auto-provisioning is disabled.

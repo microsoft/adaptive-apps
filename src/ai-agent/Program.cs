@@ -47,7 +47,7 @@ builder.Services.AddCors(options =>
 
 // --- Build the AI Agent as a singleton service --------------------------------
 
-// Radius injects CONNECTION_AI_* from the aiAgents connection.
+// Radius injects CONNECTION_AI_* from the aiModels connection.
 // For local dev (docker-compose) the same env vars are set explicitly.
 var provider = (Environment.GetEnvironmentVariable("CONNECTION_AI_PROVIDER") ?? "openai").ToLowerInvariant();
 var apiKey   = Environment.GetEnvironmentVariable("CONNECTION_AI_SECRETS_APIKEY") ?? "";
@@ -181,7 +181,7 @@ app.MapPost("/advice", async (AdviceRequest req, AIAgent agent) =>
     }
     catch (Exception ex)
     {
-        Console.Error.WriteLine($"Agent error: {ex.Message}");
+        Console.Error.WriteLine($"Agent error: {ex}");
         AiAgentTelemetry.AdviceRequests.Add(1,
             new KeyValuePair<string, object?>("status", "error"));
         return Results.Json(

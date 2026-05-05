@@ -58,8 +58,8 @@ resource tradingEnv 'Applications.Core/environments@2023-10-01-preview' = {
           templatePath: '${recipeRegistry}/idp-keycloak:latest'
         }
       }
-      // ── AI agent — Kaito (in-cluster LLM) ──────────────────────────────
-      'Radius.Resources/aiAgents': {
+      // ── AI model — Kaito (in-cluster LLM) ──────────────────────────────
+      'Radius.Resources/aiModels': {
         default: {
           templateKind: 'bicep'
           templatePath: '${recipeRegistry}/ai-agent-kaito:latest'

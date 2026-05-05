@@ -1,7 +1,7 @@
 # types.yaml — All portable-apps Radius Resource Type definitions
 #
 # A single namespace is used for all custom resources:
-#   Radius.Resources → postgreSqlDatabases, mqttBrokers, aiAgents
+#   Radius.Resources → postgreSqlDatabases, mqttBrokers, aiModels
 #
 # Publish a single Bicep extension bundle from this file:
 #
@@ -199,9 +199,9 @@ types:
           required:
             - environment
             - application
-  aiAgents:
+  aiModels:
     description: |
-      The Radius.Resources/aiAgents Resource Type provides an OpenAI-compatible AI inference
+      The Radius.Resources/aiModels Resource Type provides an OpenAI-compatible AI inference
       endpoint to an application. It is provider-agnostic: a Recipe fulfils the type
       by provisioning the concrete backend infrastructure and returning a uniform set
       of connection values so that the consuming container never needs to know which
@@ -224,13 +224,13 @@ types:
 
         rad recipe register default \
           --environment <env> \
-          --resource-type Radius.Resources/aiAgents \
+          --resource-type Radius.Resources/aiModels \
           --template-kind bicep \
           --template-path br:<registry>/ai-agent-recipe:latest
 
       Application model usage:
 
-        resource tradingAI 'Radius.Resources/aiAgents@2025-08-01-preview' = {
+        resource tradingAI 'Radius.Resources/aiModels@2025-08-01-preview' = {
           name: 'trading-ai'
           properties: {
             environment: environment

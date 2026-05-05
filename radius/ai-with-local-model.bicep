@@ -1,11 +1,15 @@
-// app-with-ai.bicep — Radius application model for portable-apps
+// ai-with-local-model.bicep — Radius application model for portable-apps with in-cluster AI
 //
 // Deploys the full stock-trading simulator on Kubernetes via Radius:
 //   • Radius.Resources/postgreSqlDatabases  → PostgreSQL 16 (with trading schema)
 //   • Radius.Resources/mqttBrokers          → Eclipse Mosquitto 2 (MQTT + WS)
 //   • Radius.Resources/idProviders          → OIDC identity provider (Keycloak by default)
-//   • Radius.Resources/aiAgents             → AI inference endpoint (provider chosen by Recipe)
-//   • Applications.Core/containers     → backend (.NET 8), ai-agent (.NET 8), frontend (Node)
+//   • Radius.Resources/aiModels             → AI inference endpoint provisioned by a Recipe
+//   • Applications.Core/containers          → backend (.NET 8), ai-agent (.NET 8), frontend (Node)
+//
+// The ai-agent container's LLM connection values (provider, endpoint, model, apiKey) are
+// auto-injected by Radius from the aiModels resource connection. Use app.bicep instead
+// when you want to supply LLM settings directly as parameters (no Recipe required).
 //
 // BEFORE DEPLOYING this file you must:
 //   1. Generate & register the Bicep extension (see README.md)
@@ -153,7 +157,7 @@ resource tradingMqtt 'Radius.Resources/mqttBrokers@2025-08-01-preview' = {
   }
 }
 
-resource tradingAI 'Radius.Resources/aiAgents@2025-08-01-preview' = {
+resource tradingAI 'Radius.Resources/aiModels@2025-08-01-preview' = {
   name: 'trading-ai'
   properties: {
     environment: environment
@@ -241,7 +245,7 @@ resource aiAgent 'Applications.Core/containers@2023-10-01-preview' = {
         OTEL_EXPORTER_OTLP_ENDPOINT: { value: 'http://otel-collector:4318' }
         OTEL_EXPORTER_OTLP_PROTOCOL: { value: 'http/protobuf' }
         // Radius auto-injects CONNECTION_AI_PROVIDER, CONNECTION_AI_ENDPOINT,
-        // and CONNECTION_AI_MODEL from the aiAgents connection below.
+        // and CONNECTION_AI_MODEL from the aiModels connection below.
         // Only the secret requires explicit wiring (secrets are not auto-injected).
         CONNECTION_AI_SECRETS_APIKEY: { value: tradingAI.properties.secrets.apiKey }
       }
@@ -324,7 +328,7 @@ resource frontend 'Applications.Core/containers@2023-10-01-preview' = {
     }
     connections: {
       backend: { source: backend.id }
-      aiAgent: { source: tradingAI.id }
+      aiModel: { source: tradingAI.id }
       mqtt:    { source: tradingMqtt.id }
       otel:    { source: otelCollector.id }
     }

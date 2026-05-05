@@ -1,5 +1,5 @@
 // azure-openai.bicep
-// Radius Recipe: Radius.Resources/aiAgents  (environment: Azure)
+// Radius Recipe: Radius.Resources/aiModels  (environment: Azure)
 //
 // Creates an Azure OpenAI account and a model deployment.
 // The provisioned endpoint is OpenAI-SDK-compatible when used with an API key,
