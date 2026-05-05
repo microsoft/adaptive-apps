@@ -134,7 +134,7 @@ Deploy the app model to the Radius environment created above.
     rad deploy app.bicep \
     --group trading \
     --environment trading \
-    --parameters imageRegistry=ghcr.io/microsoft/portable-apps \
+    --parameters imageRegistry=ghcr.io/microsoft/adaptive-apps \
     --parameters imageTag=latest \
     --parameters authUsername=admin \
     --parameters authPassword=admin \

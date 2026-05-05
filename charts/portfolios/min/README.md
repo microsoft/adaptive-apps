@@ -54,4 +54,4 @@ Additional `min` capabilities can be added as optional components under the same
 
 The portfolio chart is published as an OCI artifact to:
 
-- `ghcr.io/<owner>/portable-apps/charts/portfolios/min`
+- `ghcr.io/<owner>/adaptive-apps/charts/portfolios/min`

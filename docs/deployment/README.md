@@ -48,7 +48,7 @@ helm install min charts/portfolios/min \
 ### Install min portfolio chart from GHCR
 
 ```bash
-helm pull oci://ghcr.io/<owner>/portable-apps/charts/portfolios/min --version <chart-version>
+helm pull oci://ghcr.io/<owner>/adaptive-apps/charts/portfolios/min --version <chart-version>
 helm install min ./min-<chart-version>.tgz \
 	--namespace min \
 	--create-namespace
@@ -65,5 +65,5 @@ Release trigger conditions:
 
 Published location format:
 
-- `oci://ghcr.io/<owner>/portable-apps/charts/portfolios/<portfolio>:<version>`
+- `oci://ghcr.io/<owner>/adaptive-apps/charts/portfolios/<portfolio>:<version>`
 

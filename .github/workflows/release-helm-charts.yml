@@ -6,6 +6,7 @@ on:
     branches:
       - main
     paths:
+      - '.github/workflows/release-helm-charts.yml'
       - 'charts/portfolios/**'
 
 env:
@@ -25,27 +26,27 @@ jobs:
           - portfolio: min
             chart: min
             chart_path: charts/portfolios/min
-            oci_repo: oci://ghcr.io/${{ github.repository_owner }}/portable-apps/charts/portfolios
+            oci_repo: oci://ghcr.io/${{ github.repository_owner }}/adaptive-apps/charts/portfolios
           - portfolio: core
             chart: core
             chart_path: charts/portfolios/core
-            oci_repo: oci://ghcr.io/${{ github.repository_owner }}/portable-apps/charts/portfolios
+            oci_repo: oci://ghcr.io/${{ github.repository_owner }}/adaptive-apps/charts/portfolios
           - portfolio: ent
             chart: ent
             chart_path: charts/portfolios/ent
-            oci_repo: oci://ghcr.io/${{ github.repository_owner }}/portable-apps/charts/portfolios
+            oci_repo: oci://ghcr.io/${{ github.repository_owner }}/adaptive-apps/charts/portfolios
           - portfolio: min-ai
             chart: min-ai
             chart_path: charts/portfolios/min-ai
-            oci_repo: oci://ghcr.io/${{ github.repository_owner }}/portable-apps/charts/portfolios
+            oci_repo: oci://ghcr.io/${{ github.repository_owner }}/adaptive-apps/charts/portfolios
           - portfolio: core-ai
             chart: core-ai
             chart_path: charts/portfolios/core-ai
-            oci_repo: oci://ghcr.io/${{ github.repository_owner }}/portable-apps/charts/portfolios
+            oci_repo: oci://ghcr.io/${{ github.repository_owner }}/adaptive-apps/charts/portfolios
           - portfolio: ent-ai
             chart: ent-ai
             chart_path: charts/portfolios/ent-ai
-            oci_repo: oci://ghcr.io/${{ github.repository_owner }}/portable-apps/charts/portfolios
+            oci_repo: oci://ghcr.io/${{ github.repository_owner }}/adaptive-apps/charts/portfolios
 
     steps:
       - name: Checkout code

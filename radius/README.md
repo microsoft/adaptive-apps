@@ -30,7 +30,7 @@ radius/
 | `rad` CLI | https://docs.radapp.io/installation/ |
 | `kubectl` | https://kubernetes.io/docs/tasks/tools/ |
 | A running Kubernetes cluster | [k3d](https://k3d.io) recommended for local dev |
-| Access to GHCR images | Ensure your cluster can pull from `ghcr.io/microsoft/portable-apps` (or set `imageRegistry`/`imageTag` to your own published images) |
+| Access to GHCR images | Ensure your cluster can pull from `ghcr.io/microsoft/adaptive-apps` (or set `imageRegistry`/`imageTag` to your own published images) |
 | `az bicep` / Bicep CLI | https://learn.microsoft.com/azure/azure-resource-manager/bicep/install |
 
 ---
@@ -132,7 +132,7 @@ Gather the values you will pass on the command line in Step 7 (`authPassword` is
 
 | Parameter | Description | Local dev default |
 |-----------|-------------|-------------------|
-| `imageRegistry` | Container registry prefix | `ghcr.io/microsoft/portable-apps` |
+| `imageRegistry` | Container registry prefix | `ghcr.io/microsoft/adaptive-apps` |
 | `authPassword` | Password for the local frontend login | *(required — no default)* |
 
 ---
@@ -141,7 +141,7 @@ Gather the values you will pass on the command line in Step 7 (`authPassword` is
 
 ```bash
 cd radius/
-rad deploy app.bicep --group trading --environment trading --parameters imageRegistry=ghcr.io/microsoft/portable-apps --parameters imageTag=latest --parameters authUsername=admin --parameters authPassword=<your-password>
+rad deploy app.bicep --group trading --environment trading --parameters imageRegistry=ghcr.io/microsoft/adaptive-apps --parameters imageTag=latest --parameters authUsername=admin --parameters authPassword=<your-password>
 ```
 
 This single command:
@@ -156,7 +156,7 @@ This single command:
 
 ```bash
 cd radius/
-rad deploy app-with-ai.bicep --group trading --environment trading --parameters imageRegistry=ghcr.io/microsoft/portable-apps --parameters imageTag=latest --parameters authUsername=admin --parameters authPassword=<your-password> --parameters aiModel=Qwen/Qwen3-0.6B
+rad deploy app-with-ai.bicep --group trading --environment trading --parameters imageRegistry=ghcr.io/microsoft/adaptive-apps --parameters imageTag=latest --parameters authUsername=admin --parameters authPassword=<your-password> --parameters aiModel=Qwen/Qwen3-0.6B
 ```
 
 Monitor deployment:

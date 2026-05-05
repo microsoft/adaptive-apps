@@ -6,10 +6,11 @@ on:
     branches:
       - main
     paths:
+      - '.github/workflows/publish-recipes.yml'
       - 'radius/recipes/**'
 
 env:
-  RECIPE_REGISTRY: 'ghcr.io/${{ github.repository_owner }}/portable-apps'
+  RECIPE_REGISTRY: 'ghcr.io/${{ github.repository_owner }}/adaptive-apps'
 
 jobs:
   publish-recipes:

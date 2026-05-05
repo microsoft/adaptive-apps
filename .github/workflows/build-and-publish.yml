@@ -22,11 +22,11 @@ jobs:
       matrix:
         include:
           - directory: src/backend/
-            image: portable-apps/backend
+            image: adaptive-apps/backend
           - directory: src/ai-agent/
-            image: portable-apps/ai-agent
+            image: adaptive-apps/ai-agent
           - directory: src/frontend/
-            image: portable-apps/frontend
+            image: adaptive-apps/frontend
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
