@@ -9,7 +9,7 @@ on:
       - 'radius/recipes/**'
 
 env:
-  RECIPE_REGISTRY: 'ghcr.io/haishi2016/portable-apps'
+  RECIPE_REGISTRY: 'ghcr.io/${{ github.repository_owner }}/portable-apps'
 
 jobs:
   publish-recipes:

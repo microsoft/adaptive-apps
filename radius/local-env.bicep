@@ -22,7 +22,7 @@ OCI registry path where recipes have been published.
 Defaults to the GHCR path populated by the CI pipeline (publish-recipes.yml).
 Override only if you have published recipes to a different registry.
 ''')
-param recipeRegistry string = 'ghcr.io/haishi2016/portable-apps/recipes'
+param recipeRegistry string = 'ghcr.io/microsoft/portable-apps/recipes'
 
 // ---------------------------------------------------------------------------
 // Environment

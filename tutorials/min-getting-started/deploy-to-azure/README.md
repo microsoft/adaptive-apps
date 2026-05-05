@@ -123,7 +123,7 @@ Deploy the app model to the AKS Radius environment created above.
     rad deploy app.bicep \
       --group trading \
       --environment aks-trading \
-      --parameters imageRegistry=ghcr.io/haishi2016/portable-apps \
+    --parameters imageRegistry=ghcr.io/microsoft/portable-apps \
       --parameters imageTag=latest \
       --parameters authUsername=admin \
       --parameters authPassword=admin \

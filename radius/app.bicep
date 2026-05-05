@@ -25,7 +25,7 @@ extension radiusResources
 param environment string
 
 @description('Container image registry prefix, e.g. "ghcr.io/myorg" or "myregistry.azurecr.io/portable-apps".')
-param imageRegistry string = 'ghcr.io/haishi2016/portable-apps'
+param imageRegistry string = 'ghcr.io/microsoft/portable-apps'
 
 @description('Container image tag for all three application services.')
 param imageTag string = 'latest'
