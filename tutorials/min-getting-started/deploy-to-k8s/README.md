@@ -6,6 +6,7 @@
 * [Helm](https://helm.sh/)
 * [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
 * [rad](https://docs.radapp.io/guides/tooling/rad-cli/howto-rad-cli/)
+* (optional) An [OpenAI API Key](https://platform.openai.com/api-keys) or [Azure OpenAI deployment key](https://azure.microsoft.com/en-us/products/ai-foundry/models/openai)
 
 
 ## 1. Prepare a local Kubernetes cluster
@@ -124,7 +125,7 @@ Start with the `min` portfolio Helm chart. The first bundled component is Keyclo
 
 ## 4. Install the app
 
-Deploy the non-AI app model to the Radius environment created above.
+Deploy the app model to the Radius environment created above.
 
 1. Deploy the app:
 
@@ -143,10 +144,23 @@ Deploy the non-AI app model to the Radius environment created above.
     --parameters oidcTokenEndpoint=http://min-keycloak.min.svc.cluster.local:8080/realms/master/protocol/openid-connect/token \
     --parameters oidcUserInfoEndpoint=http://min-keycloak.min.svc.cluster.local:8080/realms/master/protocol/openid-connect/userinfo \
     --parameters oidcClientId=<Keycloak client id> \
-    --parameters oidcClientSecret=<Keycloak client secret>
+    --parameters oidcClientSecret=<Keycloak client secret> \
+    --parameters aiProvider=openai \
+    --parameters aiModelName=gpt-4o \
+    --parameters <OpenAI / Azure OpenAI Service API key>
+
     ```
 
     > **NOTE:** The Keycloak service is `ClusterIP`, which is ideal for in-cluster calls from the frontend pod. This setup uses two different URLs: Browser redirects to `http://localhost:8080` (via `oidcBrowserAuthEndpoint`); Token and userinfo requests go to the in-cluster `min-keycloak.min.svc.cluster.local` (via explicit `oidcTokenEndpoint` and `oidcUserInfoEndpoint`). This causes an issuer mismatch: Keycloak issues a token with iss claim set to `http://localhost:8080/realms/master` (the URL used during authentication), but the frontend validates the token against `oidcIssuer=http://min-keycloak.min.svc.cluster.local:8080/realms/master` by default. Use `oidcIssuerOverride=http://localhost:8080/realms/master` to tell the frontend which issuer to expect. In production, Keycloak is typically deployed behind an ingress with a single DNS name used everywhere, avoiding this split-URL issue. See [keycloak-ingress.md](../../../docs/authentication/keycloak-ingress.md) for setup details.
+
+    If you want to use an Azure OpenAI deployment endpoint, you need to set these parameters accordingly:
+
+    ```bash
+    --parameters aiProvider=azure-key \
+    --parameters aiModelName=gpt-4 \
+    --parameters aiEndpoint=https://antho-openai.openai.azure.com/ \
+    --parameters aiApiKey=<Azure OpenAI service deployment key>
+    ```
 
 3. Expose the frontend:
 
