@@ -3,7 +3,7 @@
 In this tutorial, you'll deploy a sample stock trading application across multiple environments, including Azure, Azure Arc, and a local Kubernetes cluster. The application consists of a frontend written in Node.js, a backend implemented in C#, a PostgreSQL database, and a message bus that enables communication between the frontend and backend. For authentication, the application uses an OIDC identity provider. 
 
 <p align="center">
-    <img src="./images/sample-app-no-ai.png" width="25%" />
+    <img src="./images/sample-app-no-ai.png" width="50%" />
 </p>
 
 The following table shows how each component is mapped to platform-specific deployment on different environment:
