@@ -70,10 +70,10 @@ param oidcUserInfoEndpoint string = ''
 @description('OIDC issuer URL (e.g., https://keycloak.example.com/realms/master). Used if oidcIssuerOverride is not set.')
 param oidcIssuer string = ''
 
-@description('AI provider mode understood by the ai-agent container ("openai", "azure", or "local"). Leave empty when AI is not used.')
+@description('AI provider mode understood by the ai-agent container: "openai" (OpenAI API), "azure-key" (Azure OpenAI with API key), "azure" (Azure OpenAI with managed identity), "local" (in-cluster LLM). Leave empty when AI is not used.')
 param aiProvider string = ''
 
-@description('Base URL for the AI inference API (e.g. https://<account>.openai.azure.com/ or http://kaito-svc/v1). Leave empty when AI is not used.')
+@description('Base URL for the AI inference API. For OpenAI: https://api.openai.com/v1 (leave empty to use default). For Azure OpenAI: https://<account>.openai.azure.com/ (base URL only, without /openai/deployments). For local: http://kaito-svc/v1. Leave empty when AI is not used.')
 param aiEndpoint string = ''
 
 @description('Model or deployment name for the AI inference API (e.g. gpt-4o, llama-3.1-8b-instruct). Leave empty when AI is not used.')
