@@ -341,6 +341,9 @@ rad group delete trading
 |---------------|--------|-------------|
 | `Radius.Resources/postgreSqlDatabases` | `kubernetes-trading-postgres.bicep` | PostgreSQL 16-alpine with custom init SQL that creates the trading schema and seeds a demo account |
 | `Radius.Resources/mqttBrokers` | `kubernetes-mosquitto.bicep` | Eclipse Mosquitto 2 with both a plain TCP listener (1883) and a WebSocket listener (9001) |
+| `Radius.Resources/mqttBrokers` | `azure-event-grid.bicep` | Azure Event Grid Namespace with MQTT topic spaces enabled (secure MQTT/TLS endpoint for Azure environments) |
+| `Radius.Resources/workloadIdentities` | `local-noop.bicep` | Local stub workload identity contract for non-Azure environments |
+| `Radius.Resources/workloadIdentities` | `azure-workload-identity.bicep` | User-assigned managed identity + federated credential + service account annotation + Event Grid TopicSpaces RBAC |
 | `Radius.Resources/aiModels` | `kubernetes-kaito.bicep` | Open-source LLM served in-cluster via the Kaito operator (AKS + GPU). Outputs `provider=local`. |
 | `Radius.Resources/aiModels` | `azure-openai.bicep` | Azure OpenAI account + model deployment. Outputs `provider=openai` and an API key. |
 

@@ -1,7 +1,7 @@
 # types.yaml — All portable-apps Radius Resource Type definitions
 #
 # A single namespace is used for all custom resources:
-#   Radius.Resources → postgreSqlDatabases, mqttBrokers, aiModels
+#   Radius.Resources → postgreSqlDatabases, mqttBrokers, workloadIdentities, aiModels
 #
 # Publish a single Bicep extension bundle from this file:
 #
@@ -105,7 +105,8 @@ types:
   mqttBrokers:
     description: |
       The Radius.Resources/mqttBrokers Resource Type adds an MQTT message broker to an application.
-      Eclipse Mosquitto is the default implementation deployed by the Kubernetes Recipe.
+      Eclipse Mosquitto is the default implementation for local Kubernetes environments.
+      Azure environments can bind this resource type to an Azure Event Grid MQTT recipe.
 
       Start by adding a mqttBrokers resource to your application definition Bicep file:
 
@@ -138,6 +139,10 @@ types:
         - `mqtt.properties.host`
         - `mqtt.properties.port`
         - `mqtt.properties.wsPort`
+        - `mqtt.properties.protocol`
+        - `mqtt.properties.wsProtocol`
+        - `mqtt.properties.authMethod`
+        - `mqtt.properties.tokenAudience`
     apiVersions:
       '2025-08-01-preview':
         schema:
@@ -161,6 +166,107 @@ types:
               type: integer
               readOnly: true
               description: (Read Only) The WebSocket port for MQTT-over-WebSocket connections (default 9001). Used by browser clients.
+            protocol:
+              type: string
+              readOnly: true
+              description: '(Read Only) Transport protocol for TCP MQTT endpoint. Examples: mqtt, mqtts.'
+            wsProtocol:
+              type: string
+              readOnly: true
+              description: '(Read Only) WebSocket scheme for browser MQTT endpoint. Examples: ws, wss.'
+            authMethod:
+              type: string
+              readOnly: true
+              description: '(Read Only) Authentication method expected by broker. Examples: none, OAUTH2-JWT.'
+            tokenAudience:
+              type: string
+              readOnly: true
+              description: '(Read Only) Token audience expected by broker when JWT auth is required.'
+            resourceId:
+              type: string
+              readOnly: true
+              description: '(Read Only) Backing cloud resource ID for the broker when applicable (for example Azure Event Grid namespace resource ID).'
+          required:
+            - environment
+            - application
+
+  workloadIdentities:
+    description: |
+      The Radius.Resources/workloadIdentities Resource Type models workload identity
+      configuration for application components.
+
+      For Azure/AKS environments, the recipe can provision a user-assigned managed
+      identity and federate it with a Kubernetes service account using AKS OIDC
+      Workload Identity.
+
+      Start by adding a workloadIdentities resource to your application definition:
+
+        resource wi 'Radius.Resources/workloadIdentities@2025-08-01-preview' = {
+          name: 'backend-identity'
+          properties: {
+            environment: environment
+            application: app.id
+            serviceAccountName: 'default'
+            oidcIssuer: '<aks oidc issuer url>'
+            assignPublisherRole: true
+          }
+        }
+
+      Then connect your container resource and/or reference output properties directly.
+    apiVersions:
+      '2025-08-01-preview':
+        schema:
+          type: object
+          properties:
+            environment:
+              type: string
+              description: (Required) The Radius Environment ID. Typically set by the rad CLI.
+            application:
+              type: string
+              description: (Required) The Radius Application ID.
+            serviceAccountName:
+              type: string
+              description: (Optional) Kubernetes service account name to use/annotate. Defaults to "default".
+            createServiceAccount:
+              type: boolean
+              description: (Optional) Whether recipe should create/update the Kubernetes service account. Defaults to true.
+            oidcIssuer:
+              type: string
+              description: (Optional) AKS OIDC issuer URL used for federated identity credential.
+            assignPublisherRole:
+              type: boolean
+              description: (Optional) Assign EventGrid TopicSpaces Publisher role. Defaults to true.
+            assignSubscriberRole:
+              type: boolean
+              description: (Optional) Assign EventGrid TopicSpaces Subscriber role. Defaults to false.
+            clientId:
+              type: string
+              readOnly: true
+              description: (Read Only) Managed identity client ID.
+            principalId:
+              type: string
+              readOnly: true
+              description: (Read Only) Managed identity principal ID.
+            tenantId:
+              type: string
+              readOnly: true
+              description: (Read Only) Tenant ID associated with the managed identity.
+            serviceAccountNamespace:
+              type: string
+              readOnly: true
+              description: (Read Only) Kubernetes namespace where the service account exists.
+            boundServiceAccountName:
+              type: string
+              readOnly: true
+              description: (Read Only) Kubernetes service account name bound for workload identity.
+            authMethod:
+              type: string
+              readOnly: true
+              description: '(Read Only) MQTT authentication method this identity is intended for. Example: OAUTH2-JWT.'
+            tokenAudience:
+              type: string
+              readOnly: true
+              description: '(Read Only) Token audience to request from Entra ID. Example: https://eventgrid.azure.net/.'
           required:
             - environment
             - application

@@ -59,6 +59,12 @@ param oidcBrowserAuthEndpoint string = ''
 @description('Optional OIDC issuer override (must match the issuer claim in ID tokens).')
 param oidcIssuerOverride string = ''
 
+@description('AKS OIDC issuer URL used for workload identity federation (required for AKS + Azure workload identity).')
+param workloadIdentityOidcIssuer string = ''
+
+@description('Kubernetes service account used by backend workload identity binding.')
+param workloadIdentityServiceAccountName string = 'default'
+
 @description('Optional OIDC authorization endpoint override. When empty, derived from oidcIssuer.')
 param oidcAuthEndpoint string = ''
 
@@ -154,6 +160,19 @@ resource tradingMqtt 'Radius.Resources/mqttBrokers@2025-08-01-preview' = {
   properties: {
     environment: environment
     application: tradingApp.id
+  }
+}
+
+resource backendIdentity 'Radius.Resources/workloadIdentities@2025-08-01-preview' = {
+  name: 'backend-identity'
+  properties: {
+    environment: environment
+    application: tradingApp.id
+    serviceAccountName: workloadIdentityServiceAccountName
+    createServiceAccount: true
+    oidcIssuer: workloadIdentityOidcIssuer
+    assignPublisherRole: true
+    assignSubscriberRole: false
   }
 }
 
@@ -279,12 +298,17 @@ resource backend 'Applications.Core/containers@2023-10-01-preview' = {
         // and CONNECTION_MQTT_HOST, CONNECTION_MQTT_PORT from the mqtt connection.
         // Only secrets and non-connection values require explicit wiring.
         CONNECTION_DB_SECRETS_PASSWORD: { value: tradingDb.properties.secrets.password }
+        AZURE_CLIENT_ID: { value: backendIdentity.properties.clientId }
+        AZURE_TENANT_ID: { value: backendIdentity.properties.tenantId }
+        MQTT_AUTH_METHOD: { value: backendIdentity.properties.authMethod }
+        MQTT_TOKEN_AUDIENCE: { value: backendIdentity.properties.tokenAudience }
         MQTT_TOPIC: { value: 'orders/new' }
       }
     }
     connections: {
       db:   { source: tradingDb.id }
       mqtt: { source: tradingMqtt.id }
+      identity: { source: backendIdentity.id }
       otel: { source: otelCollector.id }
     }
   }

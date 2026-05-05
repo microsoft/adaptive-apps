@@ -58,6 +58,13 @@ resource tradingEnv 'Applications.Core/environments@2023-10-01-preview' = {
           templatePath: '${recipeRegistry}/idp-keycloak:latest'
         }
       }
+      // ── Workload identity — local no-op ────────────────────────────────
+      'Radius.Resources/workloadIdentities': {
+        default: {
+          templateKind: 'bicep'
+          templatePath: '${recipeRegistry}/workload-identity-local:latest'
+        }
+      }
       // ── AI model — Kaito (in-cluster LLM) ──────────────────────────────
       'Radius.Resources/aiModels': {
         default: {

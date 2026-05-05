@@ -142,5 +142,10 @@ output result object = {
     host: '${svc.metadata.name}.${svc.metadata.namespace}.svc.cluster.local'
     port: mqttPort
     wsPort: wsPort
+    protocol: 'mqtt'
+    wsProtocol: 'ws'
+    authMethod: 'none'
+    tokenAudience: ''
+    resourceId: ''
   }
 }

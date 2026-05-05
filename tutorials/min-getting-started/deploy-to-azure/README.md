@@ -47,28 +47,37 @@ Set up Radius on AKS and register the custom resource types used by the app mode
 
 2. Install Radius control plane:
     ```bash
-    rad install kubernetes
+    rad install kubernetes --set global.azureWorkloadIdentity.enabled=true
     ```
 
-3. Create and switch to a Radius workspace bound to this AKS context:
+3. (Recommended for Event Grid MQTT) Enable AKS OIDC issuer and Workload Identity:
+    ```bash
+    az aks update \
+      --resource-group adaptive-aks \
+      --name adaptive-cluster \
+      --enable-oidc-issuer \
+      --enable-workload-identity
+    ```
+
+4. Create and switch to a Radius workspace bound to this AKS context:
     ```bash
     rad workspace create kubernetes aks-trading --context <aks context name> --force
     rad workspace switch aks-trading
     rad workspace show
     ```
 
-4. Create the Radius group:
+5. Create the Radius group:
     ```bash
     rad group create trading
     ```
 
-5. Register custom resource types used by the sample app:
+6. Register custom resource types used by the sample app:
     ```bash
     cd radius
     rad resource-type create --from-file resource-types/types.yaml
     ```
 
-6. Create the AKS Radius environment and recipe bindings:
+7. Create the AKS Radius environment and recipe bindings:
     ```bash
     rad deploy aks-env.bicep \
       --group trading \
@@ -79,6 +88,18 @@ Set up Radius on AKS and register the custom resource types used by the app mode
     ```
 
     > **NOTE:** This step is different from local Kubernetes. Use `aks-env.bicep` (not `local-env.bicep`) so Radius can use the Azure provider scope.
+
+8. Configure Entra permissions for MQTT topic spaces (publisher/subscriber):
+        * The `workloadIdentities` recipe now automates creation of a managed identity, federated credential, and Event Grid TopicSpaces role assignment.
+        * Event Grid MQTT Entra JWT authentication uses audience `https://eventgrid.azure.net/`.
+        * Fetch the AKS OIDC issuer URL, then pass it when deploying the app model:
+        ```bash
+        export AKS_OIDC_ISSUER=$(az aks show \
+            --resource-group adaptive-aks \
+            --name adaptive-cluster \
+            --query oidcIssuerProfile.issuerUrl \
+            -o tsv)
+        ```
 
 ## 3. Install Adaptive App Capability Portfolio
 
@@ -134,10 +155,19 @@ Deploy the app model to the AKS Radius environment created above.
       --parameters oidcUserInfoEndpoint=http://min-keycloak.min.svc.cluster.local:8080/realms/master/protocol/openid-connect/userinfo \
       --parameters oidcClientId=<Keycloak client id> \
       --parameters oidcClientSecret=<Keycloak client secret> \
+    --parameters workloadIdentityOidcIssuer=$AKS_OIDC_ISSUER \
+    --parameters workloadIdentityServiceAccountName=default \
       --parameters aiProvider=openai \
       --parameters aiModelName=gpt-4o \
       --parameters aiApiKey=<OpenAI API key>
     ```
+
+        For AKS Workload Identity token injection, label the backend pod template once:
+
+        ```bash
+        kubectl patch deployment backend -n trading --type merge \
+            -p '{"spec":{"template":{"metadata":{"labels":{"azure.workload.identity/use":"true"}}}}}'
+        ```
 
     If you want to use an Azure OpenAI deployment endpoint, set these parameters instead:
 

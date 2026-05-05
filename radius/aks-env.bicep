@@ -55,11 +55,18 @@ resource aksEnv 'Applications.Core/environments@2023-10-01-preview' = {
           templatePath: '${recipeRegistry}/postgres:latest'
         }
       }
-      // ── MQTT broker ─────────────────────────────────────────────────────
+      // ── MQTT broker — Azure Event Grid MQTT endpoint ───────────────────
       'Radius.Resources/mqttBrokers': {
         default: {
           templateKind: 'bicep'
-          templatePath: '${recipeRegistry}/mqtt:latest'
+          templatePath: '${recipeRegistry}/mqtt-azure-event-grid:latest'
+        }
+      }
+      // ── Workload identity — AKS + Azure federated identity ─────────────
+      'Radius.Resources/workloadIdentities': {
+        default: {
+          templateKind: 'bicep'
+          templatePath: '${recipeRegistry}/workload-identity-azure:latest'
         }
       }
       // ── AI model — Azure OpenAI ─────────────────────────────────────────
