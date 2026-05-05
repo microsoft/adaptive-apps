@@ -43,6 +43,8 @@ spec:
                 secretKeyRef:
                   name: {{ include "min.keycloak.postgresqlName" . }}-auth
                   key: password
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
