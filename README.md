@@ -108,7 +108,8 @@ As an initial capability, Adaptive Apps provide AI-based refactoring tools that 
 
 ## Getting Started
 
-Follow our [getting-started tutorial](./tutorials/getting-started/README.md) to deploy a Adaptive App across cloud and edge environments.
+Follow our getting-started tutorials to deploy a Adaptive App across cloud and edge environments.
+* [Min Portfolio - getting started](./tutorials/min-getting-started/README.md)
 
 ## Topics
 
