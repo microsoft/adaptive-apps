@@ -74,8 +74,7 @@ resource subscriberRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = i
 }
 
 output result object = {
-  // Keep empty due known Radius Azure scope validation behavior in recipe results.
-  resources: []
+  resources: [workloadIdentity.id]
   values: {
     clientId: workloadIdentity.properties.clientId
     principalId: workloadIdentity.properties.principalId
