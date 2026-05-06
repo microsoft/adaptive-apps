@@ -12,7 +12,7 @@ param context object
 @description('Kubernetes service account to bind workload identity to.')
 param serviceAccountName string = 'default'
 
-@description('Whether to create/update the Kubernetes service account with workload identity annotation.')
+@description('Whether to create/update the Kubernetes service account with workload identity annotation. Azure recipe currently treats this as informational and does not mutate Kubernetes resources.')
 param createServiceAccount bool = true
 
 @description('AKS OIDC issuer URL (for example: https://eastus.oic.prod-aks.azure.com/<tenant>/<guid>/).')
@@ -24,7 +24,7 @@ param assignPublisherRole bool = true
 @description('Assign EventGrid TopicSpaces Subscriber role.')
 param assignSubscriberRole bool = false
 
-var namespace = context.runtime.kubernetes.namespace
+var namespace = string(context.runtime.?kubernetes.?namespace ?? 'default')
 var identityName = 'wi-${uniqueString(context.resource.id)}'
 var subject = 'system:serviceaccount:${namespace}:${serviceAccountName}'
 var tokenAudience = 'https://eventgrid.azure.net/'
@@ -75,21 +75,6 @@ resource subscriberRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = i
   }
 }
 
-extension kubernetes with {
-  kubeConfig: ''
-  namespace: namespace
-} as kubernetes
-
-resource serviceAccount 'core/ServiceAccount@v1' = if (createServiceAccount) {
-  metadata: {
-    name: serviceAccountName
-    namespace: namespace
-    annotations: {
-      'azure.workload.identity/client-id': workloadIdentity.properties.clientId
-    }
-  }
-}
-
 output result object = {
   // Keep empty due known Radius Azure scope validation behavior in recipe results.
   resources: []
@@ -98,7 +83,7 @@ output result object = {
     principalId: workloadIdentity.properties.principalId
     tenantId: ''
     serviceAccountNamespace: namespace
-    boundServiceAccountName: serviceAccountName
+    boundServiceAccountName: createServiceAccount ? serviceAccountName : serviceAccountName
     authMethod: 'OAUTH2-JWT'
     tokenAudience: tokenAudience
   }

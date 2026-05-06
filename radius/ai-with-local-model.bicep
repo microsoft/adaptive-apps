@@ -185,7 +185,7 @@ resource frontendIdentity 'Radius.Resources/workloadIdentities@2025-08-01-previe
     environment: environment
     application: tradingApp.id
     serviceAccountName: workloadIdentityServiceAccountName
-    createServiceAccount: true
+    createServiceAccount: false
     oidcIssuer: workloadIdentityOidcIssuer
     assignPublisherRole: true
     assignSubscriberRole: true
