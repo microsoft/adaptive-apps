@@ -9,6 +9,16 @@
 * [rad](https://docs.radapp.io/guides/tooling/rad-cli/howto-rad-cli/)
 * (optional) An [OpenAI API Key](https://platform.openai.com/api-keys) or [Azure OpenAI deployment key](https://azure.microsoft.com/en-us/products/ai-foundry/models/openai)
 
+## 1. Define a few environment variables for consistency
+
+    ````bash
+    export AZURE_SUBSCRIPTION=<your Azure subscrption id>
+    export RESOURCE_GROUP=<Azure resource group>
+    export AZURE_LOCATION=<Azure region, i.e. westus2>
+    export AKS_CLUSTER=<AKS cluster name>
+    export RADIUS_WORKSPACE=aks-trading
+    export RADIUS_GROUP=trading
+    ```
 ## 1. Prepare an Azure Kubernetes Service (AKS) cluster
 
 For Azure deployment, you'll use AKS as the deployment target.
@@ -16,31 +26,31 @@ For Azure deployment, you'll use AKS as the deployment target.
 1. Set the subscription you want to use:
     ```bash
     az login
-    az account set --subscription <subscription name / id>
+    az account set --subscription $AZURE_SUBSCRIPTION
     ```
 
 2. Create a resource group:
     ```bash
-    az group create --name adaptive-aks --location <Azure region, i.e. westus2>
+    az group create --name $RESOURCE_GROUP --location $AZURE_LOCATION
     ```
 
 3. Create an AKS cluster:
     ```bash
     az aks create \
-    --resource-group adaptive-aks \
-    --name adaptive-cluster \
+    --resource-group $RESOURCE_GROUP \
+    --name $AKS_CLUSTER \
     --node-count 2 \
     --enable-addons monitoring \
     --generate-ssh-keys  \
-    --enable-oidc-issuer \ 
+    --enable-oidc-issuer \
     --enable-workload-identity
     ```
     > **NOTE:** If you want to reuse an existing AKS cluster, make sure OIDC issuer an Workload Idenity are enabled: `az aks update --resource-group <resource group name> --name <aks cluster name> --enable-oidc-issuer --enable-workload-identity`
     
 
-4. Get AKS credential:
+4. Get AKS credential and merge to your `kubectl` config:
     ```bash
-    az aks get-credentials --resource-group adaptive-aks --name adaptive-cluster
+    az aks get-credentials --resource-group $RESOURCE_GROUP --name $AKS_CLUSTER
     ```
     > **NOTE:** The above command merges AKS cluster config into your local `kubectl` config. Run it from where you plan to use `kubectl` command.
 
@@ -61,16 +71,16 @@ Set up Radius on AKS and register the custom resource types used by the app mode
 
 3. Create and switch to a Radius workspace bound to this AKS context:
     ```bash
-    rad workspace create kubernetes aks-trading --context <aks context name> --force
-    rad workspace switch aks-trading
+    rad workspace create kubernetes $RADIUS_WORKSPACE --context $AKS_CLUSTER --force
+    rad workspace switch $RADIUS_WORKSPACE
     rad workspace show
     ```
 
 4. You need the AKS OIDC issuer URL (also needed later for the app deploy):
     ```bash
     export AKS_OIDC_ISSUER=$(az aks show \
-      --resource-group adaptive-aks \
-      --name adaptive-cluster \
+      --resource-group $RESOURCE_GROUP \
+      --name $AKS_CLUSTER \
       --query oidcIssuerProfile.issuerUrl \
       -o tsv)
     ```
@@ -82,12 +92,12 @@ Set up Radius on AKS and register the custom resource types used by the app mode
     >**NOTE:** See https://docs.radapp.io/guides/operations/providers/azure-provider/howto-azure-provider-wi/ for more information
 
     ```bash
-    ./wi-helper.sh <AKS cluster name> <Resource group name> <Azure subscription ID> $AKS_OIDC_ISSUER
+    ./wi-helper.sh $AKS_CLUSTER $RESOURCE_GROUP $AZURE_SUBSCRIPTION $AKS_OIDC_ISSUER
     ```
 
 4. Create the Radius group:
     ```bash
-    rad group create trading
+    rad group create $RADIUS_GROUP
     ```
 
 5. Register custom resource types used by the sample app:
@@ -98,20 +108,20 @@ Set up Radius on AKS and register the custom resource types used by the app mode
 
 6. Create the AKS Radius environment and recipe bindings:
     ```bash
-    rad env create aks-trading --group trading
+    rad env create $RADIUS_WORKSPACE --group $RADIUS_GROUP
     rad deploy aks-env.bicep \
-      --group trading \
-      --parameters azureSubscriptionId=<Azure subscription id> \
-      --parameters azureResourceGroup=adaptive-aks
+      --group $RADIUS_GROUP \
+      --parameters azureSubscriptionId=$AZURE_SUBSCRIPTION \
+      --parameters azureResourceGroup=$RESOURCE_GROUP
 
-    rad environment list --group trading
+    rad environment list --group $RADIUS_GROUP
     ```
 7. Register credential
 
     When you used above helper script, it created an application with name `<AKS cluster name>-radius-app`. Next, register the credential:
 
     ```bash
-    export APPLICATION_NAME="adaptive-cluster-radius-app"
+    export APPLICATION_NAME=$AKS_CLUSTER-radius-app
     export APPLICATION_CLIENT_ID="$(az ad app list --display-name "${APPLICATION_NAME}" --query [].appId -o tsv)"
     export TENANT_ID="$(az account show --query tenantId -o tsv)"
     ```

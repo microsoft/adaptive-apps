@@ -1,0 +1,9 @@
+{
+  "name": "radius-bicep-de",
+  "issuer": "https://westus2.oic.prod-aks.azure.com/72f988bf-86f1-41af-91ab-2d7cd011db47/689cc399-a489-41ee-ac8b-2862a3fa9128/",
+  "subject": "system:serviceaccount:radius-system:bicep-de",
+  "description": "Kubernetes service account federated credential for bicep-de",
+  "audiences": [
+    "api://AzureADTokenExchange"
+  ]
+}

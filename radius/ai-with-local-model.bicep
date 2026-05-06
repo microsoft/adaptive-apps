@@ -65,6 +65,9 @@ param workloadIdentityOidcIssuer string = ''
 @description('Kubernetes service account used by backend workload identity binding.')
 param workloadIdentityServiceAccountName string = 'default'
 
+@description('Entra tenant ID used by workload identity resources in Azure environments.')
+param workloadIdentityTenantId string = ''
+
 @description('Optional OIDC authorization endpoint override. When empty, derived from oidcIssuer.')
 param oidcAuthEndpoint string = ''
 
@@ -312,7 +315,7 @@ resource backend 'Applications.Core/containers@2023-10-01-preview' = {
         // Only secrets and non-connection values require explicit wiring.
         CONNECTION_DB_SECRETS_PASSWORD: { value: tradingDb.properties.secrets.password }
         AZURE_CLIENT_ID: { value: backendIdentity.properties.clientId }
-        AZURE_TENANT_ID: { value: backendIdentity.properties.tenantId }
+        AZURE_TENANT_ID: { value: workloadIdentityTenantId }
         MQTT_AUTH_METHOD: { value: backendIdentity.properties.authMethod }
         MQTT_TOKEN_AUDIENCE: { value: backendIdentity.properties.tokenAudience }
         MQTT_TOPIC: { value: 'orders/new' }
@@ -358,7 +361,7 @@ resource frontend 'Applications.Core/containers@2023-10-01-preview' = {
         AI_AGENT_URL:   { value: 'http://ai-agent:7000' }
         MQTT_WS_URL:    { value: '${tradingMqtt.properties.wsPort == 443 ? 'wss' : 'ws'}://${tradingMqtt.properties.host}:${tradingMqtt.properties.wsPort}' }
         AZURE_CLIENT_ID: { value: frontendIdentity.properties.clientId }
-        AZURE_TENANT_ID: { value: frontendIdentity.properties.tenantId }
+        AZURE_TENANT_ID: { value: workloadIdentityTenantId }
         MQTT_AUTH_METHOD: { value: frontendIdentity.properties.authMethod }
         MQTT_TOKEN_AUDIENCE: { value: frontendIdentity.properties.tokenAudience }
         // OIDC values provided as parameters (from helm-deployed portfolio or external provider).

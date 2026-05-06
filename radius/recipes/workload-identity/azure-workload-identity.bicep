@@ -26,7 +26,6 @@ param assignSubscriberRole bool = false
 
 var namespace = context.runtime.kubernetes.namespace
 var identityName = 'wi-${uniqueString(context.resource.id)}'
-var tenantId = tenant().tenantId
 var subject = 'system:serviceaccount:${namespace}:${serviceAccountName}'
 var tokenAudience = 'https://eventgrid.azure.net/'
 
@@ -87,7 +86,6 @@ resource serviceAccount 'core/ServiceAccount@v1' = if (createServiceAccount) {
     namespace: namespace
     annotations: {
       'azure.workload.identity/client-id': workloadIdentity.properties.clientId
-      'azure.workload.identity/tenant-id': tenantId
     }
   }
 }
@@ -98,7 +96,7 @@ output result object = {
   values: {
     clientId: workloadIdentity.properties.clientId
     principalId: workloadIdentity.properties.principalId
-    tenantId: tenantId
+    tenantId: ''
     serviceAccountNamespace: namespace
     boundServiceAccountName: serviceAccountName
     authMethod: 'OAUTH2-JWT'
