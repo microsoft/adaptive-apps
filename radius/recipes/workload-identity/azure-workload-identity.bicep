@@ -57,7 +57,6 @@ resource federatedCredential 'Microsoft.ManagedIdentity/userAssignedIdentities/f
 
 resource publisherRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (assignPublisherRole) {
   name: guid(resourceGroup().id, workloadIdentity.id, eventGridTopicSpacesPublisherRoleId)
-  scope: resourceGroup()
   properties: {
     principalId: workloadIdentity.properties.principalId
     principalType: 'ServicePrincipal'
@@ -67,7 +66,6 @@ resource publisherRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if
 
 resource subscriberRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (assignSubscriberRole) {
   name: guid(resourceGroup().id, workloadIdentity.id, eventGridTopicSpacesSubscriberRoleId)
-  scope: resourceGroup()
   properties: {
     principalId: workloadIdentity.properties.principalId
     principalType: 'ServicePrincipal'
