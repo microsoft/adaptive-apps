@@ -219,3 +219,4 @@ radius/types.tgz
 **/*.cer
 **/*.crt
 **/*.key
+**/wi-helper-private.sh

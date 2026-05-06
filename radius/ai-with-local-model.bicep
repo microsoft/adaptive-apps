@@ -176,6 +176,19 @@ resource backendIdentity 'Radius.Resources/workloadIdentities@2025-08-01-preview
   }
 }
 
+resource frontendIdentity 'Radius.Resources/workloadIdentities@2025-08-01-preview' = {
+  name: 'frontend-identity'
+  properties: {
+    environment: environment
+    application: tradingApp.id
+    serviceAccountName: workloadIdentityServiceAccountName
+    createServiceAccount: true
+    oidcIssuer: workloadIdentityOidcIssuer
+    assignPublisherRole: true
+    assignSubscriberRole: true
+  }
+}
+
 resource tradingAI 'Radius.Resources/aiModels@2025-08-01-preview' = {
   name: 'trading-ai'
   properties: {
@@ -305,6 +318,14 @@ resource backend 'Applications.Core/containers@2023-10-01-preview' = {
         MQTT_TOPIC: { value: 'orders/new' }
       }
     }
+    extensions: [
+      {
+        kind: 'kubernetesMetadata'
+        labels: {
+          'azure.workload.identity/use': 'true'
+        }
+      }
+    ]
     connections: {
       db:   { source: tradingDb.id }
       mqtt: { source: tradingMqtt.id }
@@ -335,7 +356,11 @@ resource frontend 'Applications.Core/containers@2023-10-01-preview' = {
         // browser traffic to these endpoints, so only port 3000 is exposed.
         BACKEND_URL:    { value: 'http://backend:8080' }
         AI_AGENT_URL:   { value: 'http://ai-agent:7000' }
-        MQTT_WS_URL:    { value: 'ws://${tradingMqtt.properties.host}:${tradingMqtt.properties.wsPort}' }
+        MQTT_WS_URL:    { value: '${tradingMqtt.properties.wsPort == 443 ? 'wss' : 'ws'}://${tradingMqtt.properties.host}:${tradingMqtt.properties.wsPort}' }
+        AZURE_CLIENT_ID: { value: frontendIdentity.properties.clientId }
+        AZURE_TENANT_ID: { value: frontendIdentity.properties.tenantId }
+        MQTT_AUTH_METHOD: { value: frontendIdentity.properties.authMethod }
+        MQTT_TOKEN_AUDIENCE: { value: frontendIdentity.properties.tokenAudience }
         // OIDC values provided as parameters (from helm-deployed portfolio or external provider).
         OIDC_ISSUER:    { value: effectiveOidcIssuer }
         OIDC_AUTH_ENDPOINT: { value: effectiveOidcAuthEndpoint }
@@ -350,11 +375,20 @@ resource frontend 'Applications.Core/containers@2023-10-01-preview' = {
         SESSION_SECRET: { value: sessionSecret }
       }
     }
+    extensions: [
+      {
+        kind: 'kubernetesMetadata'
+        labels: {
+          'azure.workload.identity/use': 'true'
+        }
+      }
+    ]
     connections: {
-      backend: { source: backend.id }
-      aiModel: { source: tradingAI.id }
-      mqtt:    { source: tradingMqtt.id }
-      otel:    { source: otelCollector.id }
+      backend:  { source: backend.id }
+      aiModel:  { source: tradingAI.id }
+      mqtt:     { source: tradingMqtt.id }
+      identity: { source: frontendIdentity.id }
+      otel:     { source: otelCollector.id }
     }
   }
 }

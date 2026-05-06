@@ -26,8 +26,17 @@ For Azure deployment, you'll use AKS as the deployment target.
 
 3. Create an AKS cluster:
     ```bash
-    az aks create --resource-group adaptive-aks --name adaptive-cluster --node-count 2 --enable-addons monitoring --generate-ssh-keys
+    az aks create \
+    --resource-group adaptive-aks \
+    --name adaptive-cluster \
+    --node-count 2 \
+    --enable-addons monitoring \
+    --generate-ssh-keys  \
+    --enable-oidc-issuer \ 
+    --enable-workload-identity
     ```
+    > **NOTE:** If you want to reuse an existing AKS cluster, make sure OIDC issuer an Workload Idenity are enabled: `az aks update --resource-group <resource group name> --name <aks cluster name> --enable-oidc-issuer --enable-workload-identity`
+    
 
 4. Get AKS credential:
     ```bash
@@ -42,7 +51,7 @@ Set up Radius on AKS and register the custom resource types used by the app mode
 1. Verify the current Kubernetes context points to AKS:
     ```bash
     kubectl config current-context
-    kubectl get nodes
+    kubectl cluster-info
     ```
 
 2. Install Radius control plane:
@@ -50,35 +59,46 @@ Set up Radius on AKS and register the custom resource types used by the app mode
     rad install kubernetes --set global.azureWorkloadIdentity.enabled=true
     ```
 
-3. (Recommended for Event Grid MQTT) Enable AKS OIDC issuer and Workload Identity:
-    ```bash
-    az aks update \
-      --resource-group adaptive-aks \
-      --name adaptive-cluster \
-      --enable-oidc-issuer \
-      --enable-workload-identity
-    ```
-
-4. Create and switch to a Radius workspace bound to this AKS context:
+3. Create and switch to a Radius workspace bound to this AKS context:
     ```bash
     rad workspace create kubernetes aks-trading --context <aks context name> --force
     rad workspace switch aks-trading
     rad workspace show
     ```
 
-5. Create the Radius group:
+4. You need the AKS OIDC issuer URL (also needed later for the app deploy):
+    ```bash
+    export AKS_OIDC_ISSUER=$(az aks show \
+      --resource-group adaptive-aks \
+      --name adaptive-cluster \
+      --query oidcIssuerProfile.issuerUrl \
+      -o tsv)
+    ```
+
+5. Register Azure credentials so Radius can provision Azure resources (Event Grid, Managed Identity, etc.):
+
+    Use `wi-helper.sh` script under the `tutorials/min-getting-started/deploy-to-azure` folder to create managed identity and set up service account federation:
+
+    >**NOTE:** See https://docs.radapp.io/guides/operations/providers/azure-provider/howto-azure-provider-wi/ for more information
+
+    ```bash
+    ./wi-helper.sh <AKS cluster name> <Resource group name> <Azure subscription ID> $AKS_OIDC_ISSUER
+    ```
+
+4. Create the Radius group:
     ```bash
     rad group create trading
     ```
 
-6. Register custom resource types used by the sample app:
+5. Register custom resource types used by the sample app:
     ```bash
     cd radius
     rad resource-type create --from-file resource-types/types.yaml
     ```
 
-7. Create the AKS Radius environment and recipe bindings:
+6. Create the AKS Radius environment and recipe bindings:
     ```bash
+    rad env create aks-trading --group trading
     rad deploy aks-env.bicep \
       --group trading \
       --parameters azureSubscriptionId=<Azure subscription id> \
@@ -86,20 +106,22 @@ Set up Radius on AKS and register the custom resource types used by the app mode
 
     rad environment list --group trading
     ```
+7. Register credential
 
-    > **NOTE:** This step is different from local Kubernetes. Use `aks-env.bicep` (not `local-env.bicep`) so Radius can use the Azure provider scope.
+    When you used above helper script, it created an application with name `<AKS cluster name>-radius-app`. Next, register the credential:
 
-8. Configure Entra permissions for MQTT topic spaces (publisher/subscriber):
-        * The `workloadIdentities` recipe now automates creation of a managed identity, federated credential, and Event Grid TopicSpaces role assignment.
-        * Event Grid MQTT Entra JWT authentication uses audience `https://eventgrid.azure.net/`.
-        * Fetch the AKS OIDC issuer URL, then pass it when deploying the app model:
-        ```bash
-        export AKS_OIDC_ISSUER=$(az aks show \
-            --resource-group adaptive-aks \
-            --name adaptive-cluster \
-            --query oidcIssuerProfile.issuerUrl \
-            -o tsv)
-        ```
+    ```bash
+    export APPLICATION_NAME="adaptive-cluster-radius-app"
+    export APPLICATION_CLIENT_ID="$(az ad app list --display-name "${APPLICATION_NAME}" --query [].appId -o tsv)"
+    export TENANT_ID="$(az account show --query tenantId -o tsv)"
+    ```
+
+    rad credential register azure wi --client-id $APPLICATION_CLIENT_ID --tenant-id $TENANT_ID
+    ```
+    Verify credentials are registered (this may take 30+ seconds to refresh):
+    ```bash
+    rad credential show azure
+    ```
 
 ## 3. Install Adaptive App Capability Portfolio
 
@@ -155,19 +177,14 @@ Deploy the app model to the AKS Radius environment created above.
       --parameters oidcUserInfoEndpoint=http://min-keycloak.min.svc.cluster.local:8080/realms/master/protocol/openid-connect/userinfo \
       --parameters oidcClientId=<Keycloak client id> \
       --parameters oidcClientSecret=<Keycloak client secret> \
-    --parameters workloadIdentityOidcIssuer=$AKS_OIDC_ISSUER \
-    --parameters workloadIdentityServiceAccountName=default \
+      --parameters workloadIdentityOidcIssuer=$AKS_OIDC_ISSUER \
+      --parameters workloadIdentityServiceAccountName=default \
       --parameters aiProvider=openai \
       --parameters aiModelName=gpt-4o \
       --parameters aiApiKey=<OpenAI API key>
     ```
 
-        For AKS Workload Identity token injection, label the backend pod template once:
-
-        ```bash
-        kubectl patch deployment backend -n trading --type merge \
-            -p '{"spec":{"template":{"metadata":{"labels":{"azure.workload.identity/use":"true"}}}}}'
-        ```
+    > **NOTE:** The app model automatically sets `azure.workload.identity/use=true` on backend and frontend pods.
 
     If you want to use an Azure OpenAI deployment endpoint, set these parameters instead:
 
