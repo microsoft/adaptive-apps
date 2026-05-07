@@ -19,16 +19,19 @@ param createServiceAccount bool = true
 param oidcIssuer string = ''
 
 var namespace = string(context.runtime.?kubernetes.?namespace ?? 'default')
+var identityName = 'wi-${uniqueString(context.resource.id)}'
 var tokenAudience = 'https://eventgrid.azure.net/'
 
-// Diagnostic mode: no ARM resources are declared so we can isolate whether
-// bicep-de crashes before/while processing deployment resources with scope.
+resource workloadIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: identityName
+  location: resourceGroup().location
+}
 
 output result object = {
-  resources: []
+  resources: [workloadIdentity.id]
   values: {
-    clientId: ''
-    principalId: ''
+    clientId: workloadIdentity.properties.clientId
+    principalId: workloadIdentity.properties.principalId
     tenantId: ''
     serviceAccountNamespace: namespace
     boundServiceAccountName: serviceAccountName
