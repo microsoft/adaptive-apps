@@ -25,6 +25,9 @@ var tokenAudience = 'https://eventgrid.azure.net/'
 resource workloadIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: identityName
   location: resourceGroup().location
+  sku: {
+    name: 'Standard'
+  }
 }
 
 output result object = {
