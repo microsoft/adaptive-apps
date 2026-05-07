@@ -19,39 +19,19 @@ param createServiceAccount bool = true
 param oidcIssuer string = ''
 
 var namespace = string(context.runtime.?kubernetes.?namespace ?? 'default')
-var identityName = 'wi-${uniqueString(context.resource.id)}'
-var subject = 'system:serviceaccount:${namespace}:${serviceAccountName}'
 var tokenAudience = 'https://eventgrid.azure.net/'
 
-resource workloadIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
-  name: identityName
-  location: resourceGroup().location
-}
-
-resource federatedCredential 'Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials@2023-01-31' = if (!empty(oidcIssuer)) {
-  name: 'aks-wi'
-  parent: workloadIdentity
-  properties: {
-    issuer: oidcIssuer
-    subject: subject
-    audiences: [
-      'api://AzureADTokenExchange'
-    ]
-  }
-}
-
-// NOTE: Microsoft.Authorization/roleAssignments are provisioned outside this recipe
-// (az role assignment create) due to Radius bicep-de not supporting the
-// Microsoft.Authorization ARM namespace in recipe deployments.
+// Diagnostic mode: no ARM resources are declared so we can isolate whether
+// bicep-de crashes before/while processing deployment resources with scope.
 
 output result object = {
-  resources: [workloadIdentity.id]
+  resources: []
   values: {
-    clientId: workloadIdentity.properties.clientId
-    principalId: workloadIdentity.properties.principalId
+    clientId: ''
+    principalId: ''
     tenantId: ''
     serviceAccountNamespace: namespace
-    boundServiceAccountName: createServiceAccount ? serviceAccountName : serviceAccountName
+    boundServiceAccountName: serviceAccountName
     authMethod: 'OAUTH2-JWT'
     tokenAudience: tokenAudience
   }
