@@ -17,25 +17,11 @@ param createServiceAccount bool = true
 @description('AKS OIDC issuer URL (for example: https://eastus.oic.prod-aks.azure.com/<tenant>/<guid>/).')
 param oidcIssuer string = ''
 
-@description('Assign EventGrid TopicSpaces Publisher role at the resource-group scope.')
-param assignPublisherRole bool = true
-
-@description('Assign EventGrid TopicSpaces Subscriber role at the resource-group scope.')
-param assignSubscriberRole bool = false
-
 var namespace = string(context.runtime.?kubernetes.?namespace ?? 'default')
 var identityName = 'wi-${uniqueString(context.resource.id)}'
 var boundServiceAccountName = createServiceAccount ? serviceAccountName : serviceAccountName
 var subject = 'system:serviceaccount:${namespace}:${serviceAccountName}'
 var tokenAudience = 'https://eventgrid.azure.net/'
-var eventGridTopicSpacesPublisherRoleId = subscriptionResourceId(
-  'Microsoft.Authorization/roleDefinitions',
-  'a12b0b94-b317-4dcd-84a8-502ce99884c6'
-)
-var eventGridTopicSpacesSubscriberRoleId = subscriptionResourceId(
-  'Microsoft.Authorization/roleDefinitions',
-  '4b0f2fd7-60b4-4eca-896f-4435034f8bf5'
-)
 
 resource workloadIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: identityName
@@ -51,24 +37,6 @@ resource federatedCredential 'Microsoft.ManagedIdentity/userAssignedIdentities/f
     audiences: [
       'api://AzureADTokenExchange'
     ]
-  }
-}
-
-resource publisherRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (assignPublisherRole) {
-  name: guid(resourceGroup().id, workloadIdentity.id, eventGridTopicSpacesPublisherRoleId)
-  properties: {
-    principalId: workloadIdentity.properties.principalId
-    principalType: 'ServicePrincipal'
-    roleDefinitionId: eventGridTopicSpacesPublisherRoleId
-  }
-}
-
-resource subscriberRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (assignSubscriberRole) {
-  name: guid(resourceGroup().id, workloadIdentity.id, eventGridTopicSpacesSubscriberRoleId)
-  properties: {
-    principalId: workloadIdentity.properties.principalId
-    principalType: 'ServicePrincipal'
-    roleDefinitionId: eventGridTopicSpacesSubscriberRoleId
   }
 }
 
