@@ -28,7 +28,7 @@ resource workloadIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023
   location: resourceGroup().location
 }
 
-resource federatedCredential 'Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials@2023-01-31' = if (!empty(oidcIssuer)) {
+resource federatedCredential 'Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials@2023-01-31' = {
   name: 'aks-wi'
   parent: workloadIdentity
   properties: {
