@@ -482,14 +482,23 @@
           clientOrderId: `web-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
         };
 
-        if (!mqttClient) {
-          orderStatusEl.textContent = "MQTT not connected.";
-          return;
-        }
+        try {
+          const res = await fetch(`${config.backendUrl}/api/orders`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(order),
+          });
 
-        mqttClient.publish(config.mqttTopic, JSON.stringify(order));
-        orderStatusEl.textContent = `Order sent for ${symbol}.`;
-        setTimeout(loadData, 500);
+          if (!res.ok) {
+            orderStatusEl.textContent = "Order submit failed.";
+            return;
+          }
+
+          orderStatusEl.textContent = `Order sent for ${symbol}.`;
+          setTimeout(loadData, 500);
+        } catch (err) {
+          orderStatusEl.textContent = "Order submit failed.";
+        }
       }
 
       async function sendChat() {

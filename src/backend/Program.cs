@@ -70,6 +70,17 @@ app.MapGet("/api/symbols", () =>
 app.MapGet("/api/orders", async (OrderProcessor processor) =>
     Results.Ok(await processor.GetOrdersAsync()));
 
+app.MapPost("/api/orders", async (OrderMessage order, OrderProcessor processor, CancellationToken cancellationToken) =>
+{
+    if (string.IsNullOrWhiteSpace(order.Symbol) || order.Quantity <= 0 || order.Price <= 0)
+    {
+        return Results.BadRequest(new { error = "Invalid order payload" });
+    }
+
+    await processor.ProcessOrderAsync(order, cancellationToken);
+    return Results.Accepted(value: new { status = "queued" });
+});
+
 app.MapGet("/api/trades", async (OrderProcessor processor) =>
     Results.Ok(await processor.GetTradesAsync()));
 
