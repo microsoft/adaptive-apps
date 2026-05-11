@@ -6,8 +6,8 @@ The Min Portfolio is designed for local development, prototyping, and MVP scenar
 
 ## Components
 
-* [KeyCloak](https://www.keycloak.org/) as the identity provider for authentication.
-
+* [KeyCloak](https://www.keycloak.org/) as the identity provider for user authentication.
+* [Workload Identities](https://learn.microsoft.com/en-us/entra/workload-id/workload-identities-overview) for authenticating with Azure services.
 
 ## Authentication
 

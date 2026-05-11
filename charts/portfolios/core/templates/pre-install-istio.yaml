@@ -1,0 +1,96 @@
+{{- /*
+  Pre-install Job that installs Istio base CRDs and istiod as standalone Helm
+  releases into istio-system. This is the install flow prescribed by the Istio
+  docs (https://istio.io/latest/docs/setup/install/helm/).
+
+  Runs only when istio.install.enabled=true (local / vanilla k8s).
+  On AKS, set istio.install.enabled=false and use the AKS mesh add-on instead.
+*/}}
+{{- if .Values.istio.install.enabled }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "core.name" . }}-istio-installer
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "core.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "core.name" . }}-istio-installer
+  labels:
+    {{- include "core.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-9"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+- kind: ServiceAccount
+  name: {{ include "core.name" . }}-istio-installer
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "core.name" . }}-istio-installer
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "core.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      serviceAccountName: {{ include "core.name" . }}-istio-installer
+      restartPolicy: Never
+      containers:
+      - name: istio-install
+        image: dtzar/helm-kubectl:3.17
+        command:
+        - /bin/sh
+        - -c
+        - |
+          set -e
+          ISTIO_VERSION="{{ .Values.istio.version }}"
+          ISTIO_NS="{{ .Values.istio.namespace }}"
+          REPO="https://istio-release.storage.googleapis.com/charts"
+
+          helm repo add istio "$REPO" 2>/dev/null || helm repo add istio "$REPO"
+          helm repo update istio
+
+          kubectl create namespace "$ISTIO_NS" --dry-run=client -o yaml | kubectl apply -f -
+
+          if ! helm status istio-base -n "$ISTIO_NS" >/dev/null 2>&1; then
+            echo "Installing istio-base..."
+            helm install istio-base istio/base -n "$ISTIO_NS" --version "$ISTIO_VERSION" --set defaultRevision=default --wait
+          else
+            echo "istio-base already installed, upgrading..."
+            helm upgrade istio-base istio/base -n "$ISTIO_NS" --version "$ISTIO_VERSION" --set defaultRevision=default --wait
+          fi
+
+          if ! helm status istiod -n "$ISTIO_NS" >/dev/null 2>&1; then
+            echo "Installing istiod..."
+            helm install istiod istio/istiod -n "$ISTIO_NS" --version "$ISTIO_VERSION" --wait
+          else
+            echo "istiod already installed, upgrading..."
+            helm upgrade istiod istio/istiod -n "$ISTIO_NS" --version "$ISTIO_VERSION" --wait
+          fi
+
+          echo "Waiting for istiod to be ready..."
+          kubectl rollout status deployment/istiod -n "$ISTIO_NS" --timeout=120s
+
+          echo "Istio install complete."
+{{- end }}

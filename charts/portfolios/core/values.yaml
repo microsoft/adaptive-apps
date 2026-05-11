@@ -1,1 +1,21 @@
 min: {}
+
+# ---------------------------------------------------------------------------
+# Istio service mesh
+# ---------------------------------------------------------------------------
+istio:
+  # Set to false on AKS where the Istio add-on manages the control plane.
+  # Set to true on local / vanilla Kubernetes clusters to install Istio via Helm.
+  install:
+    enabled: true
+
+  # Istio version to install (used by the pre-install hook).
+  version: "1.27.0"
+
+  # Namespace where the Istio control plane is installed.
+  namespace: istio-system
+
+  mtls:
+    strict: true
+    namespaces:
+      - trading-portable-apps

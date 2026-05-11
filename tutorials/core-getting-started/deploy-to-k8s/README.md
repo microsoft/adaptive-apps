@@ -1,4 +1,4 @@
-# Deploy Adaptive App (Min) to Local K8s
+# Deploy Adaptive App (Core) to Local K8s
 
 ## 0. Prerequisites
 
@@ -75,42 +75,43 @@ Set up Radius on the local cluster and register the custom resource types used b
     rad environment list --group trading
     ```
 
-## 3. Install Adaptive App Capability Portfolio (Min)
+## 3. Install Adaptive App Capability Portfolio (Core)
 
-Start with the `min` portfolio Helm chart. The first bundled component is Keycloak.
+Start with the `core` portfolio Helm chart. The first bundled component is Keycloak.
 
 1. Create namespace:
 
     ```bash
-    kubectl create namespace min
+    kubectl create namespace core
     ```
 
-2. Install the `min` portfolio from the local chart:
+2. Install the `core` portfolio from the local chart:
 
     ```bash
-    helm install min ./charts/portfolios/min --namespace min
+    helm install core ./charts/portfolios/core --namespace core --set min.nameOverride=core
     ```
 
 3. Verify deployments:
 
     ```bash
-    kubectl get pods -n min
-    kubectl get svc -n min
+    kubectl get pods -n core
+    kubectl get svc -n core
     ```
 
     You should see services like:
 
     ```bash
     NAME                      TYPE        
-    min-keycloak              ClusterIP   
-    min-keycloak-discovery    ClusterIP
-    min-keycloak-postgresql   ClusterIP 
+    core-keycloak              ClusterIP   
+    core-keycloak-discovery    ClusterIP
+    core-keycloak-postgresql   ClusterIP 
+    istiod                     ClusterIP
     ```
 
 4. In a separate Terminal, expose Keycloak with port-forward (keep this terminal running):
 
     ```bash
-    kubectl port-forward -n min svc/min-keycloak 8080:8080
+    kubectl port-forward -n core svc/core-keycloak 8080:8080
     ```
 
 5. Open a browser and navigate to `localhost:8080`. Log in to KeyCloak portal with user `admin` and password `admin` (which are defined in the `values.yaml` for the Helm chart).
@@ -162,17 +163,38 @@ Deploy the app model to the Radius environment created above.
     --parameters aiEndpoint=https://antho-openai.openai.azure.com/ \
     --parameters aiApiKey=<Azure OpenAI service deployment key>
     ```
+2. (Optional) Observe mTLS
 
-2. Expose the frontend:
+    ```bash
+    export APP_NAMESPACE=trading-portable-apps
+    kubectl get pods -n $APP_NAMESPACE -o jsonpath='{range .items[*]}{.metadata.name}{" => "}{range .spec.containers[*]}{.name}{" "}{end}{"\n"}{end}'
+    ```
+    
+    You should see something like:
+
+    ```bash
+    ai-agent-... => ai-agent istio-proxy
+    backend-... => backend istio-proxy
+    frontend-... => frontend istio-proxy
+    mosquitto-... => mosquitto istio-proxy
+    otel-collector-... => otel-collector istio-proxy
+    postgres-... => postgres istio-proxy
+    prometheus-... => prometheus istio-proxy
+    zipkin-... => zipkin istio-proxy
+    ```
+
+    >**NOTE:** The `core` Helm chart handles all three steps automatically: 1. The pre-install hook installs Istio (`istio-base` + `istiod`) into `istio-system`. 2. The `namespace-enrollment` template labels the app namespace with `istio-injection=enabled`. 3. The post-install hook applies a `PeerAuthentication` with `mtls.mode: STRICT`.
+
+This is intentionally independent of the app model in `radius/app.bicep`. The app stays portable; the environment decides whether service-to-service traffic is meshed.
+
+3. Expose the frontend:
 
     ```bash
     rad resource expose Applications.Core/containers frontend -a portable-apps --port 3000 --remote-port 3000
     ```
 
-3. Open the app at `http://localhost:3000`.
-4. Login using local account admin/admin, or click on "Sign in with OIDC" button to use KeyCloak to login with federated credential.
-
-This is intentionally independent of the app model in `radius/app.bicep`. The app stays portable; the environment decides whether service-to-service traffic is meshed.
+4. Open the app at `http://localhost:3000`.
+5. Login using local account admin/admin, or click on "Sign in with OIDC" button to use KeyCloak to login with federated credential.
 
 ## 5. Clean up
 

@@ -60,11 +60,11 @@ As a starting point, we define six portfolios with clear inheritance:
 
 * [`min`](./docs/portfolios/min.md)
 
-    Baseline capabilities for adaptive application hosting (currently includes Keycloak and its PostgreSQL backend) [...read more](./docs/portfolios/min.md)
+    Baseline capabilities for adaptive application hosting (currently includes Keycloak and its PostgreSQL backend). [read more...](./docs/portfolios/min.md)
 
-* `core`
+* [`core`](./docs/portfolios/core.md)
 
-    Builds on `min` and adds core enterprise capabilities over time.
+    Builds on `min` and adds core enterprise capabilities over time. [read more...](./docs/portfolios/core.md)
 
 * `ent`
 
@@ -110,6 +110,7 @@ As an initial capability, Adaptive Apps provide AI-based refactoring tools that 
 
 Follow our getting-started tutorials to deploy a Adaptive App across cloud and edge environments.
 * [Min Portfolio - getting started](./tutorials/min-getting-started/README.md)
+* [Core Portfolio - getting started](./tutorials/core-getting-started/README.md)
 
 ## Topics
 
