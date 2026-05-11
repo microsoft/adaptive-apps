@@ -127,7 +127,7 @@ class MqttOrderListener : BackgroundService
         var azureTenantId = _configuration["AZURE_TENANT_ID"] ?? string.Empty;
         var federatedTokenFile = _configuration["AZURE_FEDERATED_TOKEN_FILE"] ?? string.Empty;
 
-        if (!tokenAudience.EndsWith('/', StringComparison.Ordinal))
+        if (!tokenAudience.EndsWith("/", StringComparison.Ordinal))
         {
             tokenAudience += "/";
         }
