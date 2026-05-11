@@ -124,6 +124,13 @@ class MqttOrderListener : BackgroundService
         var authMethod = _configuration["MQTT_AUTH_METHOD"] ?? "none";
         var tokenAudience = _configuration["MQTT_TOKEN_AUDIENCE"] ?? "https://eventgrid.azure.net/";
         var azureClientId = _configuration["AZURE_CLIENT_ID"] ?? string.Empty;
+        var azureTenantId = _configuration["AZURE_TENANT_ID"] ?? string.Empty;
+        var federatedTokenFile = _configuration["AZURE_FEDERATED_TOKEN_FILE"] ?? string.Empty;
+
+        if (!tokenAudience.EndsWith('/', StringComparison.Ordinal))
+        {
+            tokenAudience += "/";
+        }
 
         var optionsBuilder = new MqttClientOptionsBuilder()
             .WithTcpServer(host, port)
@@ -131,9 +138,51 @@ class MqttOrderListener : BackgroundService
 
         if (string.Equals(authMethod, "OAUTH2-JWT", StringComparison.OrdinalIgnoreCase))
         {
-            var credential = new DefaultAzureCredential();
-            var tokenRequest = new TokenRequestContext(new[] { tokenAudience + "/.default" });
-            var accessToken = await credential.GetTokenAsync(tokenRequest, stoppingToken);
+            TokenCredential credential;
+            if (!string.IsNullOrWhiteSpace(azureClientId) &&
+                !string.IsNullOrWhiteSpace(azureTenantId) &&
+                !string.IsNullOrWhiteSpace(federatedTokenFile))
+            {
+                credential = new WorkloadIdentityCredential(new WorkloadIdentityCredentialOptions
+                {
+                    ClientId = azureClientId,
+                    TenantId = azureTenantId,
+                    TokenFilePath = federatedTokenFile
+                });
+            }
+            else if (!string.IsNullOrWhiteSpace(azureClientId))
+            {
+                // Explicitly target the configured user-assigned identity to avoid
+                // ambiguous IMDS selection when multiple identities are present.
+                credential = new ManagedIdentityCredential(azureClientId);
+            }
+            else
+            {
+                credential = new DefaultAzureCredential(new DefaultAzureCredentialOptions
+                {
+                    ExcludeVisualStudioCredential = true,
+                    ExcludeAzureCliCredential = true,
+                    ExcludeAzurePowerShellCredential = true,
+                    ExcludeAzureDeveloperCliCredential = true
+                });
+            }
+
+            AccessToken accessToken;
+            try
+            {
+                var tokenRequest = new TokenRequestContext(new[] { tokenAudience + ".default" });
+                accessToken = await credential.GetTokenAsync(tokenRequest, stoppingToken);
+            }
+            catch (Exception ex) when (ex is CredentialUnavailableException or AuthenticationFailedException)
+            {
+                _logger.LogError(ex,
+                    "MQTT token acquisition failed. authMethod={AuthMethod}, clientIdSet={ClientIdSet}, tenantIdSet={TenantIdSet}, federatedTokenFileSet={TokenFileSet}",
+                    authMethod,
+                    !string.IsNullOrWhiteSpace(azureClientId),
+                    !string.IsNullOrWhiteSpace(azureTenantId),
+                    !string.IsNullOrWhiteSpace(federatedTokenFile));
+                return;
+            }
 
             optionsBuilder = optionsBuilder
                 .WithTlsOptions(tls => tls.UseTls())
