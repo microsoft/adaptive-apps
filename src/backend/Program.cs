@@ -122,7 +122,8 @@ class MqttOrderListener : BackgroundService
         _client = factory.CreateMqttClient();
 
         var authMethod = _configuration["MQTT_AUTH_METHOD"] ?? "none";
-        var tokenAudience = _configuration["MQTT_TOKEN_AUDIENCE"] ?? string.Empty;
+        var tokenAudience = _configuration["MQTT_TOKEN_AUDIENCE"] ?? "https://eventgrid.azure.net/";
+        var azureClientId = _configuration["AZURE_CLIENT_ID"] ?? string.Empty;
 
         var optionsBuilder = new MqttClientOptionsBuilder()
             .WithTcpServer(host, port)
@@ -136,9 +137,11 @@ class MqttOrderListener : BackgroundService
 
             optionsBuilder = optionsBuilder
                 .WithTlsOptions(tls => tls.UseTls())
-                .WithAuthentication(
-                    method: "OAUTH2-JWT",
-                    data: System.Text.Encoding.UTF8.GetBytes(accessToken.Token));
+                // MQTTnet v5 uses username/password credentials for broker auth.
+                // Event Grid validates the JWT bearer token provided as password.
+                .WithCredentials(
+                    string.IsNullOrWhiteSpace(azureClientId) ? "oauth2-jwt" : azureClientId,
+                    accessToken.Token);
 
             _logger.LogInformation("MQTT: using OAUTH2-JWT authentication (audience: {Audience})", tokenAudience);
         }
