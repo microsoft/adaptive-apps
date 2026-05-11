@@ -35,7 +35,7 @@ param authUsername string = 'admin'
 
 @description('Password for the local frontend login.')
 @secure()
-param authPassword string = 'admin'
+param authPassword string
 
 @description('Secret used to sign Express session cookies. Defaults to a value derived from the environment ID.')
 @secure()
@@ -178,6 +178,7 @@ resource backendIdentity 'Radius.Resources/workloadIdentities@2025-08-01-preview
   properties: {
     environment: environment
     application: tradingApp.id
+    #disable-next-line BCP073
     clientId: backendClientId
     serviceAccountName: workloadIdentityServiceAccountName
   }
@@ -188,6 +189,7 @@ resource frontendIdentity 'Radius.Resources/workloadIdentities@2025-08-01-previe
   properties: {
     environment: environment
     application: tradingApp.id
+    #disable-next-line BCP073
     clientId: frontendClientId
     serviceAccountName: workloadIdentityServiceAccountName
   }

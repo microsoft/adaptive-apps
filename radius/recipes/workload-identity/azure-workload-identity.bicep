@@ -11,7 +11,7 @@
 param context object
 
 @description('Client ID of the pre-provisioned user-assigned managed identity.')
-param clientId string
+param clientId string = ''
 
 @description('Kubernetes service account name bound to this workload identity.')
 param serviceAccountName string = 'default'
