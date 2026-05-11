@@ -58,10 +58,13 @@ param oidcBrowserAuthEndpoint string = ''
 @description('Optional OIDC issuer override (must match the issuer claim in ID tokens).')
 param oidcIssuerOverride string = ''
 
-@description('AKS OIDC issuer URL used for workload identity federation (required for AKS + Azure workload identity).')
-param workloadIdentityOidcIssuer string = ''
+@description('Client ID of the pre-provisioned managed identity for the backend workload (created by app-wi-setup.sh).')
+param backendClientId string = ''
 
-@description('Kubernetes service account used by backend workload identity binding.')
+@description('Client ID of the pre-provisioned managed identity for the frontend workload (created by app-wi-setup.sh).')
+param frontendClientId string = ''
+
+@description('Kubernetes service account used by workload identity binding.')
 param workloadIdentityServiceAccountName string = 'default'
 
 @description('Entra tenant ID used by workload identity resources in Azure environments.')
@@ -175,11 +178,8 @@ resource backendIdentity 'Radius.Resources/workloadIdentities@2025-08-01-preview
   properties: {
     environment: environment
     application: tradingApp.id
+    clientId: backendClientId
     serviceAccountName: workloadIdentityServiceAccountName
-    createServiceAccount: true
-    oidcIssuer: workloadIdentityOidcIssuer
-    assignPublisherRole: true
-    assignSubscriberRole: false
   }
 }
 
@@ -188,11 +188,8 @@ resource frontendIdentity 'Radius.Resources/workloadIdentities@2025-08-01-previe
   properties: {
     environment: environment
     application: tradingApp.id
+    clientId: frontendClientId
     serviceAccountName: workloadIdentityServiceAccountName
-    createServiceAccount: false
-    oidcIssuer: workloadIdentityOidcIssuer
-    assignPublisherRole: true
-    assignSubscriberRole: true
   }
 }
 

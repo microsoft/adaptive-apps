@@ -133,7 +133,30 @@ Set up Radius on AKS and register the custom resource types used by the app mode
     rad credential show azure
     ```
 
-## 3. Install Adaptive App Capability Portfolio
+## 4. Provision workload identities for the app
+
+Managed identities, federated credentials, and RBAC must be provisioned before
+deploying the app. Use `app-wi-setup.sh` once per workload identity:
+
+```bash
+cd tutorials/min-getting-started/deploy-to-azure
+
+# Create managed identity + federated credential for backend
+./app-wi-setup.sh backend $RESOURCE_GROUP $AZURE_SUBSCRIPTION $AKS_OIDC_ISSUER trading default
+
+# Create managed identity + federated credential for frontend
+./app-wi-setup.sh frontend $RESOURCE_GROUP $AZURE_SUBSCRIPTION $AKS_OIDC_ISSUER trading default
+```
+
+Capture the client IDs output by each call:
+```bash
+export BACKEND_CLIENT_ID=$(az identity show -g $RESOURCE_GROUP -n backend --query clientId -o tsv)
+export FRONTEND_CLIENT_ID=$(az identity show -g $RESOURCE_GROUP -n frontend --query clientId -o tsv)
+```
+
+> **NOTE:** You only need to run this step once. Re-running the deploy later does not re-provision identities.
+
+## 5. Install Adaptive App Capability Portfolio
 
 Start with the `min` portfolio Helm chart. The first bundled component is Keycloak.
 
@@ -166,7 +189,7 @@ Start with the `min` portfolio Helm chart. The first bundled component is Keyclo
 
 7. Go to the "Credentials" tab and copy the client secret. You need both client ID and client secret in the next step.
 
-## 4. Install the app
+## 6. Install the app
 
 Deploy the app model to the AKS Radius environment created above.
 
@@ -187,8 +210,9 @@ Deploy the app model to the AKS Radius environment created above.
       --parameters oidcUserInfoEndpoint=http://min-keycloak.min.svc.cluster.local:8080/realms/master/protocol/openid-connect/userinfo \
       --parameters oidcClientId=<Keycloak client id> \
       --parameters oidcClientSecret=<Keycloak client secret> \
-      --parameters workloadIdentityOidcIssuer=$AKS_OIDC_ISSUER \
       --parameters workloadIdentityServiceAccountName=default \
+      --parameters backendClientId=$BACKEND_CLIENT_ID \
+      --parameters frontendClientId=$FRONTEND_CLIENT_ID \
       --parameters aiProvider=openai \
       --parameters aiModelName=gpt-4o \
       --parameters aiApiKey=<OpenAI API key>

@@ -195,9 +195,9 @@ types:
       The Radius.Resources/workloadIdentities Resource Type models workload identity
       configuration for application components.
 
-      For Azure/AKS environments, the recipe can provision a user-assigned managed
-      identity and federate it with a Kubernetes service account using AKS OIDC
-      Workload Identity.
+      For Azure/AKS environments, provision the managed identity and federated
+      credential upfront using app-wi-setup.sh, then pass the resulting client ID
+      as an input to this resource.
 
       Start by adding a workloadIdentities resource to your application definition:
 
@@ -206,9 +206,8 @@ types:
           properties: {
             environment: environment
             application: app.id
+            clientId: '<pre-provisioned managed identity client id>'
             serviceAccountName: 'default'
-            oidcIssuer: '<aks oidc issuer url>'
-            assignPublisherRole: true
           }
         }
 
@@ -224,25 +223,12 @@ types:
             application:
               type: string
               description: (Required) The Radius Application ID.
-            serviceAccountName:
-              type: string
-              description: (Optional) Kubernetes service account name to use/annotate. Defaults to "default".
-            createServiceAccount:
-              type: boolean
-              description: (Optional) Whether recipe should create/update the Kubernetes service account. Defaults to true.
-            oidcIssuer:
-              type: string
-              description: (Optional) AKS OIDC issuer URL used for federated identity credential.
-            assignPublisherRole:
-              type: boolean
-              description: (Optional) Assign EventGrid TopicSpaces Publisher role. Defaults to true.
-            assignSubscriberRole:
-              type: boolean
-              description: (Optional) Assign EventGrid TopicSpaces Subscriber role. Defaults to false.
             clientId:
               type: string
-              readOnly: true
-              description: (Read Only) Managed identity client ID.
+              description: (Optional) Client ID of a pre-provisioned user-assigned managed identity. Passed to the recipe and echoed back as an output.
+            serviceAccountName:
+              type: string
+              description: (Optional) Kubernetes service account name bound to this workload identity. Defaults to "default".
             principalId:
               type: string
               readOnly: true
