@@ -2,6 +2,8 @@ using System.Buffers;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Text.Json;
+using Azure.Core;
+using Azure.Identity;
 using MQTTnet;
 using Npgsql;
 using OpenTelemetry.Metrics;
@@ -119,10 +121,29 @@ class MqttOrderListener : BackgroundService
         var factory = new MqttClientFactory();
         _client = factory.CreateMqttClient();
 
-        var options = new MqttClientOptionsBuilder()
+        var authMethod = _configuration["MQTT_AUTH_METHOD"] ?? "none";
+        var tokenAudience = _configuration["MQTT_TOKEN_AUDIENCE"] ?? string.Empty;
+
+        var optionsBuilder = new MqttClientOptionsBuilder()
             .WithTcpServer(host, port)
-            .WithClientId($"backend-{Guid.NewGuid():N}")
-            .Build();
+            .WithClientId($"backend-{Guid.NewGuid():N}");
+
+        if (string.Equals(authMethod, "OAUTH2-JWT", StringComparison.OrdinalIgnoreCase))
+        {
+            var credential = new DefaultAzureCredential();
+            var tokenRequest = new TokenRequestContext(new[] { tokenAudience + "/.default" });
+            var accessToken = await credential.GetTokenAsync(tokenRequest, stoppingToken);
+
+            optionsBuilder = optionsBuilder
+                .WithTlsOptions(tls => tls.UseTls())
+                .WithAuthentication(
+                    method: "OAUTH2-JWT",
+                    data: System.Text.Encoding.UTF8.GetBytes(accessToken.Token));
+
+            _logger.LogInformation("MQTT: using OAUTH2-JWT authentication (audience: {Audience})", tokenAudience);
+        }
+
+        var options = optionsBuilder.Build();
 
         _client.ApplicationMessageReceivedAsync += async e =>
         {
