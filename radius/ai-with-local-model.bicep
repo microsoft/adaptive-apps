@@ -83,6 +83,12 @@ param oidcUserInfoEndpoint string = ''
 @description('OIDC issuer URL (e.g., https://keycloak.example.com/realms/master). Used if oidcIssuerOverride is not set.')
 param oidcIssuer string = ''
 
+@description('OTLP collector endpoint for sending telemetry (e.g., http://otel-collector.core:4318). Provided by the portfolio/environment.')
+param otelCollectorEndpoint string = ''
+
+@description('Enable Istio sidecar injection for all containers in the app (requires Istio to be installed in the cluster).')
+param enableIstioInjection bool = true
+
 var effectiveOidcIssuer = oidcIssuerOverride != '' ? oidcIssuerOverride : oidcIssuer
 var issuerBaseForDerivedEndpoints = endsWith(effectiveOidcIssuer, '/')
   ? substring(effectiveOidcIssuer, 0, max(length(effectiveOidcIssuer) - 1, 0))
@@ -103,9 +109,24 @@ var effectiveOidcUserInfoEndpoint = oidcUserInfoEndpoint != ''
     ? '${issuerBaseForDerivedEndpoints}/protocol/openid-connect/userinfo'
     : ''
 
-// No browser-facing URL parameters needed — the frontend server
-// proxies all backend, AI-agent, and MQTT traffic. Only the frontend
-// port needs to be exposed.
+var kubernetesMetadataExtension = enableIstioInjection ? [
+  {
+    kind: 'kubernetesMetadata'
+    annotations: {
+      'sidecar.istio.io/inject': 'true'
+    }
+    labels: {
+      'azure.workload.identity/use': 'true'
+    }
+  }
+] : [
+  {
+    kind: 'kubernetesMetadata'
+    labels: {
+      'azure.workload.identity/use': 'true'
+    }
+  }
+]
 
 @description('''
 Model or deployment name hint for the AI Recipe.
@@ -114,36 +135,6 @@ Model or deployment name hint for the AI Recipe.
 The Recipe uses this value when provisioning the inference backend.
 ''')
 param aiModel string = 'Qwen/Qwen3-0.6B'
-
-var otelCollectorConfig = '''
-receivers:
-  otlp:
-    protocols:
-      http:
-        endpoint: 0.0.0.0:4318
-
-processors:
-  batch:
-
-exporters:
-  zipkin:
-    endpoint: http://zipkin:9411/api/v2/spans
-  prometheusremotewrite:
-    endpoint: http://prometheus:9090/api/v1/write
-    tls:
-      insecure: true
-
-service:
-  pipelines:
-    traces:
-      receivers: [otlp]
-      processors: [batch]
-      exporters: [zipkin]
-    metrics:
-      receivers: [otlp]
-      processors: [batch]
-      exporters: [prometheusremotewrite]
-'''
 
 resource tradingApp 'Applications.Core/applications@2023-10-01-preview' = {
   name: 'portable-apps'
@@ -198,67 +189,6 @@ resource tradingAI 'Radius.Resources/aiModels@2025-08-01-preview' = {
   }
 }
 
-resource zipkin 'Applications.Core/containers@2023-10-01-preview' = {
-  name: 'zipkin'
-  properties: {
-    application: tradingApp.id
-    container: {
-      image: 'openzipkin/zipkin:3.5.1'
-      ports: {
-        http: {
-          containerPort: 9411
-        }
-      }
-    }
-  }
-}
-
-resource prometheus 'Applications.Core/containers@2023-10-01-preview' = {
-  name: 'prometheus'
-  properties: {
-    application: tradingApp.id
-    container: {
-      image: 'prom/prometheus:v2.54.1'
-      command: [
-        '/bin/prometheus'
-        '--config.file=/etc/prometheus/prometheus.yml'
-        '--web.enable-remote-write-receiver'
-      ]
-      ports: {
-        http: {
-          containerPort: 9090
-        }
-      }
-    }
-  }
-}
-
-resource otelCollector 'Applications.Core/containers@2023-10-01-preview' = {
-  name: 'otel-collector'
-  properties: {
-    application: tradingApp.id
-    container: {
-      image: 'otel/opentelemetry-collector-contrib:0.111.0'
-      command: [
-        '/otelcol-contrib'
-        '--config=env:OTEL_COLLECTOR_CONFIG'
-      ]
-      env: {
-        OTEL_COLLECTOR_CONFIG: { value: otelCollectorConfig }
-      }
-      ports: {
-        'otlp-http': {
-          containerPort: 4318
-        }
-      }
-    }
-    connections: {
-      zipkin: { source: zipkin.id }
-      prometheus: { source: prometheus.id }
-    }
-  }
-}
-
 resource aiAgent 'Applications.Core/containers@2023-10-01-preview' = {
   name: 'ai-agent'
   properties: {
@@ -274,7 +204,7 @@ resource aiAgent 'Applications.Core/containers@2023-10-01-preview' = {
         ASPNETCORE_URLS: { value: 'http://+:7000' }
         OTEL_SERVICE_NAME: { value: 'trading-ai-agent' }
         OTEL_RESOURCE_ATTRIBUTES: { value: 'service.namespace=portable-apps,service.version=1.0.0,deployment.environment=radius' }
-        OTEL_EXPORTER_OTLP_ENDPOINT: { value: 'http://otel-collector:4318' }
+        OTEL_EXPORTER_OTLP_ENDPOINT: { value: otelCollectorEndpoint }
         OTEL_EXPORTER_OTLP_PROTOCOL: { value: 'http/protobuf' }
         // Radius auto-injects CONNECTION_AI_PROVIDER, CONNECTION_AI_ENDPOINT,
         // and CONNECTION_AI_MODEL from the aiModels connection below.
@@ -284,7 +214,6 @@ resource aiAgent 'Applications.Core/containers@2023-10-01-preview' = {
     }
     connections: {
       ai: { source: tradingAI.id }
-      otel: { source: otelCollector.id }
     }
   }
 }
@@ -304,7 +233,7 @@ resource backend 'Applications.Core/containers@2023-10-01-preview' = {
         ASPNETCORE_URLS: { value: 'http://+:8080' }
         OTEL_SERVICE_NAME: { value: 'trading-backend' }
         OTEL_RESOURCE_ATTRIBUTES: { value: 'service.namespace=portable-apps,service.version=1.0.0,deployment.environment=radius' }
-        OTEL_EXPORTER_OTLP_ENDPOINT: { value: 'http://otel-collector:4318' }
+        OTEL_EXPORTER_OTLP_ENDPOINT: { value: otelCollectorEndpoint }
         OTEL_EXPORTER_OTLP_PROTOCOL: { value: 'http/protobuf' }
         // Radius auto-injects CONNECTION_DB_HOST, CONNECTION_DB_PORT,
         // CONNECTION_DB_DATABASE, CONNECTION_DB_USERNAME from the db connection,
@@ -318,19 +247,11 @@ resource backend 'Applications.Core/containers@2023-10-01-preview' = {
         MQTT_TOPIC: { value: 'orders/new' }
       }
     }
-    extensions: [
-      {
-        kind: 'kubernetesMetadata'
-        labels: {
-          'azure.workload.identity/use': 'true'
-        }
-      }
-    ]
+    extensions: kubernetesMetadataExtension
     connections: {
       db:   { source: tradingDb.id }
       mqtt: { source: tradingMqtt.id }
       identity: { source: backendIdentity.id }
-      otel: { source: otelCollector.id }
     }
   }
 }
@@ -350,7 +271,7 @@ resource frontend 'Applications.Core/containers@2023-10-01-preview' = {
         PORT:           { value: '3000' }
         OTEL_SERVICE_NAME: { value: 'trading-frontend' }
         OTEL_RESOURCE_ATTRIBUTES: { value: 'service.namespace=portable-apps,service.version=1.0.0,deployment.environment=radius' }
-        OTEL_EXPORTER_OTLP_ENDPOINT: { value: 'http://otel-collector:4318' }
+        OTEL_EXPORTER_OTLP_ENDPOINT: { value: otelCollectorEndpoint }
         OTEL_EXPORTER_OTLP_PROTOCOL: { value: 'http/protobuf' }
         // In-cluster service URLs — the frontend server proxies all
         // browser traffic to these endpoints, so only port 3000 is exposed.
@@ -375,20 +296,12 @@ resource frontend 'Applications.Core/containers@2023-10-01-preview' = {
         SESSION_SECRET: { value: sessionSecret }
       }
     }
-    extensions: [
-      {
-        kind: 'kubernetesMetadata'
-        labels: {
-          'azure.workload.identity/use': 'true'
-        }
-      }
-    ]
+    extensions: kubernetesMetadataExtension
     connections: {
       backend:  { source: backend.id }
       aiModel:  { source: tradingAI.id }
       mqtt:     { source: tradingMqtt.id }
       identity: { source: frontendIdentity.id }
-      otel:     { source: otelCollector.id }
     }
   }
 }

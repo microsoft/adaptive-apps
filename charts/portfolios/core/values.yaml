@@ -1,6 +1,13 @@
 min: {}
 
 # ---------------------------------------------------------------------------
+# Observability stack (OpenTelemetry, Prometheus, Zipkin)
+# ---------------------------------------------------------------------------
+observability:
+  # Set to true to deploy OpenTelemetry collector, Prometheus, and Zipkin
+  enabled: true
+
+# ---------------------------------------------------------------------------
 # Istio service mesh
 # ---------------------------------------------------------------------------
 istio:

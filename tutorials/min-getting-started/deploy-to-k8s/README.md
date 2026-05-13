@@ -139,6 +139,7 @@ Deploy the app model to the Radius environment created above.
     --parameters imageTag=latest \
     --parameters authUsername=admin \
     --parameters authPassword=admin \
+    --parameters otelCollectorEndpoint=http://otel-collector.core:4318 \
     --parameters oidcIssuer=http://min-keycloak.min.svc.cluster.local:8080/realms/master \
     --parameters oidcIssuerOverride=http://localhost:8080/realms/master \
     --parameters oidcBrowserAuthEndpoint=http://localhost:8080/realms/master/protocol/openid-connect/auth \

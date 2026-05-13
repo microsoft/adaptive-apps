@@ -140,6 +140,8 @@ Deploy the app model to the Radius environment created above.
     --parameters imageTag=latest \
     --parameters authUsername=admin \
     --parameters authPassword=admin \
+    --parameters otelCollectorEndpoint=http://otel-collector.core:4318 \
+    --parameters enableIstioInjection=true \
     --parameters oidcIssuer=http://min-keycloak.min.svc.cluster.local:8080/realms/master \
     --parameters oidcIssuerOverride=http://localhost:8080/realms/master \
     --parameters oidcBrowserAuthEndpoint=http://localhost:8080/realms/master/protocol/openid-connect/auth \
@@ -177,15 +179,12 @@ Deploy the app model to the Radius environment created above.
     backend-... => backend istio-proxy
     frontend-... => frontend istio-proxy
     mosquitto-... => mosquitto istio-proxy
-    otel-collector-... => otel-collector istio-proxy
     postgres-... => postgres istio-proxy
-    prometheus-... => prometheus istio-proxy
-    zipkin-... => zipkin istio-proxy
     ```
 
-    >**NOTE:** The `core` Helm chart handles all three steps automatically: 1. The pre-install hook installs Istio (`istio-base` + `istiod`) into `istio-system`. 2. The `namespace-enrollment` template labels the app namespace with `istio-injection=enabled`. 3. The post-install hook applies a `PeerAuthentication` with `mtls.mode: STRICT`.
+    >**NOTE:** The `core` Helm chart handles mTLS automatically: 1. The pre-install hook installs Istio (`istio-base` + `istiod`) into `istio-system`. 2. The `namespace-enrollment` template labels the app namespace with `istio-injection=enabled`. 3. The post-install hook applies a `PeerAuthentication` with `mtls.mode: STRICT`. The chart also deploys observability components (OpenTelemetry collector, Prometheus, and Zipkin) in the `core` namespace, and the app automatically sends telemetry to the collector.
 
-This is intentionally independent of the app model in `radius/app.bicep`. The app stays portable; the environment decides whether service-to-service traffic is meshed.
+This separation allows apps to remain portable; the environment (Helm chart) decides whether observability and mTLS are available.
 
 3. Expose the frontend:
 

@@ -1,18 +1,9 @@
 {{- /*
-  Labels each namespace listed under istio.mtls.namespaces for Istio sidecar
-  injection (istio-injection=enabled).
-
-  Applied regardless of install.enabled so that AKS mesh add-on environments
-  also have their app namespaces enrolled automatically.
+  NOTE: Radius manages app namespaces, so we don't create them here.
+  The istio-injection label should be applied via namespace labels in the
+  Radius environment configuration or manually after namespace creation.
+  
+  To enable Istio sidecar injection on app namespaces, label them with:
+    kubectl label namespace <app-namespace> istio-injection=enabled
 */}}
-{{- if .Values.istio.mtls.strict }}
-{{- range .Values.istio.mtls.namespaces }}
----
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: {{ . }}
-  labels:
-    istio-injection: enabled
-{{- end }}
-{{- end }}
+
