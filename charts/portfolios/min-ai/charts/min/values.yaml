@@ -1,0 +1,80 @@
+nameOverride: ""
+fullnameOverride: ""
+
+commonLabels: {}
+
+components:
+  keycloak:
+    enabled: true
+
+serviceAccount:
+  create: false
+  name: ""
+
+keycloak:
+  replicaCount: 2
+  image:
+    repository: quay.io/keycloak/keycloak
+    tag: "26.5.5"
+    pullPolicy: IfNotPresent
+
+  admin:
+    username: admin
+    password: admin
+
+  resources: {}
+
+  service:
+    type: ClusterIP
+    port: 8080
+
+  ingress:
+    enabled: false
+    className: ""
+    annotations: {}
+    hosts:
+      - host: keycloak.localtest.me
+        paths:
+          - path: /
+            pathType: Prefix
+    tls: []
+
+  podSecurityContext:
+    fsGroup: 1000
+
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+
+  hostAliases: []
+
+  customCert:
+    crt: ""
+    fileName: custom-ca.crt
+    mountPath: /opt/keycloak/conf/certs
+
+postgresql:
+  enabled: true
+  image:
+    repository: mirror.gcr.io/postgres
+    tag: "17"
+    pullPolicy: IfNotPresent
+
+  auth:
+    database: keycloak
+    username: keycloak
+    password: keycloak
+
+  persistence:
+    enabled: true
+    size: 2Gi
+    storageClass: ""
+
+  resources: {}
+
+externalDatabase:
+  host: ""
+  port: 5432
+  database: keycloak
+  username: keycloak
+  password: ""
