@@ -60,27 +60,27 @@ As a starting point, we define six portfolios with clear inheritance:
 
 * [`min`](./docs/portfolios/min.md)
 
-    Baseline capabilities for adaptive application hosting (currently includes Keycloak and its PostgreSQL backend). [read more...](./docs/portfolios/min.md)
+    Baseline capabilities for adaptive application hosting, including authentication, service hosting, and observability. Ideal for PoC, MVP, hackathon, demos and experiments. [read more...](./docs/portfolios/min.md)
 
 * [`core`](./docs/portfolios/core.md)
 
-    Builds on `min` and adds core enterprise capabilities over time. [read more...](./docs/portfolios/core.md)
+    Builds on `min` and provides operational readiness, including service mesh, data sync, basic policy reinforcement, and secret management. Ideal for operating standard production workloads. [read more...](./docs/portfolios/core.md)
 
 * `ent`
 
-    Builds on `core` and represents the enterprise tier.
+    Builds on `core` and represents the large-scale enterprise developments, including advanced policy reinforcement, optional sidecar enablement, advanced certificate management, advanced monitoring and backup/restore.
 
-* `min-ai`
+* [`min-ai`](./docs/portfolios/min-ai.md)
 
-    Builds on `min` and serves as the baseline AI-enabled tier.
+    Builds on `min` and adds local AI model management for continued offline AI inferences. [read more...](./docs/portfolios/min-ai.md)
 
 * `core-ai`
 
-    Builds on `min-ai`.
+    Builds on `min-ai` and adds local AI model management for continued offline AI inferences. 
 
 * `ent-ai`
 
-    Builds on `core-ai`.
+    Builds on `core-ai` and adds local AI model management for continued offline AI inferences. 
 
 
 #### **Capability portfolio deployment**
