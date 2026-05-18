@@ -9,3 +9,7 @@ The Min-AI Portfolio extends the [Min Portfolio](min.md) with capability to depl
 * [Min Portfolio Components](./min.md#components)
 * +[Kaito](https://kaito-project.github.io/kaito/docs/) for offline AI model management on Kubernetes
 
+
+## Additional Guidance
+
+* [Getting started with the Min-AI portfolio](../../tutorials/min-ai-getting-started/README.md)

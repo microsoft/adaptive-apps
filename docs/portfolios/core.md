@@ -1,4 +1,4 @@
-The Core Portfolio
+# The Core Portfolio
 
 The Core Portfolio is designed for standard workloads in production. It covers all aspects that are required for operating a production system, including authentication, secret management, policy, service mesh, as well as service mesh. This portfolio extends [the Min Portfolio](core.md) with these additional capabilities:
 
@@ -7,5 +7,9 @@ The Core Portfolio is designed for standard workloads in production. It covers a
 
 ## Components
 
-* [Istio](https://istio.io/) as the service mesh solution.
+* [Min Portfolio Components](./min.md#components)
+* +[Istio](https://istio.io/) as the service mesh solution.
 
+## Additional Guidance
+
+* [Getting started with the Core portfolio](../../tutorials/core-getting-started/README.md)

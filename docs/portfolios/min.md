@@ -31,6 +31,7 @@ The first approach provides greater flexibility, as Keycloak can be configured w
 
 ## Additional Guidance
 
+* [Getting started with the Min portfolio](../../tutorials/min-getting-started/README.md)
 * [How to deploy KeyCloak behind an ingress](../authentication/keycloak-ingress.md)
 * [How to set up KeyCloak federation with Azure Entra ID](../authentication/keycloak-entra.md)
 * [How to set up KeyCloak federation with a local Active Directory](../authentication/keycloak-active-directory.md)
