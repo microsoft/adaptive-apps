@@ -2,7 +2,7 @@
 
 ## 0. Prerequisites
 
-* NVIDIA GPU
+* NVIDIA GPU with >= 4G memory, preferrably >= 16G 
 * Latest NVIDIA driver installed (with WSL support if using WSL)
 * [docker](https://docs.docker.com/)
 * [Helm](https://helm.sh/)
@@ -89,14 +89,17 @@ To demostrate local deployments, you need a local Kubernetes cluster such as [k3
     # <MiB> should equal to GPU memory reported in step 4. See also known issue 2 below.
     export NODE_NAME=k3d-localk8s-server-0 
     kubectl label node $NODE_NAME nvidia.com/gpu=true          # Kaito labelSelector
-    kubectl label node $NODE_NAME nvidia.com/gpu.memory=<MiB>  # Used by the estimator
+    kubectl label node $NODE_NAME nvidia.com/gpu.product=Persistence-M # Should match with your GPUs
+    kubectl label node $NODE_NAME nvidia.com/gpu.present=true
+    kubectl label node $NODE_NAME nvidia.com/gpu.count=1
+    kubectl label node $NODE_NAME nvidia.com/gpu.memory=<MiB>  # Used by the estimator. See troubleshoot guide #5 below.
     ```
 
     Known issues (Kaito v0.9.0)
 
     |Issue | Workaround |
     |--------|--------|
-    | Webhook panic (MustParse("")) when applying a generic-model Workspace in BYO mode | Delete the validating webhook before applying: `kubectl delete validatingwebhookconfiguration alidation.workspace.kaito.sh` |
+    | Webhook panic (MustParse("")) when applying a generic-model Workspace in BYO mode | Delete the validating webhook before applying: `kubectl delete validatingwebhookconfiguration validation.workspace.kaito.sh` |
     | Node estimator `ignores max-model-len` from ConfigMap and over-estimates `targetNodeCount` |	Inflate the `nvidia.com/gpu.memory` node label to satisfy the estimator |
 
 
@@ -108,7 +111,7 @@ To demostrate local deployments, you need a local Kubernetes cluster such as [k3
     helm repo update
     helm upgrade --install kaito-workspace kaito/workspace \
     --create-namespace \
-    --version 0.9.0 \
+    --version 0.10.0 \
     --namespace kaito-workspace \
     --set featureGates.disableNodeAutoProvisioning=true \
     --set nvidiaDevicePlugin.enabled=false \
@@ -233,10 +236,8 @@ Deploy the app model to the Radius environment created above.
     --parameters oidcUserInfoEndpoint=http://min-keycloak.min.svc.cluster.local:8080/realms/master/protocol/openid-connect/userinfo \
     --parameters oidcClientId=<Keycloak client id> \
     --parameters oidcClientSecret=<Keycloak client secret> \
-    --parameters aiProvider=openai \
-    --parameters aiModelName=gpt-4o \
-    --parameters <OpenAI / Azure OpenAI Service API key>
-
+    --parameters aiProvider=local \
+    --parameters aiModel=Qwen/Qwen3-0.6B
     ```
 
     > **NOTE:** The Keycloak service is `ClusterIP`, which is ideal for in-cluster calls from the frontend pod. This setup uses two different URLs: Browser redirects to `http://localhost:8080` (via `oidcBrowserAuthEndpoint`); Token and userinfo requests go to the in-cluster `min-keycloak.min.svc.cluster.local` (via explicit `oidcTokenEndpoint` and `oidcUserInfoEndpoint`). This causes an issuer mismatch: Keycloak issues a token with iss claim set to `http://localhost:8080/realms/master` (the URL used during authentication), but the frontend validates the token against `oidcIssuer=http://min-keycloak.min.svc.cluster.local:8080/realms/master` by default. Use `oidcIssuerOverride=http://localhost:8080/realms/master` to tell the frontend which issuer to expect. In production, Keycloak is typically deployed behind an ingress with a single DNS name used everywhere, avoiding this split-URL issue. See [keycloak-ingress.md](../../../docs/authentication/keycloak-ingress.md) for setup details.
@@ -249,6 +250,8 @@ Deploy the app model to the Radius environment created above.
     --parameters aiEndpoint=https://antho-openai.openai.azure.com/ \
     --parameters aiApiKey=<Azure OpenAI service deployment key>
     ```
+
+    > **NOTE:** Your GPU size limits which models you can use. For a 4G memory GPU, the only feasible model seems to be `Qwen/Qwen3-0.6B`. For slightly bigger GPU, you can try `ministral-3-3b-instruct`. See troubleshoot guide #5 below.
 
 2. Expose the frontend:
 
@@ -298,7 +301,17 @@ This is intentionally independent of the app model in `radius/app.bicep`. The ap
     ```bash
     k3d image import <your image tag> -c localk8s
     ```
+5. You can trick Kaito scheduler by overclaiming the `nvidia.com/gpu.memory` label to make it think your GPU has bigger memory. For example, by labeling a 4GiB GPU to `12288`, Kaito can be tricked to schedule `Qwen/Qwen3-0.6B` on a single node, which seems to work for the demo.
 
+6. Manully labeling the node seems to lead Kaito GPU feature discovery pod to crash. This doesn't appear to affect the demo flow.
+
+7. If Radius got stuck at a "The target resource is in progress state: Updating." conflict, the best known approch to restore is to re-create the Kubernetes cluster.
+
+8. To get a list of models supported by the currently installed version of Kaito:
+
+    ```bash
+    kubectl get cm kaito-supported-models -n kaito-workspace -o yaml
+    ```
 ## Additional Topics
 
 * [Deploy Keycloak behind an ingress](../../../docs/authentication/keycloak-ingress.md)

@@ -4,11 +4,14 @@
 //   • Radius.Resources/postgreSqlDatabases  → PostgreSQL 16 (with trading schema)
 //   • Radius.Resources/mqttBrokers          → Eclipse Mosquitto 2 (MQTT + WS)
 //   • Radius.Resources/idProviders          → OIDC identity provider (Keycloak by default)
-//   • Applications.Core/containers           → backend (.NET 8), ai-agent (.NET 8), frontend (Node)
+//   • Radius.Resources/aiModels             → AI inference endpoint (only when aiProvider=='local')
+//   • Applications.Core/containers          → backend (.NET 8), ai-agent (.NET 8), frontend (Node)
 //
-// AI inference settings are supplied as optional parameters and injected directly
-// into the ai-agent container. Use ai-with-local-model.bicep instead when you want
-// Radius to provision the AI backend automatically via a Recipe.
+// AI inference settings:
+//   • When aiProvider == 'local', a Radius.Resources/aiModels resource is provisioned by
+//     a Recipe and its connection values are auto-injected into the ai-agent container.
+//   • Otherwise, the aiProvider / aiEndpoint / aiModelName / aiApiKey parameters are
+//     injected directly into the ai-agent container (no Recipe required).
 //
 // BEFORE DEPLOYING this file you must:
 //   1. Generate & register the Bicep extension (see README.md)
@@ -95,6 +98,14 @@ param aiModelName string = ''
 @secure()
 param aiApiKey string = ''
 
+@description('''
+Model hint for the AI Recipe (used only when aiProvider == 'local').
+  Kaito (kubernetes-kaito.bicep)       : a Kaito preset, e.g. llama-3.1-8b-instruct
+  Azure OpenAI (azure-openai.bicep)    : a model name to deploy, e.g. gpt-4o
+The Recipe uses this value when provisioning the inference backend.
+''')
+param aiModel string = 'qwen2.5-coder-7b-instruct'
+
 @description('OTLP collector endpoint for sending telemetry (e.g., http://otel-collector.core:4318). Provided by the portfolio/environment.')
 param otelCollectorEndpoint string = ''
 
@@ -120,6 +131,8 @@ var effectiveOidcUserInfoEndpoint = oidcUserInfoEndpoint != ''
   : issuerBaseForDerivedEndpoints != ''
     ? '${issuerBaseForDerivedEndpoints}/protocol/openid-connect/userinfo'
     : ''
+
+var isLocalAi = aiProvider == 'local'
 
 var kubernetesMetadataExtension = enableIstioInjection ? [
   {
@@ -186,6 +199,38 @@ resource frontendIdentity 'Radius.Resources/workloadIdentities@2025-08-01-previe
   }
 }
 
+resource tradingAI 'Radius.Resources/aiModels@2025-08-01-preview' = if (isLocalAi) {
+  name: 'trading-ai'
+  properties: {
+    environment: environment
+    application: tradingApp.id
+    model: aiModel
+  }
+}
+
+// When using a Recipe-provisioned AI model, Radius auto-injects
+// CONNECTION_AI_PROVIDER, CONNECTION_AI_ENDPOINT, and CONNECTION_AI_MODEL from
+// the aiModels connection. Only the secret requires explicit wiring.
+// Otherwise, the LLM connection values are supplied as parameters directly.
+var aiAgentBaseEnv = {
+  ASPNETCORE_URLS: { value: 'http://+:7000' }
+  OTEL_SERVICE_NAME: { value: 'trading-ai-agent' }
+  OTEL_RESOURCE_ATTRIBUTES: { value: 'service.namespace=portable-apps,service.version=1.0.0,deployment.environment=radius' }
+  OTEL_EXPORTER_OTLP_ENDPOINT: { value: otelCollectorEndpoint }
+  OTEL_EXPORTER_OTLP_PROTOCOL: { value: 'http/protobuf' }
+}
+var aiAgentEnv = isLocalAi ? union(aiAgentBaseEnv, {
+  CONNECTION_AI_SECRETS_APIKEY: { value: tradingAI!.properties.secrets.apiKey }
+}) : union(aiAgentBaseEnv, {
+  CONNECTION_AI_PROVIDER:       { value: aiProvider }
+  CONNECTION_AI_ENDPOINT:       { value: aiEndpoint }
+  CONNECTION_AI_MODEL:          { value: aiModelName }
+  CONNECTION_AI_SECRETS_APIKEY: { value: aiApiKey }
+})
+var aiAgentConnections = isLocalAi ? {
+  ai: { source: tradingAI!.id }
+} : {}
+
 resource aiAgent 'Applications.Core/containers@2023-10-01-preview' = {
   name: 'ai-agent'
   properties: {
@@ -197,22 +242,9 @@ resource aiAgent 'Applications.Core/containers@2023-10-01-preview' = {
           containerPort: 7000
         }
       }
-      env: {
-        ASPNETCORE_URLS: { value: 'http://+:7000' }
-        OTEL_SERVICE_NAME: { value: 'trading-ai-agent' }
-        OTEL_RESOURCE_ATTRIBUTES: { value: 'service.namespace=portable-apps,service.version=1.0.0,deployment.environment=radius' }
-        OTEL_EXPORTER_OTLP_ENDPOINT: { value: otelCollectorEndpoint }
-        OTEL_EXPORTER_OTLP_PROTOCOL: { value: 'http/protobuf' }
-        // LLM connection values supplied as parameters and injected directly.
-        // Use ai-with-local-model.bicep to have Radius provision the AI backend via a Recipe.
-        CONNECTION_AI_PROVIDER:      { value: aiProvider }
-        CONNECTION_AI_ENDPOINT:      { value: aiEndpoint }
-        CONNECTION_AI_MODEL:         { value: aiModelName }
-        CONNECTION_AI_SECRETS_APIKEY: { value: aiApiKey }
-      }
+      env: aiAgentEnv
     }
-    connections: {
-    }
+    connections: aiAgentConnections
   }
 }
 

@@ -4,8 +4,7 @@ This directory contains all Radius assets needed to deploy the **portable-apps**
 
 ```
 radius/
-├── app.bicep                          # Radius application model (no AI agent)
-├── app-with-ai.bicep                  # Radius application model (includes AI agent)
+├── app.bicep                          # Radius application model (set aiProvider=local to enable AI agent via Recipe)
 ├── local-env.bicep                    # Environment for local k3s (Kaito AI recipe)
 ├── aks-env.bicep                      # Environment for AKS / Azure (Azure OpenAI recipe)
 ├── bicepconfig.json                   # Bicep extension references
@@ -156,7 +155,7 @@ This single command:
 
 ```bash
 cd radius/
-rad deploy app-with-ai.bicep --group trading --environment trading --parameters imageRegistry=ghcr.io/microsoft/adaptive-apps --parameters imageTag=latest --parameters authUsername=admin --parameters authPassword=<your-password> --parameters aiModel=Qwen/Qwen3-0.6B
+rad deploy app.bicep --group trading --environment trading --parameters imageRegistry=ghcr.io/microsoft/adaptive-apps --parameters imageTag=latest --parameters authUsername=admin --parameters authPassword=<your-password> --parameters aiProvider=local --parameters aiModel=qwen2.5-coder-7b-instruct
 ```
 
 Monitor deployment:
@@ -183,7 +182,8 @@ Then open **http://localhost:3000** and log in with the `authUsername` / `authPa
 
 ## Deploying to Azure
 
-For Azure deployments with AI, use `app-with-ai.bicep`. Instead of a local Kaito
+For Azure deployments with AI, deploy `app.bicep` with `aiProvider=local`.
+Instead of a local Kaito
 LLM, the AI recipe provisions an Azure OpenAI account.
 
 ### Azure prerequisites
@@ -278,14 +278,15 @@ rad deploy aks-env.bicep \
 ### Azure Step 5 — Deploy the application
 
 ```bash
-rad deploy app-with-ai.bicep --group trading --environment aks-trading \
+rad deploy app.bicep --group trading --environment aks-trading \
   --parameters authPassword=<your-password> \
+  --parameters aiProvider=local \
   --parameters aiModel=gpt-4o
 ```
 
 > The only difference from the local deploy is the environment name
 > (`aks-trading` vs `trading`) and `aiModel=gpt-4o` (or another
-> Azure OpenAI model) instead of `Qwen/Qwen3-0.6B`.
+> Azure OpenAI model) instead of `qwen2.5-coder-7b-instruct`.
 
 ### Azure Step 6 — Access the application
 
