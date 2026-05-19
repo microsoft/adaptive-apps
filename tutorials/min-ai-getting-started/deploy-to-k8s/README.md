@@ -25,17 +25,33 @@ To demostrate local deployments, you need a local Kubernetes cluster such as [k3
     ```bash
     k3d --version
     ```
-3. Create a K3s cluster:
+3. Create a K3s cluster using a custom Docker image and a custom volume folder:
 
     ```bash
-    k3d cluster create localk8s
-    # Set K3D_FIX_DNS=0 helps cluster creation complete in environments where it otherwise stalls at configuring CoreDNS configmap
+    mkdir -p ~/k3d/localk8s-storage
+
+    k3d cluster create localk8s \
+    --image hbai/cuda:0.1 \
+    --gpus all \
+    --k3s-arg "--disable=traefik@server:0" \
+    --volume "$HOME/k3d/localk8s-storage:/var/lib/rancher/k3s@server:0" \
+    --volume "/usr/lib/wsl:/usr/lib/wsl@server:0" \
+    --volume "/dev/dxg:/dev/dxg@server:0"
     ```
-4. Verify GPU and NVIDIA driver is in place:
+
+    > **NOTE:** To build hbai/cuda:0.1 package, use the `Dockerfile.nvidia` file under this folder: docker build -t <tag> -f Dockerfile.nvidia .
+
+4. Apply the GPU bootstrap artifact:
 
     ```bash
-    nvidia-smi
+    kubectl apply -f gpu_bootstrap.yaml
     ```
+
+5. Run `validate_gpu.sh` to validate the node has allocatable GPU:
+
+    ```bash
+    .validate_gpu.sh
+    ````
     You should see something like:
     ```bash
     Fri May 15 09:06:53 2026
@@ -59,29 +75,6 @@ To demostrate local deployments, you need a local Kubernetes cluster such as [k3
     |  No running processes found                                                             |
     +-----------------------------------------------------------------------------------------+
     ```
-5. Install NVIDIA Container Toolkit:
-
-    ```bash
-    curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
-    | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
-
-    curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
-    | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' \
-    | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
-
-    sudo apt-get update
-    sudo apt-get install -y nvidia-container-toolkit
-    ```
-6. Configure Docker to use NVIDIA runtime
-    ```bash
-    sudo nvidia-ctk runtime configure --runtime=docker # this modifies /etc/docker/daemon.json automatically
-    sudo systemctl restart docker
-    ```
-7. Test CUDA container:
-    ```bash
-    docker run --rm --gpus all nvidia/cuda:12.3.2-base-ubuntu22.04 nvidia-smi
-    ```
-    If successful, you should see the NVIDIA GPU table again, which confirms Docker can access the GPU.
 
 8. Kaito's node estimator reads the `nvidia.com/gpu.memory` label to calculate how many nodes are needed. If you were on WSL, WSL2 GPU Feature Discovery may not auto-populate all labels. Ensure the node has at least:
     ```bash
@@ -259,6 +252,8 @@ Deploy the app model to the Radius environment created above.
     rad resource expose Applications.Core/containers frontend -a portable-apps --port 3000 --remote-port 3000
     ```
 
+    >**NOTE:** The AI model container may take serveral minutes to set up, as model needs to be downloaded and configured. Watch the pods under the `trading-portable-apps` namespace.
+
 3. Open the app at `http://localhost:3000`.
 4. Login using local account admin/admin, or click on "Sign in with OIDC" button to use KeyCloak to login with federated credential.
 
@@ -277,7 +272,10 @@ This is intentionally independent of the app model in `radius/app.bicep`. The ap
     ```
     k3d cluster delete localk8s
     ```
+3. Remove the volumne folder:
 
+    ```
+    sudo rm -rf ~/k3d/localk8s-storage
 ## Troubleshoot
 
 1. Sometimes K3s DNS resolution is not initialized correctly when launched in WSL, leading DNS resolution failures in pods. Try to recreate the cluster using resolv file on the host:
@@ -311,6 +309,21 @@ This is intentionally independent of the app model in `radius/app.bicep`. The ap
 
     ```bash
     kubectl get cm kaito-supported-models -n kaito-workspace -o yaml
+    ```
+9. If you face disk pressure, try wth relaxed eviction policy:
+
+    ```bash
+    k3d cluster create localk8s \
+    --image hbai/cuda:0.1 \
+    --gpus all \
+    --k3s-arg "--disable=traefik@server:0" \
+    --k3s-arg "--kubelet-arg=eviction-hard=imagefs.available<1%,nodefs.available<1%@server:0" \
+    --k3s-arg "--kubelet-arg=eviction-soft=imagefs.available<2%,nodefs.available<2%@server:0" \
+    --k3s-arg "--kubelet-arg=eviction-soft-grace-period=imagefs.available=5m,nodefs.available=5m@server:0" \
+    --k3s-arg "--kubelet-arg=eviction-minimum-reclaim=imagefs.available=500Mi,nodefs.available=500Mi@server:0" \
+    --volume "$HOME/k3d/localk8s-storage:/var/lib/rancher/k3s@server:0" \
+    --volume "/usr/lib/wsl:/usr/lib/wsl@server:0" \
+    --volume "/dev/dxg:/dev/dxg@server:0"
     ```
 ## Additional Topics
 
