@@ -43,3 +43,29 @@ spec:
       - name: device-plugin
         hostPath:
           path: /var/lib/kubelet/device-plugins
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: add-nvidia-runtimeclass-to-kaito-workloads
+spec:
+  background: false
+  rules:
+  - name: add-runtimeclass-to-gpu-statefulsets
+    match:
+      any:
+      - resources:
+          kinds:
+          - StatefulSet
+    preconditions:
+      all:
+      - key: "{{ request.object.spec.template.spec.containers[].resources.limits.\"nvidia.com/gpu\" || `[]` }}"
+        operator: AnyIn
+        value:
+        - "1"
+    mutate:
+      patchStrategicMerge:
+        spec:
+          template:
+            spec:
+              runtimeClassName: nvidia

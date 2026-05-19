@@ -54,6 +54,13 @@ var apiKey   = Environment.GetEnvironmentVariable("CONNECTION_AI_SECRETS_APIKEY"
 var endpoint = Environment.GetEnvironmentVariable("CONNECTION_AI_ENDPOINT") ?? "";
 var model    = Environment.GetEnvironmentVariable("CONNECTION_AI_MODEL") ?? "gpt-4o";
 
+// Strip any "publisher/" prefix (e.g. "Qwen/Qwen3-0.6B" -> "Qwen3-0.6B")
+var slashIdx = model.LastIndexOf('/');
+if (slashIdx >= 0 && slashIdx < model.Length - 1)
+{
+    model = model[(slashIdx + 1)..];
+}
+
 AIAgent agent;
 
 switch (provider)
