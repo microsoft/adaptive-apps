@@ -60,6 +60,8 @@ To enable predictable portability, Adaptive Apps introduce the concept of a **ca
 
 An application targets a specific capability portfolio and can be deployed to any environment that implements that portfolio.
 
+A horiztonal comparison of portfolios is available [here](./docs/portfolios/overview.md).
+
 ### **Defined portfolios**
 
 As a starting point, we define six portfolios with clear inheritance:
