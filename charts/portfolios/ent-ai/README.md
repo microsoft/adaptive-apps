@@ -1,6 +1,6 @@
 # ent-ai Capability Portfolio Chart
 
-The `ent-ai` portfolio builds on `core-ai`.
+The `ent-ai` portfolio adds AI capabilities on top of `ent`.
 
 ## Portfolio chart
 
@@ -9,4 +9,4 @@ The `ent-ai` portfolio builds on `core-ai`.
 
 ## Dependency chain
 
-- `ent-ai` -> `core-ai` -> `min-ai` -> `min`
+- `ent-ai` -> `ent` -> `core` -> `min`

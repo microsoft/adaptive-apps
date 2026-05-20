@@ -88,7 +88,7 @@ Start with the `core` portfolio Helm chart. The first bundled component is Keycl
 2. Install the `core` portfolio from the local chart:
 
     ```bash
-    helm install core ./charts/portfolios/core --namespace core --set min.nameOverride=core
+    helm install core ./charts/portfolios/core --namespace core
     ```
 
 3. Verify deployments:

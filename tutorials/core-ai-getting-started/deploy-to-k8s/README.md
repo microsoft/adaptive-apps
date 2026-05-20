@@ -1,4 +1,4 @@
-# Deploy Adaptive App (Min-AI) to Local K8s
+# Deploy Adaptive App (Core-AI) to Local K8s
 
 ## 0. Prerequisites
 
@@ -39,7 +39,7 @@ To demostrate local deployments, you need a local Kubernetes cluster such as [k3
     --volume "/dev/dxg:/dev/dxg@server:0"
     ```
 
-    > **NOTE:** To build hbai/cuda:0.1 package, use the `Dockerfile.nvidia` file under this folder: docker build -t <tag> -f Dockerfile.nvidia .
+    > **NOTE:** To build hbai/cuda:0.1 package, use the `Dockerfile.nvidia` file under the `tutorials/min-ai-getting-started/deploy-to-k8s` folder: docker build -t <tag> -f Dockerfile.nvidia .
 
 4. Install kyverno. For Kaito to work with K3s, we need a cluster policy to patch statefulset with nvidia runtimeClassName:
 
@@ -55,13 +55,13 @@ To demostrate local deployments, you need a local Kubernetes cluster such as [k3
 5. Apply the GPU bootstrap artifact:
 
     ```bash
-    kubectl apply -f gpu_bootstrap.yaml
+    kubectl apply -f tutorials/min-ai-getting-started/deploy-to-k8s/gpu_bootstrap.yaml
     ```
 
 6. Run `validate_gpu.sh` to validate the node has allocatable GPU:
 
     ```bash
-    .validate_gpu.sh
+    tutorials/min-ai-getting-started/deploy-to-k8s/validate_gpu.sh
     # then Press Ctrl+C to exit
     ````
     You should see something like:
@@ -87,7 +87,7 @@ To demostrate local deployments, you need a local Kubernetes cluster such as [k3
     |  No running processes found                                                             |
     +-----------------------------------------------------------------------------------------+
     ```
- 
+
 7. Kaito's node estimator reads the `nvidia.com/gpu.memory` label to calculate how many nodes are needed. If you were on WSL, WSL2 GPU Feature Discovery may not auto-populate all labels. Ensure the node has at least:
     ```bash
     # get NODE_NAME via kubectl get nodes
@@ -106,7 +106,6 @@ To demostrate local deployments, you need a local Kubernetes cluster such as [k3
     |--------|--------|
     | Webhook panic (MustParse("")) when applying a generic-model Workspace in BYO mode | Delete the validating webhook before applying: `kubectl delete validatingwebhookconfiguration validation.workspace.kaito.sh` |
     | Node estimator `ignores max-model-len` from ConfigMap and over-estimates `targetNodeCount` |	Inflate the `nvidia.com/gpu.memory` node label to satisfy the estimator |
-
 
 ## 2. Set up Kaito
 
@@ -169,42 +168,43 @@ Set up Radius on the local cluster and register the custom resource types used b
     rad environment list --group trading
     ```
 
-## 4. Install Adaptive App Capability Portfolio (Min-AI)
+## 3. Install Adaptive App Capability Portfolio (Core-AI)
 
-Start with the `mi-ai` portfolio Helm chart. The first bundled component is Keycloak.
+Start with the `core-ai` portfolio Helm chart. 
 
 1. Create namespace:
 
     ```bash
-    kubectl create namespace min-ai
+    kubectl create namespace core-ai
     ```
 
-2. Install the `min-ai` portfolio from the local chart:
+2. Install the `core-ai` portfolio from the local chart:
 
     ```bash
-    helm install min-ai ./charts/portfolios/min-ai --namespace min-ai 
+    helm install core-ai ./charts/portfolios/core-ai --namespace core-ai
     ```
 
 3. Verify deployments:
 
     ```bash
-    kubectl get pods -n min-ai
-    kubectl get svc -n min-ai
+    kubectl get pods -n core-ai
+    kubectl get svc -n core-ai
     ```
 
     You should see services like:
 
     ```bash
-    NAME                         TYPE        
-    min-ai-keycloak              ClusterIP   
-    min-ai-keycloak-discovery    ClusterIP
-    min-ai-keycloak-postgresql   ClusterIP 
+    NAME                      TYPE        
+    core-keycloak              ClusterIP   
+    core-keycloak-discovery    ClusterIP
+    core-keycloak-postgresql   ClusterIP 
+    istiod                     ClusterIP
     ```
 
 4. In a separate Terminal, expose Keycloak with port-forward (keep this terminal running):
 
     ```bash
-    kubectl port-forward -n min-ai svc/min-ai-keycloak 8080:8080
+    kubectl port-forward -n core-ai svc/core-ai-keycloak 8080:8080
     ```
 
 5. Open a browser and navigate to `localhost:8080`. Log in to KeyCloak portal with user `admin` and password `admin` (which are defined in the `values.yaml` for the Helm chart).
@@ -218,7 +218,7 @@ Start with the `mi-ai` portfolio Helm chart. The first bundled component is Keyc
 
 7. Go to "Credentials" tab and copy the client secret. You'll need both client id and secret for the next step.
 
-## 5. Install the app
+## 4. Install the app
 
 Deploy the app model to the Radius environment created above.
 
@@ -234,6 +234,7 @@ Deploy the app model to the Radius environment created above.
     --parameters authUsername=admin \
     --parameters authPassword=admin \
     --parameters otelCollectorEndpoint=http://otel-collector.core:4318 \
+    --parameters enableIstioInjection=true \
     --parameters oidcIssuer=http://min-keycloak.min.svc.cluster.local:8080/realms/master \
     --parameters oidcIssuerOverride=http://localhost:8080/realms/master \
     --parameters oidcBrowserAuthEndpoint=http://localhost:8080/realms/master/protocol/openid-connect/auth \
@@ -243,6 +244,7 @@ Deploy the app model to the Radius environment created above.
     --parameters oidcClientSecret=<Keycloak client secret> \
     --parameters aiProvider=local \
     --parameters aiModel=Qwen/Qwen3-0.6B
+
     ```
 
     > **NOTE:** The Keycloak service is `ClusterIP`, which is ideal for in-cluster calls from the frontend pod. This setup uses two different URLs: Browser redirects to `http://localhost:8080` (via `oidcBrowserAuthEndpoint`); Token and userinfo requests go to the in-cluster `min-keycloak.min.svc.cluster.local` (via explicit `oidcTokenEndpoint` and `oidcUserInfoEndpoint`). This causes an issuer mismatch: Keycloak issues a token with iss claim set to `http://localhost:8080/realms/master` (the URL used during authentication), but the frontend validates the token against `oidcIssuer=http://min-keycloak.min.svc.cluster.local:8080/realms/master` by default. Use `oidcIssuerOverride=http://localhost:8080/realms/master` to tell the frontend which issuer to expect. In production, Keycloak is typically deployed behind an ingress with a single DNS name used everywhere, avoiding this split-URL issue. See [keycloak-ingress.md](../../../docs/authentication/keycloak-ingress.md) for setup details.
@@ -255,23 +257,37 @@ Deploy the app model to the Radius environment created above.
     --parameters aiEndpoint=https://antho-openai.openai.azure.com/ \
     --parameters aiApiKey=<Azure OpenAI service deployment key>
     ```
+2. (Optional) Observe mTLS
 
-    > **NOTE:** Your GPU size limits which models you can use. For a 4G memory GPU, the only feasible model seems to be `Qwen/Qwen3-0.6B`. For slightly bigger GPU, you can try `ministral-3-3b-instruct`. See troubleshoot guide #5 below.
+    ```bash
+    export APP_NAMESPACE=trading-portable-apps
+    kubectl get pods -n $APP_NAMESPACE -o jsonpath='{range .items[*]}{.metadata.name}{" => "}{range .spec.containers[*]}{.name}{" "}{end}{"\n"}{end}'
+    ```
+    
+    You should see something like:
 
-2. Expose the frontend:
+    ```bash
+    ai-agent-... => ai-agent istio-proxy
+    backend-... => backend istio-proxy
+    frontend-... => frontend istio-proxy
+    mosquitto-... => mosquitto istio-proxy
+    postgres-... => postgres istio-proxy
+    ```
+
+    >**NOTE:** The `core` Helm chart handles mTLS automatically: 1. The pre-install hook installs Istio (`istio-base` + `istiod`) into `istio-system`. 2. The `namespace-enrollment` template labels the app namespace with `istio-injection=enabled`. 3. The post-install hook applies a `PeerAuthentication` with `mtls.mode: STRICT`. The chart also deploys observability components (OpenTelemetry collector, Prometheus, and Zipkin) in the `core` namespace, and the app automatically sends telemetry to the collector.
+
+This separation allows apps to remain portable; the environment (Helm chart) decides whether observability and mTLS are available.
+
+3. Expose the frontend:
 
     ```bash
     rad resource expose Applications.Core/containers frontend -a portable-apps --port 3000 --remote-port 3000
     ```
 
-    >**NOTE:** The AI model container may take serveral minutes to set up, as model needs to be downloaded and configured. Watch the pods under the `trading-portable-apps` namespace.
+4. Open the app at `http://localhost:3000`.
+5. Login using local account admin/admin, or click on "Sign in with OIDC" button to use KeyCloak to login with federated credential.
 
-3. Open the app at `http://localhost:3000`.
-4. Login using local account admin/admin, or click on "Sign in with OIDC" button to use KeyCloak to login with federated credential.
-
-This is intentionally independent of the app model in `radius/app.bicep`. The app stays portable; the environment decides whether service-to-service traffic is meshed.
-
-## 6. Clean up
+## 5. Clean up
 
 1. Delete the app:
 
@@ -284,10 +300,7 @@ This is intentionally independent of the app model in `radius/app.bicep`. The ap
     ```
     k3d cluster delete localk8s
     ```
-3. Remove the volumne folder:
 
-    ```
-    sudo rm -rf ~/k3d/localk8s-storage
 ## Troubleshoot
 
 1. Sometimes K3s DNS resolution is not initialized correctly when launched in WSL, leading DNS resolution failures in pods. Try to recreate the cluster using resolv file on the host:
@@ -311,32 +324,7 @@ This is intentionally independent of the app model in `radius/app.bicep`. The ap
     ```bash
     k3d image import <your image tag> -c localk8s
     ```
-5. You can trick Kaito scheduler by overclaiming the `nvidia.com/gpu.memory` label to make it think your GPU has bigger memory. For example, by labeling a 4GiB GPU to `12288`, Kaito can be tricked to schedule `Qwen/Qwen3-0.6B` on a single node, which seems to work for the demo.
 
-6. Manully labeling the node seems to lead Kaito GPU feature discovery pod to crash. This doesn't appear to affect the demo flow.
-
-7. If Radius got stuck at a "The target resource is in progress state: Updating." conflict, the best known approch to restore is to re-create the Kubernetes cluster.
-
-8. To get a list of models supported by the currently installed version of Kaito:
-
-    ```bash
-    kubectl get cm kaito-supported-models -n kaito-workspace -o yaml
-    ```
-9. If you face disk pressure, try wth relaxed eviction policy:
-
-    ```bash
-    k3d cluster create localk8s \
-    --image hbai/cuda:0.1 \
-    --gpus all \
-    --k3s-arg "--disable=traefik@server:0" \
-    --k3s-arg "--kubelet-arg=eviction-hard=imagefs.available<1%,nodefs.available<1%@server:0" \
-    --k3s-arg "--kubelet-arg=eviction-soft=imagefs.available<2%,nodefs.available<2%@server:0" \
-    --k3s-arg "--kubelet-arg=eviction-soft-grace-period=imagefs.available=5m,nodefs.available=5m@server:0" \
-    --k3s-arg "--kubelet-arg=eviction-minimum-reclaim=imagefs.available=500Mi,nodefs.available=500Mi@server:0" \
-    --volume "$HOME/k3d/localk8s-storage:/var/lib/rancher/k3s@server:0" \
-    --volume "/usr/lib/wsl:/usr/lib/wsl@server:0" \
-    --volume "/dev/dxg:/dev/dxg@server:0"
-    ```
 ## Additional Topics
 
 * [Deploy Keycloak behind an ingress](../../../docs/authentication/keycloak-ingress.md)

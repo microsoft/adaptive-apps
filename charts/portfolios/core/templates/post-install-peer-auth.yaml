@@ -1,9 +1,13 @@
 {{- /*
-  Post-install Job that applies PeerAuthentication resources once Istio CRDs
-  are guaranteed to be present (installed by the pre-install hook).
+  Post-install Job that applies a mesh-wide STRICT PeerAuthentication in the
+  Istio root namespace once the Istio CRDs are present (installed by the
+  pre-install hook or by the AKS mesh add-on). This enforces mTLS across
+  every namespace that has sidecar injection enabled, without requiring the
+  chart to know every app namespace in advance.
 
-  Runs for both local k8s (istio.install.enabled=true) and AKS
-  (istio.install.enabled=false, CRDs come from AKS mesh add-on).
+  Sidecar injection is still applied per-namespace via the
+  `istio-injection=enabled` label, which Radius (or the operator) sets when
+  the app namespace is created.
 */}}
 {{- if .Values.istio.mtls.strict }}
 ---
@@ -86,18 +90,18 @@ spec:
             sleep 3
           done
 
-          {{- range .Values.istio.mtls.namespaces }}
+          # Mesh-wide STRICT mTLS: a PeerAuthentication in the Istio root
+          # namespace applies to every workload in the mesh.
           kubectl apply -f - <<'YAML'
           apiVersion: security.istio.io/v1
           kind: PeerAuthentication
           metadata:
             name: default
-            namespace: {{ . }}
+            namespace: {{ .Values.istio.namespace }}
           spec:
             mtls:
               mode: STRICT
           YAML
-          {{- end }}
 
-          echo "PeerAuthentication applied."
+          echo "Mesh-wide PeerAuthentication applied in {{ .Values.istio.namespace }}."
 {{- end }}

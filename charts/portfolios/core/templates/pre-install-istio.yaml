@@ -77,16 +77,14 @@ spec:
             echo "Installing istio-base..."
             helm install istio-base istio/base -n "$ISTIO_NS" --version "$ISTIO_VERSION" --set defaultRevision=default --wait
           else
-            echo "istio-base already installed, upgrading..."
-            helm upgrade istio-base istio/base -n "$ISTIO_NS" --version "$ISTIO_VERSION" --set defaultRevision=default --wait
+            echo "istio-base already installed; leaving existing release untouched."
           fi
 
           if ! helm status istiod -n "$ISTIO_NS" >/dev/null 2>&1; then
             echo "Installing istiod..."
             helm install istiod istio/istiod -n "$ISTIO_NS" --version "$ISTIO_VERSION" --wait
           else
-            echo "istiod already installed, upgrading..."
-            helm upgrade istiod istio/istiod -n "$ISTIO_NS" --version "$ISTIO_VERSION" --wait
+            echo "istiod already installed; leaving existing release untouched."
           fi
 
           echo "Waiting for istiod to be ready..."

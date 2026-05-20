@@ -10,6 +10,10 @@
 //     --parameters azureResourceGroup=<resource-group>
 
 extension radius
+extension kubernetes with {
+  namespace: 'default'
+  kubeConfig: ''
+} as k8s
 
 // ---------------------------------------------------------------------------
 // Parameters
@@ -17,6 +21,9 @@ extension radius
 
 @description('Kubernetes namespace Radius will deploy resources into.')
 param namespace string = 'trading'
+
+@description('Pre-create the app namespace with the `istio-injection=enabled` label so workloads deployed by Radius receive an Istio sidecar (and inherit the mesh-wide STRICT mTLS policy from the `core` portfolio). Set to false on clusters without Istio.')
+param enableIstioInjection bool = true
 
 @description('''
 OCI registry path where recipes have been published.
@@ -32,11 +39,27 @@ param azureSubscriptionId string
 param azureResourceGroup string
 
 // ---------------------------------------------------------------------------
+// App namespace (with optional Istio injection label)
+// ---------------------------------------------------------------------------
+
+resource appNamespace 'core/Namespace@v1' = {
+  metadata: {
+    name: namespace
+    labels: enableIstioInjection ? {
+      'istio-injection': 'enabled'
+    } : {}
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Environment
 // ---------------------------------------------------------------------------
 
 resource aksEnv 'Applications.Core/environments@2023-10-01-preview' = {
   name: 'aks-trading'
+  dependsOn: [
+    appNamespace
+  ]
   properties: {
     compute: {
       kind: 'kubernetes'

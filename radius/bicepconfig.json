@@ -1,6 +1,7 @@
 {
   "extensions": {
     "radius": "br:biceptypes.azurecr.io/radius:latest",
-    "radiusResources": "types.tgz"
+    "radiusResources": "types.tgz",
+    "kubernetes": "br:biceptypes.azurecr.io/kubernetes:latest"
   }
 }

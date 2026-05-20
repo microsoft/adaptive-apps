@@ -17,8 +17,8 @@ The first capability added is a service mesh (Istio) with strict mTLS between al
 | Capability | Local cluster | AKS |
 |------------|---------------|-----|
 | Service mesh (Istio control plane) | Installed via chart (`istiod` + `base`) | AKS Istio add-on — not installed by this chart |
-| Sidecar injection | Enabled per-namespace via `istio-injection=enabled` label | Same |
-| mTLS (strict) | `PeerAuthentication` applied per namespace | Same |
+| Sidecar injection | Per-namespace via the `istio-injection=enabled` label (applied by Radius or the operator when the app namespace is created) | Same |
+| mTLS (strict) | Mesh-wide `PeerAuthentication` in `istio-system` applies to every injected workload | Same |
 
 ## Install
 
@@ -31,11 +31,11 @@ helm dependency update ./charts/portfolios/core
 helm install core ./charts/portfolios/core --namespace core --create-namespace
 ```
 
-Verify Istio is running:
+Verify Istio is running and the mesh-wide PeerAuthentication is in place:
 
 ```bash
 kubectl get pods -n istio-system
-kubectl get peerauthentication -n trading-portable-apps
+kubectl get peerauthentication -n istio-system
 ```
 
 ### AKS — control plane managed by AKS mesh add-on
@@ -47,7 +47,7 @@ az aks mesh enable --resource-group <resource-group> --name <cluster-name>
 ```
 
 Then install the chart with Istio install disabled (the chart still applies
-namespace enrollment and `PeerAuthentication`):
+the mesh-wide `PeerAuthentication`):
 
 ```bash
 helm dependency update ./charts/portfolios/core
@@ -61,7 +61,19 @@ helm install core ./charts/portfolios/core \
 | Value | Default | Description |
 |-------|---------|-------------|
 | `istio.install.enabled` | `true` | Install Istio via Helm. Set to `false` on AKS. |
-| `istio.namespace` | `istio-system` | Namespace for the Istio control plane. |
-| `istio.mtls.strict` | `true` | Apply `PeerAuthentication` with `STRICT` mode. |
-| `istio.mtls.namespaces` | `[trading-portable-apps]` | App namespaces to enroll and protect. |
+| `istio.namespace` | `istio-system` | Namespace for the Istio control plane. Also where the mesh-wide `PeerAuthentication` is applied. |
+| `istio.mtls.strict` | `true` | Apply a mesh-wide `PeerAuthentication` with `STRICT` mode. |
+
+## Enabling sidecar injection on app namespaces
+
+The chart no longer enumerates app namespaces. Apply the injection label to any
+namespace that should participate in the mesh — typically done by Radius when
+it creates the app namespace, or manually:
+
+```bash
+kubectl label namespace <app-namespace> istio-injection=enabled --overwrite
+```
+
+Workloads in labeled namespaces will be injected with the Istio sidecar and
+inherit the mesh-wide STRICT mTLS policy.
 

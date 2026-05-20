@@ -1,0 +1,6 @@
+dependencies:
+- name: ent
+  repository: file://../ent
+  version: 0.1.0
+digest: sha256:671ac23ebc0dad0e0578ea4d0ce0e0ca49f4abdc01b01111138ab8f14d3e76a0
+generated: "2026-05-20T13:50:10.728658024-07:00"

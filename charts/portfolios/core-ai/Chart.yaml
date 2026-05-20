@@ -1,6 +1,6 @@
 apiVersion: v2
 name: core-ai
-description: Core AI capability portfolio chart for Adaptive Apps. Builds on min-ai.
+description: Core AI capability portfolio chart for Adaptive Apps. Builds on core.
 type: application
 version: 0.1.0
 appVersion: "1.0.0"
@@ -9,9 +9,9 @@ keywords:
   - capability-portfolio
   - core-ai
 dependencies:
-  - name: min-ai
+  - name: core
     version: 0.1.0
-    repository: file://../min-ai
+    repository: file://../core
 home: https://github.com/microsoft/adaptive-apps
 sources:
   - https://github.com/microsoft/adaptive-apps

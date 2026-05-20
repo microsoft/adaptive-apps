@@ -23,6 +23,7 @@ istio:
   namespace: istio-system
 
   mtls:
+    # When true, apply a mesh-wide STRICT PeerAuthentication in the Istio root
+    # namespace (`istio.namespace`). This enforces mTLS for every workload in
+    # the mesh, so app namespaces do not need to be enumerated here.
     strict: true
-    namespaces:
-      - trading-portable-apps
