@@ -74,7 +74,7 @@ As a starting point, we define six portfolios with clear inheritance:
 
     Builds on `min` and provides operational readiness, including service mesh, data sync, basic policy reinforcement, and secret management. Ideal for operating standard production workloads. [read more...](./docs/portfolios/core.md)
 
-* `ent`
+* [`ent`](./docs/portfolios/ent.md)
 
     Builds on `core` and represents the large-scale enterprise developments, including advanced policy reinforcement, optional sidecar enablement, advanced certificate management, advanced monitoring and backup/restore.
 
@@ -84,11 +84,11 @@ As a starting point, we define six portfolios with clear inheritance:
 
 * [`core-ai`](./docs/portfolios/core-ai.md)
 
-    Combines `min-ai` and `core` to support production-grade deployments of AI-powered solutions. [read more...](./docs/portfolios/core-ai.md)
+    Builds on `core` and adds local AI model management for continued offline AI inferences. [read more...](./docs/portfolios/core-ai.md)
 
-* `ent-ai`
+*  [`ent-ai`](./docs/portfolios/ent-ai.md)
 
-    Builds on `core-ai` and adds local AI model management for continued offline AI inferences. 
+    Builds on `ent` and adds local AI model management for continued offline AI inferences. [read more...](./docs/portfolios/ent-ai.md)   
 
 
 ### **Capability portfolio deployment**
@@ -114,7 +114,8 @@ Follow our getting-started tutorials to deploy a Adaptive App across cloud and e
 * [Min Portfolio - getting started](./tutorials/min-getting-started/README.md)
 * [Min-AI Portfolio -getting started](./tutorials/min-ai-getting-started/README.md)
 * [Core Portfolio - getting started](./tutorials/core-getting-started/README.md)
-
+* [Core-AI Portfolio - getting started](./tutorials/core-ai-getting-started/README.md)
 ## Topics
 
 * [Authentication](./docs/authentication/README.md)
+* [Policies](./docs/policies/README.md)

@@ -35,6 +35,7 @@ The following table summarizes capabilities offered by each of the portfolios. A
 | Service-to-service auth | Claim-based | Claim-based & mTLS (Istio) | Claim-based & mTLS (Istio) | Claim-based | Claim-based & mTLS (Istio) | Claim-based & mTLS (Istio) |
 | Service mesh | — | Istio (self-managed or AKS add-on) | Istio | — | Istio | Istio |
 | Observability | — | OpenTelemetry Collector, Prometheus, Zipkin | OpenTelemetry Collector, Prometheus, Zipkin | — | OpenTelemetry Collector, Prometheus, Zipkin | OpenTelemetry Collector, Prometheus, Zipkin |
+| Policy enforcement | — | — | OPA (opa-envoy-plugin) as Istio extensionProvider | — | — | OPA (opa-envoy-plugin) as Istio extensionProvider |
 | AI inference | Cloud-based (e.g. Azure OpenAI) | Cloud-based (e.g. Azure OpenAI) | Cloud-based (e.g. Azure OpenAI) | In-cluster (via KAITO) + cloud-based | In-cluster (via KAITO) + cloud-based | In-cluster (via KAITO) + cloud-based |
 
 Legend: 🛡️ identity/authentication capability · — not provided by this portfolio.
@@ -44,5 +45,6 @@ Legend: 🛡️ identity/authentication capability · — not provided by this p
 - **Keycloak** is installed by the `min` chart and is therefore present in every portfolio. An optional `customCert` value mounts a CA certificate into the Keycloak pod; `hostAliases` can inject host-to-IP entries for on-prem domain controllers. See [charts/portfolios/min/README.md](../../charts/portfolios/min/README.md).
 - **Istio** is installed by the `core` chart via Helm on local Kubernetes, or enabled as the AKS Istio add-on (`istio.install.enabled=false`). Strict `PeerAuthentication` is applied to enrolled namespaces. See [charts/portfolios/core/README.md](../../charts/portfolios/core/README.md).
 - **Observability** (OpenTelemetry Collector, Prometheus, Zipkin) is provisioned by the `core` chart and toggled via `observability.enabled`.
+- **Policy enforcement** is provided by the `ent` chart, which deploys OPA with the `opa-envoy-plugin` and registers it with Istio as the `opa-ext-authz-grpc` `extensionProvider`. Applications opt in via `AuthorizationPolicy` resources with `action: CUSTOM`. See [charts/portfolios/ent/README.md](../../charts/portfolios/ent/README.md).
 - **Workload identity** is provided through Radius recipes ([radius/recipes/workload-identity](../../radius/recipes/workload-identity)) rather than the portfolio chart itself, so apps can bind the appropriate implementation (Azure workload identity or a local no-op) at deployment time.
 - **AI inference** is exposed through the `aiModel` Radius resource type ([radius/recipes/ai-agent](../../radius/recipes/ai-agent)). All portfolios can bind `aiModel` to an internet-hosted endpoint (e.g. Azure OpenAI). The `*-ai` portfolios additionally support binding `aiModel` to an in-cluster [KAITO](https://github.com/kaito-project/kaito) workspace for self-hosted inference.

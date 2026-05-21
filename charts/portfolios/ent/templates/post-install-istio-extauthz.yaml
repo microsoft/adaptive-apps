@@ -1,0 +1,172 @@
+{{- /*
+  Post-install Job that registers the OPA Deployment (rendered by
+  opa.yaml) as an Istio `extensionProvider` of type
+  `envoyExtAuthzGrpc` so AuthorizationPolicy resources with
+  `action: CUSTOM` can delegate decisions to it.
+
+  Strategy:
+    - On self-managed Istio (core chart installed istiod via Helm), patch
+      the `istio` ConfigMap in the Istio root namespace and restart
+      istiod so the new MeshConfig is propagated to all sidecars.
+    - On AKS with the Istio add-on, the `istio` ConfigMap is also the
+      supported way to configure mesh extensionProviders (the add-on
+      reconciles user customizations from this ConfigMap).
+
+  Runs only when both opa.enabled and istioExtAuthz.enabled are true.
+*/}}
+{{- if and .Values.opa.enabled .Values.istioExtAuthz.enabled }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "ent.name" . }}-istio-extauthz
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ent.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "ent.name" . }}-istio-extauthz
+  labels:
+    {{- include "ent.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "11"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+rules:
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "update", "patch", "list"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "patch", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "ent.name" . }}-istio-extauthz
+  labels:
+    {{- include "ent.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "12"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "ent.name" . }}-istio-extauthz
+subjects:
+- kind: ServiceAccount
+  name: {{ include "ent.name" . }}-istio-extauthz
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "ent.name" . }}-istio-extauthz
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ent.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "15"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      serviceAccountName: {{ include "ent.name" . }}-istio-extauthz
+      restartPolicy: OnFailure
+      containers:
+      - name: patch-istio
+        image: dtzar/helm-kubectl:3.17
+        env:
+        - name: ISTIO_NS
+          value: {{ .Values.istioExtAuthz.istioNamespace | quote }}
+        - name: ISTIO_CM
+          value: {{ .Values.istioExtAuthz.istioConfigMap | quote }}
+        - name: PROVIDER_NAME
+          value: {{ .Values.istioExtAuthz.providerName | quote }}
+        - name: OPA_SERVICE
+          value: "{{ .Values.opa.name }}.{{ .Release.Namespace }}.svc.cluster.local"
+        - name: OPA_PORT
+          value: {{ .Values.opa.grpcPort | quote }}
+        command:
+        - /bin/sh
+        - -c
+        - |
+          set -euo pipefail
+
+          echo "Waiting for istio ConfigMap ${ISTIO_CM} in ${ISTIO_NS}..."
+          until kubectl -n "${ISTIO_NS}" get configmap "${ISTIO_CM}" >/dev/null 2>&1; do
+            sleep 3
+          done
+
+          # Render the desired MeshConfig: preserve existing keys and either
+          # append or replace our extensionProvider entry by name.
+          TMP=$(mktemp -d)
+          trap 'rm -rf "$TMP"' EXIT
+
+          kubectl -n "${ISTIO_NS}" get configmap "${ISTIO_CM}" \
+            -o jsonpath='{.data.mesh}' > "$TMP/mesh.yaml" || true
+
+          # Ensure we have a YAML document even if mesh key was empty.
+          if [ ! -s "$TMP/mesh.yaml" ]; then
+            echo "{}" > "$TMP/mesh.yaml"
+          fi
+
+          # Use a small Python helper (available in dtzar/helm-kubectl) to
+          # merge the extensionProvider deterministically.
+          apk add --no-cache python3 py3-yaml >/dev/null 2>&1 || true
+
+          python3 - "$TMP/mesh.yaml" "${PROVIDER_NAME}" "${OPA_SERVICE}" "${OPA_PORT}" <<'PY' > "$TMP/mesh.new.yaml"
+          import sys, yaml
+          path, name, service, port = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4])
+          with open(path) as f:
+              mesh = yaml.safe_load(f) or {}
+          providers = mesh.setdefault("extensionProviders", [])
+          entry = {
+              "name": name,
+              "envoyExtAuthzGrpc": {
+                  "service": service,
+                  "port": port,
+              },
+          }
+          replaced = False
+          for i, p in enumerate(providers):
+              if p.get("name") == name:
+                  providers[i] = entry
+                  replaced = True
+                  break
+          if not replaced:
+              providers.append(entry)
+          yaml.safe_dump(mesh, sys.stdout, default_flow_style=False, sort_keys=False)
+          PY
+
+          echo "Updated MeshConfig:"
+          cat "$TMP/mesh.new.yaml"
+
+          # Patch the ConfigMap with the new mesh value.
+          MESH_CONTENT=$(cat "$TMP/mesh.new.yaml")
+          kubectl -n "${ISTIO_NS}" patch configmap "${ISTIO_CM}" \
+            --type merge \
+            -p "$(python3 -c 'import json,sys; print(json.dumps({"data": {"mesh": sys.stdin.read()}}))' <<< "$MESH_CONTENT")"
+
+          # Restart istiod so the new MeshConfig is reloaded and pushed
+          # to sidecars. Tolerate absence (AKS add-on) — in that case the
+          # add-on controller reconciles the ConfigMap on its own.
+          if kubectl -n "${ISTIO_NS}" get deployment istiod >/dev/null 2>&1; then
+            echo "Restarting istiod to pick up new MeshConfig..."
+            kubectl -n "${ISTIO_NS}" rollout restart deployment/istiod
+            kubectl -n "${ISTIO_NS}" rollout status deployment/istiod --timeout=180s
+          else
+            echo "istiod deployment not found in ${ISTIO_NS}; assuming managed control plane will reconcile."
+          fi
+
+          echo "Registered Istio extensionProvider '${PROVIDER_NAME}' -> ${OPA_SERVICE}:${OPA_PORT}."
+{{- end }}

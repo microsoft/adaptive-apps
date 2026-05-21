@@ -1,1 +1,66 @@
 core: {}
+
+# ---------------------------------------------------------------------------
+# Open Policy Agent (OPA) with the Envoy External Authorization plugin.
+#
+# Deployed as a centralized policy decision point in the release namespace.
+# Istio is patched to register this Deployment as an `extensionProvider` so
+# AuthorizationPolicy resources with `action: CUSTOM` can delegate decisions
+# to OPA.
+# ---------------------------------------------------------------------------
+opa:
+  # Set to false to skip OPA installation entirely.
+  enabled: true
+
+  # Name used for the Deployment, Service, ServiceAccount, and ConfigMaps.
+  name: opa
+
+  # opa-envoy-plugin image. The `-envoy` tag suffix includes the embedded
+  # Envoy ext_authz gRPC plugin.
+  image:
+    repository: openpolicyagent/opa
+    tag: "1.10.0-envoy"
+    pullPolicy: IfNotPresent
+
+  replicas: 1
+
+  # gRPC port served by the Envoy ext_authz plugin. Must match the port
+  # registered with Istio via `istioExtAuthz` below.
+  grpcPort: 9191
+
+  # OPA management REST API (policy upload, data API).
+  httpPort: 8181
+
+  # Diagnostic endpoint used for liveness/readiness probes.
+  diagnosticPort: 8282
+
+  # Rego rule consulted by the Envoy ext_authz plugin for each request.
+  defaultDecisionPath: /envoy/authz/allow
+
+  logLevel: info
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# ---------------------------------------------------------------------------
+# Istio integration: register OPA as a mesh extensionProvider.
+# ---------------------------------------------------------------------------
+istioExtAuthz:
+  # Set to false to install OPA without wiring it into Istio (useful when
+  # the mesh is managed externally and you prefer to configure providers
+  # out-of-band).
+  enabled: true
+
+  # Namespace and ConfigMap holding the Istio MeshConfig.
+  istioNamespace: istio-system
+  istioConfigMap: istio
+
+  # Name under which the provider is exposed. AuthorizationPolicy resources
+  # reference this name via `provider.name`.
+  providerName: opa-ext-authz-grpc
+
