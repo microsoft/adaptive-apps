@@ -118,4 +118,5 @@ Follow our getting-started tutorials to deploy a Adaptive App across cloud and e
 ## Topics
 
 * [Authentication](./docs/authentication/README.md)
+* [Data Sync](./docs/data-sync/README.md)
 * [Policies](./docs/policies/README.md)
