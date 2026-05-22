@@ -1,0 +1,27 @@
+# Istio AuthorizationPolicy that delegates authorization decisions for the
+# `frontend` workload to the OPA extension provider installed by the `ent`
+# portfolio Helm chart. Used by tutorial Section 5.
+#
+# Radius labels every pod it creates with `app.kubernetes.io/name=<container>`
+# in addition to `radapp.io/resource=<container>`; either works as a selector.
+# Verify with: kubectl -n trading-portable-apps get pods --show-labels | grep frontend
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: frontend-ext-authz
+  namespace: trading-portable-apps
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: frontend
+  action: CUSTOM
+  provider:
+    name: opa-ext-authz-grpc
+  # CUSTOM-action policies must specify at least one rule with a `to`, `from`,
+  # or `when` clause; an empty `- {}` is rejected by istiod (silently in
+  # older versions, with a warning in 1.20+). Matching all HTTP methods
+  # is a safe "match every request" condition.
+  rules:
+  - to:
+    - operation:
+        methods: ["*"]

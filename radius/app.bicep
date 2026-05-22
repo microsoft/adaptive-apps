@@ -219,19 +219,14 @@ var aiAgentBaseEnv = {
   OTEL_EXPORTER_OTLP_ENDPOINT: { value: otelCollectorEndpoint }
   OTEL_EXPORTER_OTLP_PROTOCOL: { value: 'http/protobuf' }
 }
-var aiAgentEnv = isLocalAi ? union(aiAgentBaseEnv, {
-  CONNECTION_AI_SECRETS_APIKEY: { value: tradingAI!.properties.secrets.apiKey }
-}) : union(aiAgentBaseEnv, {
-  CONNECTION_AI_PROVIDER:       { value: aiProvider }
-  CONNECTION_AI_ENDPOINT:       { value: aiEndpoint }
-  CONNECTION_AI_MODEL:          { value: aiModelName }
-  CONNECTION_AI_SECRETS_APIKEY: { value: aiApiKey }
-})
-var aiAgentConnections = isLocalAi ? {
-  ai: { source: tradingAI!.id }
-} : {}
 
-resource aiAgent 'Applications.Core/containers@2023-10-01-preview' = {
+// Two separate ai-agent declarations, each guarded by an `if`. This avoids
+// a non-conditional resource depending on the conditional `tradingAI`
+// resource (which trips the Radius Deployment Engine with
+// "Unable to fetch resource reference from callback
+// DeploymentResourceNoOperationJob" when isLocalAi=false in v0.57.x).
+
+resource aiAgentLocal 'Applications.Core/containers@2023-10-01-preview' = if (isLocalAi) {
   name: 'ai-agent'
   properties: {
     application: tradingApp.id
@@ -242,9 +237,34 @@ resource aiAgent 'Applications.Core/containers@2023-10-01-preview' = {
           containerPort: 7000
         }
       }
-      env: aiAgentEnv
+      env: union(aiAgentBaseEnv, {
+        CONNECTION_AI_SECRETS_APIKEY: { value: tradingAI!.properties.secrets.apiKey }
+      })
     }
-    connections: aiAgentConnections
+    connections: {
+      ai: { source: tradingAI!.id }
+    }
+  }
+}
+
+resource aiAgentExternal 'Applications.Core/containers@2023-10-01-preview' = if (!isLocalAi) {
+  name: 'ai-agent'
+  properties: {
+    application: tradingApp.id
+    container: {
+      image: '${imageRegistry}/ai-agent:${imageTag}'
+      ports: {
+        http: {
+          containerPort: 7000
+        }
+      }
+      env: union(aiAgentBaseEnv, {
+        CONNECTION_AI_PROVIDER:       { value: aiProvider }
+        CONNECTION_AI_ENDPOINT:       { value: aiEndpoint }
+        CONNECTION_AI_MODEL:          { value: aiModelName }
+        CONNECTION_AI_SECRETS_APIKEY: { value: aiApiKey }
+      })
+    }
   }
 }
 
@@ -329,7 +349,13 @@ resource frontend 'Applications.Core/containers@2023-10-01-preview' = {
     extensions: kubernetesMetadataExtension
     connections: {
       backend:  { source: backend.id }
-      aiAgent:  { source: aiAgent.id }
+      // Note: no Radius `connections` entry for ai-agent. The frontend reaches
+      // it via the hardcoded `AI_AGENT_URL` env var above. We deliberately
+      // avoid a conditional dependency here because `ai-agent` is declared as
+      // two `if`-guarded resources (local vs external AI), and a non-conditional
+      // dependency on either trips the Deployment Engine with
+      // "Unable to fetch resource reference from callback
+      // DeploymentResourceNoOperationJob" in Radius v0.57.x.
       mqtt:     { source: tradingMqtt.id }
       identity: { source: frontendIdentity.id }
     }

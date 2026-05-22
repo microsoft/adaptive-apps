@@ -77,7 +77,10 @@ metadata:
     "helm.sh/hook-weight": "15"
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
-  backoffLimit: 3
+  backoffLimit: 1
+  # Keep the pod (and its logs) around for a while after the Job finishes
+  # so failures can be debugged with `kubectl logs`.
+  ttlSecondsAfterFinished: 600
   template:
     spec:
       serviceAccountName: {{ include "ent.name" . }}-istio-extauthz
@@ -107,55 +110,45 @@ spec:
             sleep 3
           done
 
-          # Render the desired MeshConfig: preserve existing keys and either
-          # append or replace our extensionProvider entry by name.
+          # Install yq (mikefarah, Go binary) for deterministic YAML editing.
+          # jq is already present in dtzar/helm-kubectl.
+          if ! command -v yq >/dev/null 2>&1; then
+            apk add --no-cache yq >/dev/null
+          fi
+
           TMP=$(mktemp -d)
           trap 'rm -rf "$TMP"' EXIT
 
+          # Pull current MeshConfig (the value of data.mesh); default to {}.
           kubectl -n "${ISTIO_NS}" get configmap "${ISTIO_CM}" \
             -o jsonpath='{.data.mesh}' > "$TMP/mesh.yaml" || true
-
-          # Ensure we have a YAML document even if mesh key was empty.
           if [ ! -s "$TMP/mesh.yaml" ]; then
             echo "{}" > "$TMP/mesh.yaml"
           fi
 
-          # Use a small Python helper (available in dtzar/helm-kubectl) to
-          # merge the extensionProvider deterministically.
-          apk add --no-cache python3 py3-yaml >/dev/null 2>&1 || true
-
-          python3 - "$TMP/mesh.yaml" "${PROVIDER_NAME}" "${OPA_SERVICE}" "${OPA_PORT}" <<'PY' > "$TMP/mesh.new.yaml"
-          import sys, yaml
-          path, name, service, port = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4])
-          with open(path) as f:
-              mesh = yaml.safe_load(f) or {}
-          providers = mesh.setdefault("extensionProviders", [])
-          entry = {
-              "name": name,
-              "envoyExtAuthzGrpc": {
-                  "service": service,
-                  "port": port,
-              },
-          }
-          replaced = False
-          for i, p in enumerate(providers):
-              if p.get("name") == name:
-                  providers[i] = entry
-                  replaced = True
-                  break
-          if not replaced:
-              providers.append(entry)
-          yaml.safe_dump(mesh, sys.stdout, default_flow_style=False, sort_keys=False)
-          PY
+          # Remove any pre-existing entry with our provider name, then append
+          # a fresh one. Using env-var interpolation via yq's strenv()/envsubst.
+          export PROVIDER_NAME OPA_SERVICE OPA_PORT
+          yq -i '
+            .extensionProviders = ((.extensionProviders // [])
+              | map(select(.name != strenv(PROVIDER_NAME))))
+              + [{
+                  "name": strenv(PROVIDER_NAME),
+                  "envoyExtAuthzGrpc": {
+                    "service": strenv(OPA_SERVICE),
+                    "port": (env(OPA_PORT) | tonumber)
+                  }
+                }]
+          ' "$TMP/mesh.yaml"
 
           echo "Updated MeshConfig:"
-          cat "$TMP/mesh.new.yaml"
+          cat "$TMP/mesh.yaml"
 
-          # Patch the ConfigMap with the new mesh value.
-          MESH_CONTENT=$(cat "$TMP/mesh.new.yaml")
+          # Patch the ConfigMap's data.mesh field with the rendered YAML.
+          # jq -Rs encodes the file contents as a single JSON string.
+          PATCH=$(jq -Rs '{data: {mesh: .}}' < "$TMP/mesh.yaml")
           kubectl -n "${ISTIO_NS}" patch configmap "${ISTIO_CM}" \
-            --type merge \
-            -p "$(python3 -c 'import json,sys; print(json.dumps({"data": {"mesh": sys.stdin.read()}}))' <<< "$MESH_CONTENT")"
+            --type merge -p "$PATCH"
 
           # Restart istiod so the new MeshConfig is reloaded and pushed
           # to sidecars. Tolerate absence (AKS add-on) — in that case the

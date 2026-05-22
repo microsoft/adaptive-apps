@@ -93,6 +93,10 @@ spec:
         - "--diagnostic-addr=0.0.0.0:{{ .Values.opa.diagnosticPort }}"
         - "--config-file=/config/config.yaml"
         - "--log-level={{ .Values.opa.logLevel }}"
+        # ConfigMap volume mounts expose hidden ..data symlinks pointing to
+        # timestamped directories; without this OPA loads policy.rego
+        # multiple times and fails with "multiple default rules".
+        - "--ignore=.*"
         - "/policies"
         ports:
         - containerPort: {{ .Values.opa.grpcPort }}

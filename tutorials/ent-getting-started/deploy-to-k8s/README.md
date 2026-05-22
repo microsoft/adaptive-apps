@@ -82,40 +82,40 @@ Start with the `core` portfolio Helm chart. The first bundled component is Keycl
 1. Create namespace:
 
     ```bash
-    kubectl create namespace core
+    kubectl create namespace ent
     ```
 
 2. Install the `core` portfolio from the local chart:
 
     ```bash
-    helm install core ./charts/portfolios/core --namespace core
+    helm install ent ./charts/portfolios/ent --namespace ent
     ```
 
 3. Verify deployments:
 
     ```bash
     kubectl get all -n ent 
-    kubectl get all -n istio-system
+    kubectl get all -n istio-system    
     ```
 
     You should see services like:
 
     ```bash
     NAME                      TYPE          NAMESPACE  
-    core-keycloak             ClusterIP     core
-    core-keycloak-discovery   ClusterIP     core
-    core-keycloak-postgresql  ClusterIP     core
+    ent-keycloak              ClusterIP     ent
+    ent-keycloak-discovery    ClusterIP     ent
+    ent-keycloak-postgresql   ClusterIP     ent
     istiod                    ClusterIP     istio-system
-    opa                       ClusterIP     core
-    otel-collector            ClusterIP     core
-    prometheus                ClusterIP     core
-    zipkin                    ClusterIP     core
+    opa                       ClusterIP     ent
+    otel-collector            ClusterIP     ent
+    prometheus                ClusterIP     ent
+    zipkin                    ClusterIP     ent
     ```
 
 4. In a separate Terminal, expose Keycloak with port-forward (keep this terminal running):
 
     ```bash
-    kubectl port-forward -n core svc/core-keycloak 8080:8080
+    kubectl port-forward -n ent svc/ent-keycloak 8080:8080
     ```
 
 5. Open a browser and navigate to `localhost:8080`. Log in to KeyCloak portal with user `admin` and password `admin` (which are defined in the `values.yaml` for the Helm chart).
@@ -199,7 +199,104 @@ This separation allows apps to remain portable; the environment (Helm chart) dec
 4. Open the app at `http://localhost:3000`.
 5. Login using local account admin/admin, or click on "Sign in with OIDC" button to use KeyCloak to login with federated credential.
 
-## 5. Clean up
+## 5. Try an OPA authorization policy
+
+The `ent` portfolio installed an OPA (Open Policy Agent) deployment and
+registered it with Istio as the `opa-ext-authz-grpc` extension provider. Out
+of the box OPA ships a default-allow Rego policy, so no requests are blocked.
+In this step you'll attach a `CUSTOM` `AuthorizationPolicy` to the `frontend`
+workload and update the Rego policy to reject any request that carries an
+`x-deny: true` header — a small but end-to-end demonstration of mesh-level
+external authorization.
+
+1. Confirm Istio sees OPA as an extension provider:
+
+    ```bash
+    kubectl -n istio-system get cm istio -o jsonpath='{.data.mesh}' | grep -A3 extensionProviders
+    ```
+
+    You should see an entry named `opa-ext-authz-grpc` pointing at
+    `opa.ent.svc.cluster.local`.
+
+2. Tell Istio to delegate authorization for the `frontend` pods to OPA. A
+   ready-made manifest is provided at
+   [`frontend-ext-authz.yaml`](frontend-ext-authz.yaml) (namespace is
+   `trading-portable-apps`):
+
+    ```bash
+    kubectl apply -f frontend-ext-authz.yaml
+    ```
+
+3. Replace the chart's default-allow Rego with the demo policy in
+   [`opa-policy.rego`](opa-policy.rego), which denies any request carrying
+   `x-deny: true`:
+
+    ```bash
+    kubectl -n ent create configmap opa-policy \
+      --from-file=policy.rego=opa-policy.rego \
+      --dry-run=client -o yaml | kubectl apply -f -
+
+    # OPA picks up ConfigMap changes once the projected volume refreshes
+    # (typically < 60s). Restart the pod to apply immediately:
+    kubectl -n ent rollout restart deployment/opa
+    kubectl -n ent rollout status  deployment/opa
+    ```
+
+4. Exercise the policy. The `kubectl port-forward` exposed in step 3
+   (used by `rad resource expose`) tunnels straight into the pod's
+   container port and **bypasses the Istio sidecar**, so requests from
+   `localhost:3000` never reach OPA. To see the policy take effect, send
+   the request from a pod inside the mesh. The application containers
+   don't ship `curl`, so launch a long-lived `curlimages/curl` pod in the
+   same namespace (which gets a sidecar via namespace-wide injection)
+   and `kubectl exec` into it. A one-shot `kubectl run ... -- curl ...`
+   pod would race the sidecar — curl exits before Envoy finishes its
+   initial xDS push, so the request never makes it out:
+
+    ```bash
+    # Start a sleeping curl pod with the sidecar (wait for 2/2 Ready):
+    kubectl -n trading-portable-apps run curlbox \
+      --image=curlimages/curl:8.10.1 --restart=Never \
+      --command -- sleep infinity
+    kubectl -n trading-portable-apps wait --for=condition=Ready pod/curlbox --timeout=60s
+
+    # Allowed — no x-deny header. Expect HTTP/1.1 302 (redirect to /login.html).
+    kubectl -n trading-portable-apps exec curlbox -c curlbox -- \
+      curl -sI http://frontend:3000/
+
+    # Denied — Envoy returns 403 because OPA evaluated allow=false.
+    kubectl -n trading-portable-apps exec curlbox -c curlbox -- \
+      curl -sI -H 'x-deny: true' http://frontend:3000/
+    ```
+
+    The second request should respond with `HTTP/1.1 403 Forbidden`
+    (Istio's standard `CUSTOM`-action denial — the body would contain
+    `RBAC: access denied` if you drop `-I` and request the body).
+
+5. (Optional) Tail OPA decision logs to watch each verdict in real time:
+
+    ```bash
+    kubectl -n ent logs -f deployment/opa | grep decision_id
+    ```
+
+6. Clean up the demo policy when you're done so the rest of the tutorial
+   continues to work normally:
+
+    ```bash
+    kubectl -n trading-portable-apps delete authorizationpolicy frontend-ext-authz
+    kubectl -n trading-portable-apps delete pod curlbox --ignore-not-found
+    kubectl -n ent delete configmap opa-policy   # restores Helm-managed default
+    helm upgrade ent ./charts/portfolios/ent --namespace ent --reuse-values
+    kubectl -n ent rollout restart deployment/opa
+    ```
+
+> **NOTE:** Real policies typically key off identity (JWT claims, SPIFFE
+> identities pushed in by Istio, etc.) and request attributes such as path
+> and method. The `x-deny` header here is only a teaching aid. See the
+> [OPA Envoy plugin docs](https://www.openpolicyagent.org/docs/latest/envoy-introduction/)
+> for the full `input` schema and richer examples.
+
+## 6. Clean up
 
 1. Delete the app:
 
