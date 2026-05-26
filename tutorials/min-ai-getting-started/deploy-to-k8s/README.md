@@ -231,9 +231,9 @@ Start with the `mi-ai` portfolio Helm chart. The first bundled component is Keyc
       --dry-run=client -o yaml | kubectl apply -f -
 
     helm upgrade min-ai ./charts/portfolios/min-ai --namespace min-ai --reuse-values \
-      --set oidc.clientId=$OIDC_APP_ID \
-      --set oidc.clientSecretRef.name=oidc-client \
-      --set oidc.browserAuthEndpoint=http://localhost:8080/realms/master/protocol/openid-connect/auth
+      --set global.oidc.clientId=$OIDC_APP_ID \
+      --set global.oidc.clientSecretRef.name=oidc-client \
+      --set global.oidc.browserAuthEndpoint=http://localhost:8080/realms/master/protocol/openid-connect/auth
     ```
 
 9. Hydrate OIDC env vars from the `min-ai-oidc` ConfigMap (consumed by the next section's `rad deploy`):

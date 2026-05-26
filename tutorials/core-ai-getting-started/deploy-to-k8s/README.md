@@ -231,9 +231,9 @@ Start with the `core-ai` portfolio Helm chart.
       --dry-run=client -o yaml | kubectl apply -f -
 
     helm upgrade core-ai ./charts/portfolios/core-ai --namespace core-ai --reuse-values \
-      --set oidc.clientId=$OIDC_APP_ID \
-      --set oidc.clientSecretRef.name=oidc-client \
-      --set oidc.browserAuthEndpoint=http://localhost:8080/realms/master/protocol/openid-connect/auth
+      --set global.oidc.clientId=$OIDC_APP_ID \
+      --set global.oidc.clientSecretRef.name=oidc-client \
+      --set global.oidc.browserAuthEndpoint=http://localhost:8080/realms/master/protocol/openid-connect/auth
     ```
 
 9. Hydrate OIDC env vars from the `core-ai-oidc` ConfigMap (consumed by the next section's `rad deploy`):
@@ -269,7 +269,6 @@ Deploy the app model to the Radius environment created above.
     --parameters authUsername=admin \
     --parameters authPassword=admin \
     --parameters otelCollectorEndpoint=http://otel-collector.core:4318 \
-    --parameters enableIstioInjection=true \
     --parameters oidcIssuer=$OIDC_ISSUER \
     --parameters oidcIssuerOverride=http://localhost:8080/realms/master \
     --parameters oidcAuthEndpoint=$OIDC_AUTH_ENDPOINT \

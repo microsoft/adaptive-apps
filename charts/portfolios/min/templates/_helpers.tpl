@@ -49,3 +49,39 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- define "min.keycloak.postgresqlName" -}}
 {{ printf "%s-postgresql" (include "min.keycloak.serviceName" .) }}
 {{- end -}}
+
+{{/*
+  Effective OIDC values dictionary.
+
+  Returns YAML for `mergeOverwrite (local) (global)` so that
+  `--set global.oidc.<x>=...` at any chart level (min directly or via core,
+  core-ai, ent, ent-ai) overrides the local default. Consumers should pipe
+  through `fromYaml`:
+
+      {{- $oidc := include "min.oidc" . | fromYaml -}}
+      {{- $oidc.clientId -}}
+*/}}
+{{- define "min.oidc" -}}
+{{- $g := default (dict) .Values.global -}}
+{{- $go := default (dict) (get $g "oidc") -}}
+{{- mergeOverwrite (deepCopy .Values.oidc) $go | toYaml -}}
+{{- end -}}
+
+{{/*
+  Effective Keycloak enable flag as a string ("true"/"false").
+
+  Honors `--set global.components.keycloak.enabled=...` when set; otherwise
+  falls back to local `components.keycloak.enabled`. Use with `eq`:
+
+      {{- if eq (include "min.keycloakEnabled" .) "true" }}
+*/}}
+{{- define "min.keycloakEnabled" -}}
+{{- $g := default (dict) .Values.global -}}
+{{- $gc := default (dict) (get $g "components") -}}
+{{- $gk := default (dict) (get $gc "keycloak") -}}
+{{- if hasKey $gk "enabled" -}}
+{{- $gk.enabled -}}
+{{- else -}}
+{{- .Values.components.keycloak.enabled -}}
+{{- end -}}
+{{- end -}}

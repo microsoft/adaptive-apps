@@ -1,4 +1,4 @@
-{{- if and .Values.components.keycloak.enabled .Values.postgresql.enabled }}
+{{- if and (eq (include "min.keycloakEnabled" .) "true") .Values.postgresql.enabled }}
 apiVersion: v1
 kind: Service
 metadata:

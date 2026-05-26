@@ -18,7 +18,8 @@
       kubectl get secret "$clientSecretName" -n <ns> \
         -o jsonpath="{.data.${clientSecretKey}}" | base64 -d
 */}}
-{{- $kc := .Values.components.keycloak.enabled -}}
+{{- $oidc := include "min.oidc" . | fromYaml -}}
+{{- $kc := eq (include "min.keycloakEnabled" .) "true" -}}
 {{- $issuer := "" -}}
 {{- $auth := "" -}}
 {{- $token := "" -}}
@@ -26,16 +27,16 @@
 {{- if $kc -}}
   {{- $svc := include "min.keycloak.serviceName" . -}}
   {{- $port := int .Values.keycloak.service.port -}}
-  {{- $base := printf "http://%s.%s.svc.cluster.local:%d/realms/%s" $svc .Release.Namespace $port .Values.oidc.realm -}}
+  {{- $base := printf "http://%s.%s.svc.cluster.local:%d/realms/%s" $svc .Release.Namespace $port $oidc.realm -}}
   {{- $issuer = $base -}}
   {{- $auth = printf "%s/protocol/openid-connect/auth" $base -}}
   {{- $token = printf "%s/protocol/openid-connect/token" $base -}}
   {{- $userinfo = printf "%s/protocol/openid-connect/userinfo" $base -}}
 {{- else -}}
-  {{- $issuer = .Values.oidc.external.issuer -}}
-  {{- $auth = .Values.oidc.external.authEndpoint -}}
-  {{- $token = .Values.oidc.external.tokenEndpoint -}}
-  {{- $userinfo = .Values.oidc.external.userInfoEndpoint -}}
+  {{- $issuer = $oidc.external.issuer -}}
+  {{- $auth = $oidc.external.authEndpoint -}}
+  {{- $token = $oidc.external.tokenEndpoint -}}
+  {{- $userinfo = $oidc.external.userInfoEndpoint -}}
 {{- end -}}
 apiVersion: v1
 kind: ConfigMap
@@ -48,9 +49,9 @@ data:
   mode: {{ ternary "keycloak" "external" $kc | quote }}
   issuer: {{ $issuer | quote }}
   authEndpoint: {{ $auth | quote }}
-  browserAuthEndpoint: {{ .Values.oidc.browserAuthEndpoint | quote }}
+  browserAuthEndpoint: {{ $oidc.browserAuthEndpoint | quote }}
   tokenEndpoint: {{ $token | quote }}
   userInfoEndpoint: {{ $userinfo | quote }}
-  clientId: {{ .Values.oidc.clientId | quote }}
-  clientSecretName: {{ .Values.oidc.clientSecretRef.name | quote }}
-  clientSecretKey: {{ .Values.oidc.clientSecretRef.key | quote }}
+  clientId: {{ $oidc.clientId | quote }}
+  clientSecretName: {{ $oidc.clientSecretRef.name | quote }}
+  clientSecretKey: {{ $oidc.clientSecretRef.key | quote }}

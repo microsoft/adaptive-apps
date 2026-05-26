@@ -46,14 +46,16 @@ Enable the AKS Istio add-on before installing the chart:
 az aks mesh enable --resource-group <resource-group> --name <cluster-name>
 ```
 
-Then install the chart with Istio install disabled (the chart still applies
-the mesh-wide `PeerAuthentication`):
+The AKS add-on runs in the `aks-istio-system` namespace (not `istio-system`).
+Install the chart with Istio install disabled and override `istio.namespace`
+so the mesh-wide `PeerAuthentication` lands in the add-on's root namespace:
 
 ```bash
 helm dependency update ./charts/portfolios/core
 helm install core ./charts/portfolios/core \
   --namespace core --create-namespace \
-  --set istio.install.enabled=false
+  --set istio.install.enabled=false \
+  --set istio.namespace=aks-istio-system
 ```
 
 ## Configuration
@@ -61,7 +63,7 @@ helm install core ./charts/portfolios/core \
 | Value | Default | Description |
 |-------|---------|-------------|
 | `istio.install.enabled` | `true` | Install Istio via Helm. Set to `false` on AKS. |
-| `istio.namespace` | `istio-system` | Namespace for the Istio control plane. Also where the mesh-wide `PeerAuthentication` is applied. |
+| `istio.namespace` | `istio-system` | Namespace for the Istio control plane. Also where the mesh-wide `PeerAuthentication` is applied. Override to `aks-istio-system` on AKS (managed add-on). |
 | `istio.mtls.strict` | `true` | Apply a mesh-wide `PeerAuthentication` with `STRICT` mode. |
 
 ## Enabling sidecar injection on app namespaces

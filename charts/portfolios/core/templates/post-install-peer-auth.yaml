@@ -73,22 +73,35 @@ metadata:
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
   backoffLimit: 2
+  # Bound the total wall-clock time: if the Istio CRD never appears (e.g. the
+  # AKS mesh add-on was not enabled), fail fast with a clear error rather than
+  # spinning forever.
+  activeDeadlineSeconds: 300
   template:
     spec:
       serviceAccountName: {{ include "core.name" . }}-peer-auth
       restartPolicy: Never
       containers:
       - name: apply-peer-auth
-        image: bitnami/kubectl:latest
+        image: {{ .Values.istio.peerAuthJob.image | default "alpine/k8s:1.31.13" }}
         command:
         - /bin/sh
         - -c
         - |
           set -e
-          echo "Waiting for PeerAuthentication CRD..."
-          until kubectl get crd peerauthentications.security.istio.io >/dev/null 2>&1; do
+          echo "Waiting for PeerAuthentication CRD (security.istio.io)..."
+          for i in $(seq 1 60); do
+            if kubectl get crd peerauthentications.security.istio.io >/dev/null 2>&1; then
+              break
+            fi
             sleep 3
           done
+          if ! kubectl get crd peerauthentications.security.istio.io >/dev/null 2>&1; then
+            echo "ERROR: PeerAuthentication CRD not found after 3 minutes."
+            echo "  - On local clusters, set istio.install.enabled=true (default)."
+            echo "  - On AKS, enable the mesh add-on: az aks mesh enable ..."
+            exit 1
+          fi
 
           # Mesh-wide STRICT mTLS: a PeerAuthentication in the Istio root
           # namespace applies to every workload in the mesh.

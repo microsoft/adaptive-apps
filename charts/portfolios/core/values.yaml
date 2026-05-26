@@ -27,3 +27,9 @@ istio:
     # namespace (`istio.namespace`). This enforces mTLS for every workload in
     # the mesh, so app namespaces do not need to be enumerated here.
     strict: true
+
+  # Image used by the post-install Job that applies the mesh-wide
+  # PeerAuthentication. Override if your environment cannot reach the default
+  # registry (e.g. air-gapped clusters).
+  peerAuthJob:
+    image: ""
