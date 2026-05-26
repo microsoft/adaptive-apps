@@ -1,7 +1,9 @@
-# Deploy Adaptive App (Core) to Local K8s
+# Deploy Adaptive App (Ent-AI) to Local K8s
 
 ## 0. Prerequisites
 
+* NVIDIA GPU with >= 4G memory, preferrably >= 16G 
+* Latest NVIDIA driver installed (with WSL support if using WSL)
 * [docker](https://docs.docker.com/)
 * [Helm](https://helm.sh/)
 * [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
@@ -23,14 +25,105 @@ To demostrate local deployments, you need a local Kubernetes cluster such as [k3
     ```bash
     k3d --version
     ```
-3. Create a K3s cluster:
+3. Create a K3s cluster using a custom Docker image and a custom volume folder:
 
     ```bash
-    k3d cluster create localk8s
-    # Set K3D_FIX_DNS=0 helps cluster creation complete in environments where it otherwise stalls at configuring CoreDNS configmap
+    mkdir -p ~/k3d/localk8s-storage
+
+    k3d cluster create localk8s \
+    --image hbai/cuda:0.1 \
+    --gpus all \
+    --k3s-arg "--disable=traefik@server:0" \
+    --volume "$HOME/k3d/localk8s-storage:/var/lib/rancher/k3s@server:0" \
+    --volume "/usr/lib/wsl:/usr/lib/wsl@server:0" \
+    --volume "/dev/dxg:/dev/dxg@server:0"
     ```
 
-## 2. Set up Radius
+    > **NOTE:** To build hbai/cuda:0.1 package, use the `Dockerfile.nvidia` file under the `tutorials/min-ai-getting-started/deploy-to-k8s` folder: docker build -t <tag> -f Dockerfile.nvidia .
+
+4. Install kyverno. For Kaito to work with K3s, we need a cluster policy to patch statefulset with nvidia runtimeClassName:
+
+    ```bash
+    helm repo add kyverno https://kyverno.github.io/kyverno/
+    helm repo update
+
+    helm upgrade --install kyverno kyverno/kyverno \
+    -n kyverno \
+    --create-namespace
+    ```
+
+5. Apply the GPU bootstrap artifact:
+
+    ```bash
+    kubectl apply -f tutorials/min-ai-getting-started/deploy-to-k8s/gpu_bootstrap.yaml
+    ```
+
+6. Run `validate_gpu.sh` to validate the node has allocatable GPU:
+
+    ```bash
+    tutorials/min-ai-getting-started/deploy-to-k8s/validate_gpu.sh
+    # then Press Ctrl+C to exit
+    ````
+    You should see something like:
+    ```bash
+    Fri May 15 09:06:53 2026
+    +-----------------------------------------------------------------------------------------+
+    | NVIDIA-SMI 590.48.01              Driver Version: 591.55         CUDA Version: 13.1     |
+    +-----------------------------------------+------------------------+----------------------+
+    | GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+    | Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+    |                                         |                        |               MIG M. |
+    |=========================================+========================+======================|
+    |   0  NVIDIA RTX A2000 Laptop GPU    On  |   00000000:F3:00.0 Off |                  N/A |
+    | N/A   60C    P5              7W /   35W |    1335MiB /   4096MiB |      9%      Default |
+    |                                         |                        |                  N/A |
+    +-----------------------------------------+------------------------+----------------------+
+
+    +-----------------------------------------------------------------------------------------+
+    | Processes:                                                                              |
+    |  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+    |        ID   ID                                                               Usage      |
+    |=========================================================================================|
+    |  No running processes found                                                             |
+    +-----------------------------------------------------------------------------------------+
+    ```
+
+7. Kaito's node estimator reads the `nvidia.com/gpu.memory` label to calculate how many nodes are needed. If you were on WSL, WSL2 GPU Feature Discovery may not auto-populate all labels. Ensure the node has at least:
+    ```bash
+    # get NODE_NAME via kubectl get nodes
+    # <MiB> should equal to GPU memory reported in step 4. See also known issue 2 below.
+    export NODE_NAME=k3d-localk8s-server-0 
+    kubectl label node $NODE_NAME nvidia.com/gpu=true          # Kaito labelSelector
+    kubectl label node $NODE_NAME nvidia.com/gpu.product=Persistence-M # Should match with your GPUs
+    kubectl label node $NODE_NAME nvidia.com/gpu.present=true
+    kubectl label node $NODE_NAME nvidia.com/gpu.count=1
+    kubectl label node $NODE_NAME nvidia.com/gpu.memory=<MiB>  # Used by the estimator. See troubleshoot guide #5 below.
+    ```
+
+    Known issues (Kaito v0.9.0)
+
+    |Issue | Workaround |
+    |--------|--------|
+    | Webhook panic (MustParse("")) when applying a generic-model Workspace in BYO mode | Delete the validating webhook before applying: `kubectl delete validatingwebhookconfiguration validation.workspace.kaito.sh` |
+    | Node estimator `ignores max-model-len` from ConfigMap and over-estimates `targetNodeCount` |	Inflate the `nvidia.com/gpu.memory` node label to satisfy the estimator |
+
+## 2. Set up Kaito
+
+1. Install Kaito
+    ```
+    helm repo add kaito https://kaito-project.github.io/kaito/charts/kaito
+    helm repo update
+    helm upgrade --install kaito-workspace kaito/workspace \
+    --create-namespace \
+    --version 0.10.0 \
+    --namespace kaito-workspace \
+    --set featureGates.disableNodeAutoProvisioning=true \
+    --set nvidiaDevicePlugin.enabled=false \
+    --set localCSIDriver.useLocalCSIDriver=false
+    ```
+    > **NOTE:** Minimum required Kaito version is 0.9.0. `nvidiaDevicePlugin.enabled=false` avoids conflict with an existing device-plugin DaemonSet. `disableNodeAutoProvisioning=true` is required for BYO GPU mode (note: the flag changed to lowercase `d` in v0.9.0).
+
+## 3. Set up Radius
 
 Set up Radius on the local cluster and register the custom resource types used by the app model.
 
@@ -75,47 +168,43 @@ Set up Radius on the local cluster and register the custom resource types used b
     rad environment list --group trading
     ```
 
-## 3. Install Adaptive App Capability Portfolio (Core)
+## 3. Install Adaptive App Capability Portfolio (Ent-AI)
 
-Start with the `core` portfolio Helm chart. The first bundled component is Keycloak.
+Start with the `ent-ai` portfolio Helm chart. 
 
 1. Create namespace:
 
     ```bash
-    kubectl create namespace core
+    kubectl create namespace ent-ai
     ```
 
-2. Install the `core` portfolio from the local chart:
+2. Install the `ent-ai` portfolio from the local chart:
 
     ```bash
-    helm install core ./charts/portfolios/core --namespace core
+    helm install ent-ai ./charts/portfolios/ent-ai --namespace ent-ai
     ```
 
 3. Verify deployments:
 
     ```bash
-    kubectl get all -n ent 
-    kubectl get all -n istio-system
+    kubectl get pods -n ent-ai
+    kubectl get svc -n ent-ai
     ```
 
     You should see services like:
 
     ```bash
-    NAME                      TYPE          NAMESPACE  
-    core-keycloak             ClusterIP     core
-    core-keycloak-discovery   ClusterIP     core
-    core-keycloak-postgresql  ClusterIP     core
-    istiod                    ClusterIP     istio-system
-    opa                       ClusterIP     core
-    otel-collector            ClusterIP     core
-    prometheus                ClusterIP     core
-    zipkin                    ClusterIP     core
+    NAME                      TYPE        
+    ent-ai-keycloak              ClusterIP   
+    ent-ai-keycloak-discovery    ClusterIP
+    ent-ai-keycloak-postgresql   ClusterIP 
+    istiod                       ClusterIP
     ```
 
 4. In a separate Terminal, expose Keycloak with port-forward (keep this terminal running):
 
     ```bash
-    kubectl port-forward -n core svc/core-keycloak 8080:8080
+    kubectl port-forward -n ent-ai svc/ent-ai-keycloak 8080:8080
     ```
 
 5. Open a browser and navigate to `localhost:8080`. Log in to KeyCloak portal with user `admin` and password `admin` (which are defined in the `values.yaml` for the Helm chart).
@@ -153,9 +242,8 @@ Deploy the app model to the Radius environment created above.
     --parameters oidcUserInfoEndpoint=http://min-keycloak.min.svc.cluster.local:8080/realms/master/protocol/openid-connect/userinfo \
     --parameters oidcClientId=<Keycloak client id> \
     --parameters oidcClientSecret=<Keycloak client secret> \
-    --parameters aiProvider=openai \
-    --parameters aiModelName=gpt-4o \
-    --parameters <OpenAI / Azure OpenAI Service API key>
+    --parameters aiProvider=local \
+    --parameters aiModel=Qwen/Qwen3-0.6B
 
     ```
 
@@ -179,7 +267,7 @@ Deploy the app model to the Radius environment created above.
     kubectl rollout restart deployment -n $APP_NAMESPACE
     ```
 
-    >**NOTE:** The `core` Helm chart handles the cluster-wide mTLS plumbing automatically: the pre-install hook installs Istio (`istio-base` + `istiod`) into `istio-system`, and the post-install hook applies a mesh-wide `PeerAuthentication` with `mtls.mode: STRICT` in the Istio root namespace. Labeling each app namespace is left to the operator because Radius owns app-namespace creation. The chart also deploys observability components (OpenTelemetry collector, Prometheus, and Zipkin) in the `core` namespace, and the app automatically sends telemetry to the collector.
+    >**NOTE:** The `core` Helm chart (inherited transitively by `ent-ai` via `ent`) handles the cluster-wide mTLS plumbing automatically: the pre-install hook installs Istio (`istio-base` + `istiod`) into `istio-system`, and the post-install hook applies a mesh-wide `PeerAuthentication` with `mtls.mode: STRICT` in the Istio root namespace. Labeling each app namespace is left to the operator because Radius owns app-namespace creation. The chart also deploys observability components (OpenTelemetry collector, Prometheus, and Zipkin) in the `core` namespace, and the app automatically sends telemetry to the collector.
 
 3. (Optional) Observe mTLS
 

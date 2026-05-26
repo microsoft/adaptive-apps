@@ -116,6 +116,7 @@ Follow our getting-started tutorials to deploy a Adaptive App across cloud and e
 * [Core Portfolio - getting started](./tutorials/core-getting-started/README.md)
 * [Core-AI Portfolio - getting started](./tutorials/core-ai-getting-started/README.md)
 * [Ent Portfolio - getting started](./tutorials/ent-getting-started/README.md)
+* [Ent-AI Portfolio - getting started](./tutorials/ent-ai-getting-started/README.md)
 
 ## Topics
 

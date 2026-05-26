@@ -29,16 +29,27 @@ The following table summarizes capabilities offered by each of the portfolios. A
 
 | Capability | Min | Core | Ent | Min-AI | Core-AI | Ent-AI |
 |---|---|---|---|---|---|---|
-| User authentication (OIDC) | 🛡️ Keycloak | 🛡️ Keycloak | 🛡️ Keycloak | 🛡️ Keycloak | 🛡️ Keycloak | 🛡️ Keycloak |
-| Identity datastore | PostgreSQL (in-cluster) | PostgreSQL (in-cluster) | PostgreSQL (in-cluster) | PostgreSQL (in-cluster) | PostgreSQL (in-cluster) | PostgreSQL (in-cluster) |
-| Workload identity | Entra Managed Identity | Entra Managed Identity | Entra Managed Identity | Entra Managed Identity | Entra Managed Identity | Entra Managed Identity |
+| User authentication (OIDC) | Keycloak | Keycloak | Keycloak | Keycloak | Keycloak | Keycloak |
+| Workload identity | Entra Managed Identity | Entra Managed Identity / SPIFFE | Entra Managed Identity / SPIFFE | Entra Managed Identity | Entra Managed Identity / SPIFFE | Entra Managed Identity / SPIFFE |
 | Service-to-service auth | Claim-based | Claim-based & mTLS (Istio) | Claim-based & mTLS (Istio) | Claim-based | Claim-based & mTLS (Istio) | Claim-based & mTLS (Istio) |
-| Service mesh | — | Istio (self-managed or AKS add-on) | Istio | — | Istio | Istio |
+| Service mesh | — | Istio | Istio | — | Istio | Istio |
 | Observability | — | OpenTelemetry Collector, Prometheus, Zipkin | OpenTelemetry Collector, Prometheus, Zipkin | — | OpenTelemetry Collector, Prometheus, Zipkin | OpenTelemetry Collector, Prometheus, Zipkin |
-| Policy enforcement | — | — | OPA (opa-envoy-plugin) as Istio extensionProvider | — | — | OPA (opa-envoy-plugin) as Istio extensionProvider |
+| Policy enforcement | — | — | Azure Policy / OPA (opa-envoy-plugin) as Istio extensionProvider | — | — | Azure Policy / OPA (opa-envoy-plugin) as Istio extensionProvider |
 | AI inference | Cloud-based (e.g. Azure OpenAI) | Cloud-based (e.g. Azure OpenAI) | Cloud-based (e.g. Azure OpenAI) | In-cluster (via KAITO) + cloud-based | In-cluster (via KAITO) + cloud-based | In-cluster (via KAITO) + cloud-based |
+| VM Management | Gantry | Gantry | Gantry | Gantry | Gantry | Gantry |
 
-Legend: 🛡️ identity/authentication capability · — not provided by this portfolio.
+The following table maps capabilities to product/OSS offerings in different environment
+
+| Capability | Azure | Azure Arc | Azure Local | Other cloud / On-premises |
+|--------|--------|--------|--------|--------|
+| User authentication | Entra | Entra | Entra | KeyCloak |
+| Workload identity | Entra Managed Identity | Entra Managed Identity | Entra Managed Identity | Entra Managed Identity | 
+| Service-to-service auth | mTLS / SPIFFE / Entra token | mTLS / SPIFFE / Entra token | mTLS / SPIFFE / Entra token | mTLS / SPIFFE / Entra token |
+| Service mesh | Istio (AKS extension) | Istio | Istio | Istio |
+| Observability | OTEL | OTEL | OTEL | OTEL |
+| Policy enforcement | Azure Policy | Azure Policy | Azure Policy | OPA |
+| AI Inference | Microsoft OpenAI/KAITO |Microsoft OpenAI/KAITO |Microsoft OpenAI/KAITO |Microsoft OpenAI/KAITO |
+| VM Management | ARM | Gantry | Gantry | TBD | 
 
 ## Implementation notes
 

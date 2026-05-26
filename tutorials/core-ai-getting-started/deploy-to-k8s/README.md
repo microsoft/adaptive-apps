@@ -194,11 +194,11 @@ Start with the `core-ai` portfolio Helm chart.
     You should see services like:
 
     ```bash
-    NAME                      TYPE        
-    core-keycloak              ClusterIP   
-    core-keycloak-discovery    ClusterIP
-    core-keycloak-postgresql   ClusterIP 
-    istiod                     ClusterIP
+    NAME                          TYPE        
+    core-ai-keycloak              ClusterIP   
+    core-ai-keycloak-discovery    ClusterIP
+    core-ai-keycloak-postgresql   ClusterIP 
+    istiod                        ClusterIP
     ```
 
 4. In a separate Terminal, expose Keycloak with port-forward (keep this terminal running):

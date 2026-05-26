@@ -169,13 +169,24 @@ Deploy the app model to the Radius environment created above.
     --parameters aiEndpoint=https://antho-openai.openai.azure.com/ \
     --parameters aiApiKey=<Azure OpenAI service deployment key>
     ```
-2. (Optional) Observe mTLS
+2. Enable Istio sidecar injection on the app namespace.
+
+    Radius creates the app namespace (`trading-<app-name>`), but it does not label it for Istio sidecar injection. The `enableIstioInjection=true` parameter on `app.bicep` only adds the `sidecar.istio.io/inject: "true"` pod annotation, which is ignored unless the namespace is enrolled in the mesh. Label the namespace and restart the workloads so they come back with sidecars:
 
     ```bash
     export APP_NAMESPACE=trading-portable-apps
+    kubectl label namespace $APP_NAMESPACE istio-injection=enabled --overwrite
+    kubectl rollout restart deployment -n $APP_NAMESPACE
+    ```
+
+    >**NOTE:** The `core` Helm chart (inherited by `ent`) handles the cluster-wide mTLS plumbing automatically: the pre-install hook installs Istio (`istio-base` + `istiod`) into `istio-system`, and the post-install hook applies a mesh-wide `PeerAuthentication` with `mtls.mode: STRICT` in the Istio root namespace. Labeling each app namespace is left to the operator because Radius owns app-namespace creation. The chart also deploys observability components (OpenTelemetry collector, Prometheus, and Zipkin) in the `core` namespace, and the app automatically sends telemetry to the collector.
+
+3. (Optional) Observe mTLS
+
+    ```bash
     kubectl get pods -n $APP_NAMESPACE -o jsonpath='{range .items[*]}{.metadata.name}{" => "}{range .spec.containers[*]}{.name}{" "}{end}{"\n"}{end}'
     ```
-    
+
     You should see something like:
 
     ```bash
@@ -186,18 +197,16 @@ Deploy the app model to the Radius environment created above.
     postgres-... => postgres istio-proxy
     ```
 
-    >**NOTE:** The `core` Helm chart handles mTLS automatically: 1. The pre-install hook installs Istio (`istio-base` + `istiod`) into `istio-system`. 2. The `namespace-enrollment` template labels the app namespace with `istio-injection=enabled`. 3. The post-install hook applies a `PeerAuthentication` with `mtls.mode: STRICT`. The chart also deploys observability components (OpenTelemetry collector, Prometheus, and Zipkin) in the `core` namespace, and the app automatically sends telemetry to the collector.
-
 This separation allows apps to remain portable; the environment (Helm chart) decides whether observability and mTLS are available.
 
-3. Expose the frontend:
+4. Expose the frontend:
 
     ```bash
     rad resource expose Applications.Core/containers frontend -a portable-apps --port 3000 --remote-port 3000
     ```
 
-4. Open the app at `http://localhost:3000`.
-5. Login using local account admin/admin, or click on "Sign in with OIDC" button to use KeyCloak to login with federated credential.
+5. Open the app at `http://localhost:3000`.
+6. Login using local account admin/admin, or click on "Sign in with OIDC" button to use KeyCloak to login with federated credential.
 
 ## 5. Try an OPA authorization policy
 
