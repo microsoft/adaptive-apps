@@ -6,11 +6,13 @@ The Min Portfolio is designed for local development, prototyping, and MVP scenar
 
 ## Components
 
-* [KeyCloak](https://www.keycloak.org/) as the identity provider for user authentication.
+* [KeyCloak](https://www.keycloak.org/) as the identity provider for user authentication.<sup>1</sup>
 * OTEL collector
 * [Workload Identities](https://learn.microsoft.com/en-us/entra/workload-id/workload-identities-overview) for authenticating with Azure services.
 * [Prometheus](https://prometheus.io/)
 * [Zipkin](https://zipkin.io/)
+
+1. KeyCloak can be turned off if an external OIDC provider is used. For example, when deploying on AKS, user authentication can be handled directly by Microsoft Entra instead of KeyCloak.
 ## Authentication
 
 Adaptive Apps recommends a claims-based architecture for authentication and authorization. In this model, applications delegate authentication to a trusted identity provider (IdP), which authenticates users and issues security tokens containing claims that describe user attributes, such as identity and roles. Applications validate the token, extract the claims, and use them to enforce authorization policies.

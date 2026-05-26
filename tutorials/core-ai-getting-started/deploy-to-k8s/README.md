@@ -216,7 +216,42 @@ Start with the `core-ai` portfolio Helm chart.
     
     Click "Save" to save the client definition.
 
-7. Go to "Credentials" tab and copy the client secret. You'll need both client id and secret for the next step.
+7. Go to "Credentials" tab and copy the client secret. Capture both values into shell variables:
+
+    ```bash
+    export OIDC_APP_ID=<Keycloak client id>
+    export OIDC_APP_SECRET=<Keycloak client secret>
+    ```
+
+8. Render the client-secret Secret and re-render the chart's OIDC ConfigMap so it carries the client ID, the secret reference, and the port-forward browser endpoint:
+
+    ```bash
+    kubectl -n core-ai create secret generic oidc-client \
+      --from-literal=clientSecret=$OIDC_APP_SECRET \
+      --dry-run=client -o yaml | kubectl apply -f -
+
+    helm upgrade core-ai ./charts/portfolios/core-ai --namespace core-ai --reuse-values \
+      --set oidc.clientId=$OIDC_APP_ID \
+      --set oidc.clientSecretRef.name=oidc-client \
+      --set oidc.browserAuthEndpoint=http://localhost:8080/realms/master/protocol/openid-connect/auth
+    ```
+
+9. Hydrate OIDC env vars from the `core-ai-oidc` ConfigMap (consumed by the next section's `rad deploy`):
+
+    ```bash
+    eval "$(kubectl -n core-ai get cm core-ai-oidc -o go-template='
+    export OIDC_ISSUER={{ .data.issuer | printf "%q" }}
+    export OIDC_AUTH_ENDPOINT={{ .data.authEndpoint | printf "%q" }}
+    export OIDC_BROWSER_AUTH_ENDPOINT={{ .data.browserAuthEndpoint | printf "%q" }}
+    export OIDC_TOKEN_ENDPOINT={{ .data.tokenEndpoint | printf "%q" }}
+    export OIDC_USERINFO_ENDPOINT={{ .data.userInfoEndpoint | printf "%q" }}
+    export OIDC_CLIENT_ID={{ .data.clientId | printf "%q" }}
+    export OIDC_CLIENT_SECRET_NAME={{ .data.clientSecretName | printf "%q" }}
+    export OIDC_CLIENT_SECRET_KEY={{ .data.clientSecretKey | printf "%q" }}
+    ')"
+    export OIDC_CLIENT_SECRET=$(kubectl -n core-ai get secret "$OIDC_CLIENT_SECRET_NAME" \
+      -o jsonpath="{.data.${OIDC_CLIENT_SECRET_KEY}}" | base64 -d)
+    ```
 
 ## 4. Install the app
 
@@ -235,19 +270,20 @@ Deploy the app model to the Radius environment created above.
     --parameters authPassword=admin \
     --parameters otelCollectorEndpoint=http://otel-collector.core:4318 \
     --parameters enableIstioInjection=true \
-    --parameters oidcIssuer=http://min-keycloak.min.svc.cluster.local:8080/realms/master \
+    --parameters oidcIssuer=$OIDC_ISSUER \
     --parameters oidcIssuerOverride=http://localhost:8080/realms/master \
-    --parameters oidcBrowserAuthEndpoint=http://localhost:8080/realms/master/protocol/openid-connect/auth \
-    --parameters oidcTokenEndpoint=http://min-keycloak.min.svc.cluster.local:8080/realms/master/protocol/openid-connect/token \
-    --parameters oidcUserInfoEndpoint=http://min-keycloak.min.svc.cluster.local:8080/realms/master/protocol/openid-connect/userinfo \
-    --parameters oidcClientId=<Keycloak client id> \
-    --parameters oidcClientSecret=<Keycloak client secret> \
+    --parameters oidcAuthEndpoint=$OIDC_AUTH_ENDPOINT \
+    --parameters oidcBrowserAuthEndpoint=$OIDC_BROWSER_AUTH_ENDPOINT \
+    --parameters oidcTokenEndpoint=$OIDC_TOKEN_ENDPOINT \
+    --parameters oidcUserInfoEndpoint=$OIDC_USERINFO_ENDPOINT \
+    --parameters oidcClientId=$OIDC_CLIENT_ID \
+    --parameters oidcClientSecret=$OIDC_CLIENT_SECRET \
     --parameters aiProvider=local \
     --parameters aiModel=Qwen/Qwen3-0.6B
 
     ```
 
-    > **NOTE:** The Keycloak service is `ClusterIP`, which is ideal for in-cluster calls from the frontend pod. This setup uses two different URLs: Browser redirects to `http://localhost:8080` (via `oidcBrowserAuthEndpoint`); Token and userinfo requests go to the in-cluster `min-keycloak.min.svc.cluster.local` (via explicit `oidcTokenEndpoint` and `oidcUserInfoEndpoint`). This causes an issuer mismatch: Keycloak issues a token with iss claim set to `http://localhost:8080/realms/master` (the URL used during authentication), but the frontend validates the token against `oidcIssuer=http://min-keycloak.min.svc.cluster.local:8080/realms/master` by default. Use `oidcIssuerOverride=http://localhost:8080/realms/master` to tell the frontend which issuer to expect. In production, Keycloak is typically deployed behind an ingress with a single DNS name used everywhere, avoiding this split-URL issue. See [keycloak-ingress.md](../../../docs/authentication/keycloak-ingress.md) for setup details.
+    > **NOTE:** The OIDC values above are read from the chart-rendered `core-ai-oidc` ConfigMap. Users reach Keycloak via `kubectl port-forward` on `localhost:8080`, while the frontend pod calls it via the in-cluster Service DNS, so Keycloak issues tokens with `iss=http://localhost:8080/realms/master` (the URL used during browser auth). `oidcIssuerOverride=http://localhost:8080/realms/master` makes the frontend accept tokens validated against the localhost issuer while still hitting the token/userinfo endpoints in-cluster. In production, expose Keycloak behind an ingress with a single DNS name to avoid this split-URL setup — see [keycloak-ingress.md](../../../docs/authentication/keycloak-ingress.md).
 
     If you want to use an Azure OpenAI deployment endpoint, you need to set these parameters accordingly:
 

@@ -5,11 +5,72 @@ commonLabels: {}
 
 components:
   keycloak:
+    # When false, the in-cluster Keycloak StatefulSet/Service/Ingress and its
+    # PostgreSQL backend are not deployed. Use this mode when delegating user
+    # authentication to an external OIDC provider (e.g. Microsoft Entra ID,
+    # Auth0, Okta). Configure `oidc.external.*` below.
     enabled: true
 
 serviceAccount:
   create: false
   name: ""
+
+# ---------------------------------------------------------------------------
+# OIDC identity provider configuration.
+#
+# The chart always renders a `<release>-oidc` ConfigMap whose keys describe
+# the active OIDC provider. Downstream consumers (the `rad deploy` step of
+# the tutorials, or charts that depend on `min`) read this ConfigMap so the
+# same `app.bicep` parameters work against either an in-cluster Keycloak or
+# an external IdP — no Bicep change required.
+#
+# Two modes:
+#   • components.keycloak.enabled=true (default)  → endpoints are derived
+#     from the in-cluster Keycloak Service.
+#   • components.keycloak.enabled=false           → endpoints come from
+#     `oidc.external.*` below. Typical sources: Microsoft Entra ID, Auth0,
+#     Okta, Azure AD B2C.
+# ---------------------------------------------------------------------------
+oidc:
+  # Keycloak realm. Only used when Keycloak is enabled.
+  realm: master
+
+  # OIDC client ID used by the application. Optional at install time —
+  # operators typically create the client out-of-band (Keycloak admin UI
+  # after first launch, or `az ad app create` for Entra) and supply this
+  # value via `helm upgrade --set oidc.clientId=...` or directly to the app
+  # deploy step.
+  clientId: ""
+
+  # Browser-facing authorization endpoint. Override when end users reach
+  # the IdP at a different URL than in-cluster pods (e.g. `kubectl
+  # port-forward` to localhost, or a public ingress host). Leave empty to
+  # fall back to the in-cluster / canonical `authEndpoint`.
+  browserAuthEndpoint: ""
+
+  # Reference to an existing Kubernetes Secret containing the OIDC client
+  # secret. The chart does NOT create this Secret — render it yourself:
+  #   kubectl create secret generic oidc-client \
+  #     --namespace <release-ns> \
+  #     --from-literal=clientSecret=<value-from-IdP>
+  # The name+key are surfaced in the oidc ConfigMap so callers can resolve
+  # the secret value.
+  clientSecretRef:
+    name: ""
+    key: clientSecret
+
+  external:
+    # Issuer URL.
+    #   Microsoft Entra ID: https://login.microsoftonline.com/<tenant>/v2.0
+    #   Auth0:              https://<tenant>.auth0.com/
+    issuer: ""
+    # OIDC endpoints. For Entra ID, the standard values are:
+    #   authEndpoint:     https://login.microsoftonline.com/<tenant>/oauth2/v2.0/authorize
+    #   tokenEndpoint:    https://login.microsoftonline.com/<tenant>/oauth2/v2.0/token
+    #   userInfoEndpoint: https://graph.microsoft.com/oidc/userinfo
+    authEndpoint: ""
+    tokenEndpoint: ""
+    userInfoEndpoint: ""
 
 keycloak:
   replicaCount: 2

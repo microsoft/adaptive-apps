@@ -7,3 +7,6 @@ The Core-AI Portfolio combines the [Min-AI Portfolio](./min-ai.md) and the [Core
 * [Core Portfolio Components](./core.md#components)
 * [Min-AI Portfolio Components](./min-ai.md#components)
 
+## Additional Guidance
+
+* [Getting started with the Core-AI portfolio](../../tutorials/core-ai-getting-started/README.md)

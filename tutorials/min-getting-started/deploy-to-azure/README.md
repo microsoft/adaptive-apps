@@ -158,7 +158,20 @@ export FRONTEND_CLIENT_ID=$(az identity show -g $RESOURCE_GROUP -n frontend --qu
 
 ## 5. Install Adaptive App Capability Portfolio
 
-Start with the `min` portfolio Helm chart. The first bundled component is Keycloak.
+The `min` portfolio Helm chart provides the OIDC identity provider for user
+sign-in. Pick **one** of the two paths below — they both end with the same
+`min-oidc` ConfigMap and `oidc-client` Secret in the `min` namespace, so
+step 6 (deploying the app) is identical regardless of which path you chose.
+
+> **Why two paths?** AKS exposes an OIDC issuer
+> ([docs](https://learn.microsoft.com/en-us/azure/aks/use-oidc-issuer)), but
+> that issuer signs **ServiceAccount tokens for workload identity** — it is
+> not a user-facing IdP. For end-user browser sign-in on AKS the natural
+> choice is **Microsoft Entra ID** (Option B). Keycloak (Option A) remains
+> useful when you need a self-managed IdP or want the same setup to work
+> on non-Azure clusters.
+
+### Option A — In-cluster Keycloak (default, portable)
 
 1. Create namespace:
     ```bash
@@ -187,13 +200,100 @@ Start with the `min` portfolio Helm chart. The first bundled component is Keyclo
     * `Client authentication`: set to **On**.
     * `Valid redirect URIs`: set to `http://localhost:3000/*` (or `http://localhost:3000/auth/oidc/callback`).
 
-7. Go to the "Credentials" tab and copy the client secret. You need both client ID and client secret in the next step.
+7. Go to the "Credentials" tab and copy the client secret. Capture the client ID and secret into shell variables:
+    ```bash
+    export OIDC_APP_ID=<Keycloak client id>
+    export OIDC_APP_SECRET=<Keycloak client secret>
+    ```
+
+8. Render the client-secret Kubernetes Secret and re-render the OIDC ConfigMap with the captured client ID and the browser-facing endpoint (port-forward URL):
+    ```bash
+    kubectl -n min create secret generic oidc-client \
+      --from-literal=clientSecret=$OIDC_APP_SECRET \
+      --dry-run=client -o yaml | kubectl apply -f -
+
+    helm upgrade min ./charts/portfolios/min --namespace min --reuse-values \
+      --set oidc.clientId=$OIDC_APP_ID \
+      --set oidc.clientSecretRef.name=oidc-client \
+      --set oidc.browserAuthEndpoint=http://localhost:8080/realms/master/protocol/openid-connect/auth
+    ```
+
+### Option B — Microsoft Entra ID (AKS-native, no in-cluster IdP)
+
+1. Create namespace:
+    ```bash
+    kubectl create namespace min
+    ```
+
+2. Register an Entra application for the frontend's browser sign-in and capture the client ID / secret:
+    ```bash
+    export TENANT_ID=$(az account show --query tenantId -o tsv)
+    export OIDC_APP_ID=$(az ad app create \
+      --display-name portable-apps-frontend \
+      --sign-in-audience AzureADMyOrg \
+      --web-redirect-uris http://localhost:3000/auth/oidc/callback \
+      --query appId -o tsv)
+    export OIDC_APP_SECRET=$(az ad app credential reset \
+      --id $OIDC_APP_ID --append \
+      --query password -o tsv)
+    ```
+
+    > **NOTE:** `AzureADMyOrg` restricts sign-in to your tenant. Use `AzureADMultipleOrgs` for multi-tenant. Add additional redirect URIs (`az ad app update --web-redirect-uris ...`) when you front the app with a public ingress.
+
+3. Create the OIDC client-secret Kubernetes Secret:
+    ```bash
+    kubectl -n min create secret generic oidc-client \
+      --from-literal=clientSecret=$OIDC_APP_SECRET
+    ```
+
+4. Install the `min` portfolio with Keycloak disabled and Entra endpoints wired in:
+    ```bash
+    helm install min ./charts/portfolios/min --namespace min \
+      --set components.keycloak.enabled=false \
+      --set oidc.clientId=$OIDC_APP_ID \
+      --set oidc.clientSecretRef.name=oidc-client \
+      --set oidc.external.issuer=https://login.microsoftonline.com/$TENANT_ID/v2.0 \
+      --set oidc.external.authEndpoint=https://login.microsoftonline.com/$TENANT_ID/oauth2/v2.0/authorize \
+      --set oidc.external.tokenEndpoint=https://login.microsoftonline.com/$TENANT_ID/oauth2/v2.0/token \
+      --set oidc.external.userInfoEndpoint=https://graph.microsoft.com/oidc/userinfo
+    ```
+
+    Verify no Keycloak/Postgres pods were created — only the ConfigMap:
+    ```bash
+    kubectl get all -n min                     # should be empty
+    kubectl get cm min-oidc -n min -o yaml     # mode: "external"
+    ```
 
 ## 6. Install the app
 
-Deploy the app model to the AKS Radius environment created above.
+Deploy the app model to the AKS Radius environment created above. The OIDC
+values are read from the `min-oidc` ConfigMap and `oidc-client` Secret
+populated by step 5 — the same commands work for both Option A and Option B.
 
-1. Deploy the app:
+1. Read OIDC values into shell variables:
+    ```bash
+    eval "$(kubectl -n min get cm min-oidc -o go-template='
+    export OIDC_ISSUER={{ .data.issuer | printf "%q" }}
+    export OIDC_AUTH_ENDPOINT={{ .data.authEndpoint | printf "%q" }}
+    export OIDC_BROWSER_AUTH_ENDPOINT={{ .data.browserAuthEndpoint | printf "%q" }}
+    export OIDC_TOKEN_ENDPOINT={{ .data.tokenEndpoint | printf "%q" }}
+    export OIDC_USERINFO_ENDPOINT={{ .data.userInfoEndpoint | printf "%q" }}
+    export OIDC_CLIENT_ID={{ .data.clientId | printf "%q" }}
+    export OIDC_CLIENT_SECRET_NAME={{ .data.clientSecretName | printf "%q" }}
+    export OIDC_CLIENT_SECRET_KEY={{ .data.clientSecretKey | printf "%q" }}
+    ')"
+    export OIDC_CLIENT_SECRET=$(kubectl -n min get secret "$OIDC_CLIENT_SECRET_NAME" \
+      -o jsonpath="{.data.${OIDC_CLIENT_SECRET_KEY}}" | base64 -d)
+    ```
+
+    > **NOTE:** If you used Option A (Keycloak via port-forward), the in-cluster
+    > `OIDC_ISSUER` URL uses the Keycloak Service DNS, but Keycloak issues
+    > tokens with an `iss` claim equal to the URL the browser used during
+    > authentication (`http://localhost:8080/realms/master`). Pass that as
+    > `oidcIssuerOverride` to `rad deploy` so the frontend validates the
+    > token against the right issuer. Option B has no such mismatch.
+
+2. Deploy the app:
     ```bash
     cd radius
     rad deploy app.bicep \
@@ -204,19 +304,26 @@ Deploy the app model to the AKS Radius environment created above.
       --parameters authUsername=admin \
       --parameters authPassword=admin \
       --parameters otelCollectorEndpoint=http://otel-collector.core:4318 \
-      --parameters oidcIssuer=http://min-keycloak.min.svc.cluster.local:8080/realms/master \
-      --parameters oidcIssuerOverride=http://localhost:8080/realms/master \
-      --parameters oidcBrowserAuthEndpoint=http://localhost:8080/realms/master/protocol/openid-connect/auth \
-      --parameters oidcTokenEndpoint=http://min-keycloak.min.svc.cluster.local:8080/realms/master/protocol/openid-connect/token \
-      --parameters oidcUserInfoEndpoint=http://min-keycloak.min.svc.cluster.local:8080/realms/master/protocol/openid-connect/userinfo \
-      --parameters oidcClientId=<Keycloak client id> \
-      --parameters oidcClientSecret=<Keycloak client secret> \
+      --parameters oidcIssuer=$OIDC_ISSUER \
+      --parameters oidcAuthEndpoint=$OIDC_AUTH_ENDPOINT \
+      --parameters oidcBrowserAuthEndpoint=$OIDC_BROWSER_AUTH_ENDPOINT \
+      --parameters oidcTokenEndpoint=$OIDC_TOKEN_ENDPOINT \
+      --parameters oidcUserInfoEndpoint=$OIDC_USERINFO_ENDPOINT \
+      --parameters oidcClientId=$OIDC_CLIENT_ID \
+      --parameters oidcClientSecret=$OIDC_CLIENT_SECRET \
       --parameters workloadIdentityServiceAccountName=default \
       --parameters backendClientId=$BACKEND_CLIENT_ID \
       --parameters frontendClientId=$FRONTEND_CLIENT_ID \
       --parameters aiProvider=openai \
       --parameters aiModelName=gpt-4o \
       --parameters aiApiKey=<OpenAI API key>
+    ```
+
+    For **Option A only**, also add the issuer override so the frontend
+    accepts the browser-issued token:
+
+    ```bash
+      --parameters oidcIssuerOverride=http://localhost:8080/realms/master \
     ```
 
     > **NOTE:** The app model automatically sets `azure.workload.identity/use=true` on backend and frontend pods.
@@ -230,13 +337,13 @@ Deploy the app model to the AKS Radius environment created above.
     --parameters aiApiKey=<Azure OpenAI deployment key>
     ```
 
-2. Expose the frontend:
+3. Expose the frontend:
     ```bash
     rad resource expose Applications.Core/containers frontend -a portable-apps --port 3000 --remote-port 3000
     ```
 
-3. Open the app at `http://localhost:3000`.
-4. Login using local account `admin/admin`, or click "Sign in with OIDC" to authenticate with Keycloak.
+4. Open the app at `http://localhost:3000`.
+5. Login using local account `admin/admin`, or click "Sign in with OIDC" to authenticate with your IdP (Keycloak in Option A, Entra ID in Option B).
 
 ## 5. Clean up
 
