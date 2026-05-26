@@ -12,7 +12,7 @@ The following table shows how each component is mapped to platform-specific depl
 |--------|-------|-------|-------|
 | Frontend |	Pod on Azure Kubernetes Service |	Pod on Arc-enabled Kubernetes cluster | Pod on local Kubernetes cluster |
 | Backend |	Pod on Azure Kubernetes Service	| Pod on Arc-enabled Kubernetes cluster | Pod on local Kubernetes cluster |
-| Identity | Provider	Microsoft Entra ID	| Microsoft Entra ID | Keycloak |
+| Identity Provider |	Microsoft Entra ID	| Microsoft Entra ID | Keycloak |
 | Database |	Azure SQL Database	| SQL Managed Instance enabled by Azure Arc	| PostgreSQL (self-managed) |
 | Messaging |	Azure Event Grid | Eclipse Mosquitto | Eclipse Mosquitto |
 | AI Model | Azure OpenAI Service / OpenAI | Azure OpenAI Service / OpenAI / Kaito | Kaito |
