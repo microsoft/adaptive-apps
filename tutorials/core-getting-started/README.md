@@ -19,6 +19,6 @@ The following table shows how each component is mapped to platform-specific depl
 
 Follow the instructions for your chosen environment to deploy the app:
 
-* Deploy to Azure
+* [Deploy to Azure](./deploy-to-azure/README.md)
 * Deploy to Azure Arc
 * [Deploy to local Kubernetes](./deploy-to-k8s/README.md)
