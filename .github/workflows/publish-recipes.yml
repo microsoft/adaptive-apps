@@ -46,8 +46,16 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Radius CLI
+        # Pin the rad CLI version. The install script ships a bundled Bicep
+        # whose Azure type catalog can change between releases; an unpinned
+        # install was the root cause of the May 2026 CI regression that broke
+        # azure-openai.bicep (BCP109 on `.listKeys()`) and
+        # azure-workload-identity.bicep (BCP057 on `subscription()`).
+        env:
+          RADIUS_VERSION: '0.57.0'
         run: |
-          curl -fsSL https://raw.githubusercontent.com/radius-project/radius/main/deploy/install.sh | bash
+          curl -fsSL https://raw.githubusercontent.com/radius-project/radius/main/deploy/install.sh \
+            | bash -s -- "${RADIUS_VERSION}"
           echo "$HOME/.rad/bin" >> $GITHUB_PATH
 
       - name: Login to GitHub Container Registry
