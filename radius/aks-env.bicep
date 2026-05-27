@@ -99,6 +99,13 @@ resource aksEnv 'Applications.Core/environments@2023-10-01-preview' = {
           templatePath: '${recipeRegistry}/ai-agent-azure-openai:latest'
         }
       }
+      // ── Governance — Open Policy Agent (PDP) ───────────────────────────
+      'Radius.Resources/governance': {
+        default: {
+          templateKind: 'bicep'
+          templatePath: '${recipeRegistry}/governance-opa:latest'
+        }
+      }
     }
   }
 }

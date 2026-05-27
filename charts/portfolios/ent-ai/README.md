@@ -47,11 +47,13 @@ helm install ent-ai ./charts/portfolios/ent-ai \
 
 All values are passed through to the `ent` subchart. See
 [../ent/README.md](../ent/README.md) and [../core/README.md](../core/README.md)
-for the full set. For example, to disable OPA while keeping the rest of the
-stack:
+for the full set. For example, to install the legacy chart-managed OPA
+(disabled by default since the OPA workload migrated to the
+`Radius.Resources/governance` recipe):
 
 ```bash
 helm install ent-ai ./charts/portfolios/ent-ai \
   --namespace ent-ai --create-namespace \
-  --set ent.opa.enabled=false
+  --set ent.opa.enabled=true \
+  --set ent.istioExtAuthz.enabled=true
 ```

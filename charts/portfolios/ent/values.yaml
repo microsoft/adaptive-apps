@@ -9,8 +9,13 @@ core: {}
 # to OPA.
 # ---------------------------------------------------------------------------
 opa:
-  # Set to false to skip OPA installation entirely.
-  enabled: true
+  # Disabled by default. The OPA workload + Istio extensionProvider wiring
+  # has migrated to the Radius governance recipe
+  # (radius/recipes/governance/kubernetes-opa.bicep) and is provisioned
+  # per-application via Radius.Resources/governance. Set to true only if you
+  # are not using the Radius governance recipe and still want a chart-managed,
+  # cluster-wide OPA installed in the release namespace.
+  enabled: false
 
   # Name used for the Deployment, Service, ServiceAccount, and ConfigMaps.
   name: opa
@@ -51,10 +56,11 @@ opa:
 # Istio integration: register OPA as a mesh extensionProvider.
 # ---------------------------------------------------------------------------
 istioExtAuthz:
-  # Set to false to install OPA without wiring it into Istio (useful when
-  # the mesh is managed externally and you prefer to configure providers
-  # out-of-band).
-  enabled: true
+  # Disabled by default. Mesh-level registration of OPA as an Istio
+  # extensionProvider is now performed by the Radius governance recipe
+  # (set `istioIntegration: true` on the Radius.Resources/governance
+  # resource). Set to true only when running the chart-managed OPA above.
+  enabled: false
 
   # Namespace and ConfigMap holding the Istio MeshConfig.
   istioNamespace: istio-system

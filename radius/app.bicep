@@ -112,6 +112,20 @@ param otelCollectorEndpoint string = ''
 @description('Enable Istio sidecar injection for all containers in the app (requires Istio to be installed in the cluster).')
 param enableIstioInjection bool = true
 
+@description('Deploy a Radius.Resources/governance resource (policy decision point) for the application. Set to true to migrate the legacy OPA workload from the `ent` Helm portfolio onto the portable Radius recipe.')
+param enableGovernance bool = false
+
+@description('Enforcement mode passed to the governance recipe. Recipes may interpret this differently (e.g. OPA decision-log only vs. denying responses).')
+@allowed([
+  'enforce'
+  'audit'
+  'dryrun'
+])
+param governanceMode string = 'enforce'
+
+@description('When true (and enableGovernance is true), the governance recipe also registers itself as an Istio mesh extensionProvider so AuthorizationPolicy resources with `action: CUSTOM` can delegate to the PDP. Requires Istio to be installed in the cluster.')
+param governanceIstioIntegration bool = true
+
 var effectiveOidcIssuer = oidcIssuerOverride != '' ? oidcIssuerOverride : oidcIssuer
 var issuerBaseForDerivedEndpoints = endsWith(effectiveOidcIssuer, '/')
   ? substring(effectiveOidcIssuer, 0, max(length(effectiveOidcIssuer) - 1, 0))
@@ -196,6 +210,24 @@ resource frontendIdentity 'Radius.Resources/workloadIdentities@2025-08-01-previe
     #disable-next-line BCP073
     clientId: frontendClientId
     serviceAccountName: workloadIdentityServiceAccountName
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Governance (policy decision point) — opt-in.
+//
+// When enableGovernance=true the registered recipe (default: OPA) deploys a
+// PDP into the app namespace. Containers don't take a connection to this
+// resource (governance is applied at the mesh / sidecar layer, not via env
+// vars), so there is no `connections` wiring on the containers below.
+// ---------------------------------------------------------------------------
+resource tradingGovernance 'Radius.Resources/governance@2025-08-01-preview' = if (enableGovernance) {
+  name: 'trading-governance'
+  properties: {
+    environment: environment
+    application: tradingApp.id
+    mode: governanceMode
+    istioIntegration: governanceIstioIntegration
   }
 }
 

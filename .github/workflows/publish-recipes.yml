@@ -39,6 +39,8 @@ jobs:
             tag: recipes/ai-agent-kaito:latest
           - file: radius/recipes/ai-agent/azure-openai.bicep
             tag: recipes/ai-agent-azure-openai:latest
+          - file: radius/recipes/governance/kubernetes-opa.bicep
+            tag: recipes/governance-opa:latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

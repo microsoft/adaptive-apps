@@ -400,3 +400,121 @@ types:
           required:
             - environment
             - application
+
+  governance:
+    description: |
+      The Radius.Resources/governance Resource Type adds a policy decision point
+      (PDP) to an application. It is provider-agnostic: a Recipe materializes the
+      type into a concrete enforcement mechanism such as Open Policy Agent (OPA),
+      service mesh AuthorizationPolicy generation, or a sidecar governance toolkit.
+
+      Recipes provided in this repository:
+
+        kubernetes-opa.bicep
+          Deploys an opa-envoy-plugin Deployment + Service into the application
+          namespace and exposes a gRPC decision endpoint suitable for use as an
+          Istio extensionProvider (envoyExtAuthzGrpc). Replaces the OPA workload
+          previously installed by the `ent` Helm portfolio.
+
+      The Recipe is registered per Radius Environment. Swap implementations by
+      registering a different recipe for the same resource type:
+
+        rad recipe register default \
+          --environment <env> \
+          --resource-type Radius.Resources/governance \
+          --template-kind bicep \
+          --template-path br:<registry>/governance-opa:latest
+
+      Application model usage:
+
+        resource gov 'Radius.Resources/governance@2025-08-01-preview' = {
+          name: 'gov'
+          properties: {
+            environment: environment
+            application: app.id
+            mode: 'enforce'
+          }
+        }
+
+      Output properties (consumed by mesh / sidecar integrations that wire the
+      PDP into the data plane — e.g. an Istio extensionProvider patch):
+        - provider           — implementation kind (opa | agntcy-sidecar | istio-authz)
+        - decisionService    — cluster-internal DNS hostname of the PDP
+        - decisionPort       — gRPC ext_authz port
+        - decisionEndpoint   — "<service>:<port>" string
+        - decisionPath       — Rego decision path
+        - managementEndpoint — REST URL of the PDP management API
+    apiVersions:
+      '2025-08-01-preview':
+        schema:
+          type: object
+          properties:
+            environment:
+              type: string
+              description: (Required) The Radius Environment ID. Typically set by the rad CLI.
+            application:
+              type: string
+              description: (Required) The Radius Application ID.
+            mode:
+              type: string
+              enum:
+                - enforce
+                - audit
+                - dryrun
+              description: >
+                (Optional) Enforcement mode the recipe should configure. Recipes
+                may interpret this differently (e.g. OPA decision-log-only vs.
+                denying responses). Defaults to "enforce".
+            policy:
+              type: string
+              description: >
+                (Optional) Inline Rego policy bundle loaded by the PDP. When
+                empty, the recipe loads a default-allow policy so the data
+                plane remains functional out of the box.
+            decisionPath:
+              type: string
+              description: >
+                (Optional) Rego decision path consulted by the data plane.
+                Defaults to "/envoy/authz/allow" for the OPA recipe.
+            istioIntegration:
+              type: boolean
+              description: >
+                (Optional) When true, recipes that support it should also
+                register the PDP as an Istio mesh extensionProvider so
+                AuthorizationPolicy resources with `action: CUSTOM` can
+                delegate to it. The OPA recipe interprets this flag and
+                runs a one-shot Job to patch the Istio MeshConfig.
+                Defaults to false.
+            provider:
+              type: string
+              readOnly: true
+              description: >
+                (Read Only) Implementation provider materialized by the recipe.
+                Examples: "opa", "agntcy-sidecar", "istio-authz".
+            decisionService:
+              type: string
+              readOnly: true
+              description: (Read Only) Cluster-internal DNS hostname of the policy decision service.
+            decisionPort:
+              type: integer
+              readOnly: true
+              description: (Read Only) Port number for the enforcement (gRPC ext_authz) endpoint.
+            decisionEndpoint:
+              type: string
+              readOnly: true
+              description: (Read Only) Combined "service:port" string suitable for Istio extensionProvider configuration.
+            managementEndpoint:
+              type: string
+              readOnly: true
+              description: (Read Only) REST URL of the PDP management API (policy upload, data API).
+            istioProviderName:
+              type: string
+              readOnly: true
+              description: >
+                (Read Only) Name registered with the Istio MeshConfig as an
+                extensionProvider. Empty when the recipe does not perform
+                mesh integration. AuthorizationPolicy resources reference
+                this name via `provider.name` when `action: CUSTOM`.
+          required:
+            - environment
+            - application
