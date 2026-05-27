@@ -3,5 +3,5 @@
     "radius": "br:biceptypes.azurecr.io/radius:latest",
     "radiusResources": "types.tgz"
   },
-  "implicitExtensions": ["kubernetes"]
+  "implicitExtensions": ["az", "kubernetes"]
 }
