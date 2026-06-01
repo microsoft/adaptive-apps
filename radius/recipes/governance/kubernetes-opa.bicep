@@ -67,8 +67,16 @@ param istioNamespace string = 'istio-system'
 @description('Name of the ConfigMap holding the Istio MeshConfig.')
 param istioConfigMap string = 'istio'
 
-@description('Name registered for the extensionProvider. AuthorizationPolicy resources reference this name via `provider.name`.')
-param istioProviderName string = 'opa-ext-authz-grpc'
+@description('''
+Name registered for the extensionProvider in the Istio MeshConfig.
+AuthorizationPolicy resources reference this name via `provider.name`.
+When empty (the default), a per-app name is derived from the resource:
+`opa-ext-authz-grpc-<resourceName>`. This guarantees that multiple apps
+with `enableGovernance=true` in the same cluster register distinct
+entries and do not clobber each other's provider configuration.
+Override only when you intentionally want apps to share a single PDP.
+''')
+param istioProviderName string = ''
 
 @description('Image used by the post-install Istio-patching Job. Must include `kubectl`, `jq`, and `apk`/`yq`.')
 param istioPatchImage string = 'dtzar/helm-kubectl:3.17'
@@ -77,6 +85,13 @@ var resourceBaseName = toLower(replace(context.resource.name, '_', '-'))
 var opaName = '${resourceBaseName}-opa'
 var namespace = context.runtime.kubernetes.namespace
 var applicationName = context.application == null ? '' : context.application.name
+
+// Derive a per-app Istio extensionProvider name when the caller did not
+// override it. Per-app names prevent two apps with `enableGovernance=true`
+// from clobbering each other's MeshConfig.extensionProviders entry.
+var effectiveIstioProviderName = istioProviderName == ''
+  ? 'opa-ext-authz-grpc-${resourceBaseName}'
+  : istioProviderName
 
 var commonLabels = {
   app: 'opa'
@@ -467,7 +482,7 @@ resource istioPatchJob 'batch/Job@v1' = if (istioIntegration) {
               }
               {
                 name: 'PROVIDER_NAME'
-                value: istioProviderName
+                value: effectiveIstioProviderName
               }
               {
                 name: 'OPA_SERVICE'
@@ -520,6 +535,6 @@ output result object = {
     decisionEndpoint: '${decisionServiceDns}:${grpcPort}'
     decisionPath: decisionPath
     managementEndpoint: 'http://${decisionServiceDns}:${httpPort}'
-    istioProviderName: istioIntegration ? istioProviderName : ''
+    istioProviderName: istioIntegration ? effectiveIstioProviderName : ''
   }
 }

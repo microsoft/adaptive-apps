@@ -1,0 +1,17 @@
+[package]
+name = "ada"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Adaptive Apps CLI: bootstrap and manage portable-app platform portfolios."
+
+[[bin]]
+name = "ada"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+which.workspace = true

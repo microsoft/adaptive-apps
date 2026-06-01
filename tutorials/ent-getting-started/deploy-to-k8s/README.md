@@ -1,4 +1,4 @@
-# Deploy Adaptive App (Core) to Local K8s
+# Deploy Adaptive App (Ent) to Local K8s
 
 ## 0. Prerequisites
 
@@ -245,22 +245,26 @@ This separation allows apps to remain portable; the environment (Helm chart) dec
 
 ## 5. Try an OPA authorization policy
 
-The `ent` portfolio installed an OPA (Open Policy Agent) deployment and
-registered it with Istio as the `opa-ext-authz-grpc` extension provider. Out
-of the box OPA ships a default-allow Rego policy, so no requests are blocked.
-In this step you'll attach a `CUSTOM` `AuthorizationPolicy` to the `frontend`
-workload and update the Rego policy to reject any request that carries an
-`x-deny: true` header — a small but end-to-end demonstration of mesh-level
-external authorization.
+The `ent` portfolio deployment in this tutorial sets `enableGovernance=true`
+on the Radius app, which materializes a `Radius.Resources/governance`
+resource (`trading-governance`). The Kubernetes OPA recipe deploys an OPA
+(Open Policy Agent) instance into the app namespace and registers it with
+Istio as a per-app extension provider named
+`opa-ext-authz-grpc-trading-governance`. Out of the box OPA ships a
+default-allow Rego policy, so no requests are blocked. In this step you'll
+attach a `CUSTOM` `AuthorizationPolicy` to the `frontend` workload and
+update the Rego policy to reject any request that carries an `x-deny: true`
+header — a small but end-to-end demonstration of mesh-level external
+authorization.
 
-1. Confirm Istio sees OPA as an extension provider:
+1. Confirm Istio sees this app's OPA as an extension provider:
 
     ```bash
     kubectl -n istio-system get cm istio -o jsonpath='{.data.mesh}' | grep -A3 extensionProviders
     ```
 
-    You should see an entry named `opa-ext-authz-grpc` pointing at
-    `opa.ent.svc.cluster.local`.
+    You should see an entry named `opa-ext-authz-grpc-trading-governance`
+    pointing at `trading-governance-opa.trading-portable-apps.svc.cluster.local`.
 
 2. Tell Istio to delegate authorization for the `frontend` pods to OPA. A
    ready-made manifest is provided at
@@ -275,15 +279,19 @@ external authorization.
    [`opa-policy.rego`](opa-policy.rego), which denies any request carrying
    `x-deny: true`:
 
+    The recipe creates the policy ConfigMap as `<resourceName>-opa-policy`
+    in the app's namespace (here: `trading-governance-opa-policy` in
+    `trading-portable-apps`):
+
     ```bash
-    kubectl -n ent create configmap opa-policy \
+    kubectl -n trading-portable-apps create configmap trading-governance-opa-policy \
       --from-file=policy.rego=opa-policy.rego \
       --dry-run=client -o yaml | kubectl apply -f -
 
     # OPA picks up ConfigMap changes once the projected volume refreshes
     # (typically < 60s). Restart the pod to apply immediately:
-    kubectl -n ent rollout restart deployment/opa
-    kubectl -n ent rollout status  deployment/opa
+    kubectl -n trading-portable-apps rollout restart deployment/trading-governance-opa
+    kubectl -n trading-portable-apps rollout status  deployment/trading-governance-opa
     ```
 
 4. Exercise the policy. The `kubectl port-forward` exposed in step 3
@@ -320,7 +328,7 @@ external authorization.
 5. (Optional) Tail OPA decision logs to watch each verdict in real time:
 
     ```bash
-    kubectl -n ent logs -f deployment/opa | grep decision_id
+    kubectl -n trading-portable-apps logs -f deployment/trading-governance-opa | grep decision_id
     ```
 
 6. Clean up the demo policy when you're done so the rest of the tutorial
@@ -329,9 +337,12 @@ external authorization.
     ```bash
     kubectl -n trading-portable-apps delete authorizationpolicy frontend-ext-authz
     kubectl -n trading-portable-apps delete pod curlbox --ignore-not-found
-    kubectl -n ent delete configmap opa-policy   # restores Helm-managed default
-    helm upgrade ent ./charts/portfolios/ent --namespace ent --reuse-values
-    kubectl -n ent rollout restart deployment/opa
+    # Re-deploying the app re-applies the recipe's default-allow policy.
+    # To revert in place without a redeploy, recreate the ConfigMap from
+    # the recipe's baked-in Rego or simply delete it and let the next
+    # `rad deploy` recreate it:
+    kubectl -n trading-portable-apps delete configmap trading-governance-opa-policy
+    kubectl -n trading-portable-apps rollout restart deployment/trading-governance-opa
     ```
 
 > **NOTE:** Real policies typically key off identity (JWT claims, SPIFFE
