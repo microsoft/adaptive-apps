@@ -223,34 +223,18 @@ Start with the `mi-ai` portfolio Helm chart. The first bundled component is Keyc
     export OIDC_APP_SECRET=<Keycloak client secret>
     ```
 
-8. Render the client-secret Secret and re-render the chart's OIDC ConfigMap so it carries the client ID, the secret reference, and the port-forward browser endpoint:
-
-    ```bash
-    kubectl -n min-ai create secret generic oidc-client \
-      --from-literal=clientSecret=$OIDC_APP_SECRET \
-      --dry-run=client -o yaml | kubectl apply -f -
-
-    helm upgrade min-ai ./charts/portfolios/min-ai --namespace min-ai --reuse-values \
-      --set global.oidc.clientId=$OIDC_APP_ID \
-      --set global.oidc.clientSecretRef.name=oidc-client \
-      --set global.oidc.browserAuthEndpoint=http://localhost:8080/realms/master/protocol/openid-connect/auth
-    ```
-
-9. Hydrate OIDC env vars from the `min-ai-oidc` ConfigMap (consumed by the next section's `rad deploy`):
+8. Build the OIDC env vars for the next section's `rad deploy`. The chart's `min-ai-oidc` ConfigMap already exposes the in-cluster endpoint URLs; the client ID/secret come straight from Keycloak, and the browser endpoint is the port-forward URL:
 
     ```bash
     eval "$(kubectl -n min-ai get cm min-ai-oidc -o go-template='
     export OIDC_ISSUER={{ .data.issuer | printf "%q" }}
     export OIDC_AUTH_ENDPOINT={{ .data.authEndpoint | printf "%q" }}
-    export OIDC_BROWSER_AUTH_ENDPOINT={{ .data.browserAuthEndpoint | printf "%q" }}
     export OIDC_TOKEN_ENDPOINT={{ .data.tokenEndpoint | printf "%q" }}
     export OIDC_USERINFO_ENDPOINT={{ .data.userInfoEndpoint | printf "%q" }}
-    export OIDC_CLIENT_ID={{ .data.clientId | printf "%q" }}
-    export OIDC_CLIENT_SECRET_NAME={{ .data.clientSecretName | printf "%q" }}
-    export OIDC_CLIENT_SECRET_KEY={{ .data.clientSecretKey | printf "%q" }}
     ')"
-    export OIDC_CLIENT_SECRET=$(kubectl -n min-ai get secret "$OIDC_CLIENT_SECRET_NAME" \
-      -o jsonpath="{.data.${OIDC_CLIENT_SECRET_KEY}}" | base64 -d)
+    export OIDC_CLIENT_ID=$OIDC_APP_ID
+    export OIDC_CLIENT_SECRET=$OIDC_APP_SECRET
+    export OIDC_BROWSER_AUTH_ENDPOINT=http://localhost:8080/realms/master/protocol/openid-connect/auth
     ```
 
 ## 5. Install the app
