@@ -1,4 +1,4 @@
-# What The Hack - PortableAppWithRadius
+# What The Hack - AdaptiveApps
 
 ## Introduction
 
