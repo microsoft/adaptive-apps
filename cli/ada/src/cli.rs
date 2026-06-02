@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
-use crate::commands::bootstrap;
+use crate::commands::{bootstrap, package};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -20,12 +20,16 @@ pub struct Cli {
 enum Command {
     /// Install or upgrade a portfolio onto the current Kubernetes context.
     Bootstrap(bootstrap::BootstrapArgs),
+
+    /// Analyze an app source folder and emit a Radius app.bicep file.
+    Package(package::PackageArgs),
 }
 
 impl Cli {
     pub fn run(self) -> Result<()> {
         match self.command {
             Command::Bootstrap(args) => bootstrap::run(args),
+            Command::Package(args) => package::run(args),
         }
     }
 }
