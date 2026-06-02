@@ -11,6 +11,8 @@ use std::process::Command;
 use anyhow::{anyhow, bail, Context, Result};
 use clap::{Args, ValueEnum};
 
+use crate::ui;
+
 /// Default OCI repository prefix for published portfolio charts.
 /// Concrete chart reference is `<prefix>/<portfolio>[-ai]`.
 const DEFAULT_CHART_REGISTRY: &str = "oci://ghcr.io/microsoft/adaptive-apps/charts/portfolios";
@@ -187,6 +189,18 @@ pub struct BootstrapArgs {
     /// `--chart-root` is set.
     #[arg(long, default_value = DEFAULT_CHART_REGISTRY, env = "ADA_CHART_REGISTRY")]
     chart_registry: String,
+
+    /// Name of the local k3d cluster to provision/reuse when
+    /// `--platform localk8s` is set. The resulting kube context is
+    /// `k3d-<name>`.
+    #[arg(long, default_value = "localk8s")]
+    k3d_cluster: String,
+
+    /// Skip automatic local-cluster provisioning. By default `--platform
+    /// localk8s` runs `k3d cluster create <name>` (idempotent) and
+    /// switches the kubectl context to `k3d-<name>` before installing.
+    #[arg(long)]
+    skip_cluster_provision: bool,
 }
 
 pub fn run(args: BootstrapArgs) -> Result<()> {
@@ -226,58 +240,73 @@ pub fn run(args: BootstrapArgs) -> Result<()> {
         helm.arg("--set").arg(s);
     }
 
-    println!("Plan");
-    println!("  portfolio : {}", args.portfolio.as_str());
+    ui::heading("Plan");
+    ui::detail("portfolio", args.portfolio.as_str());
     match args.platform {
-        Some(p) => println!("  platform  : {}", p.as_str()),
+        Some(p) => ui::detail("platform", p.as_str()),
         None => {
             let current = current_kube_context().unwrap_or_else(|_| "<unknown>".into());
-            println!("  platform  : <auto> (current kubectl context: {current})");
+            ui::detail(
+                "platform",
+                &format!("<auto> (current kubectl context: {current})"),
+            );
         }
     }
     if !args.with.is_empty() {
         let with: Vec<&str> = args.with.iter().map(|c| c.as_str()).collect();
-        println!("  with      : {}", with.join(","));
+        ui::detail("with", &with.join(","));
     }
-    println!("  release   : {}", args.release);
-    println!("  namespace : {}", args.namespace);
-    println!("  chart     : {}", resolution.chart_ref.to_string_lossy());
+    ui::detail("release", &args.release);
+    ui::detail("namespace", &args.namespace);
+    ui::detail("chart", &resolution.chart_ref.to_string_lossy());
     if let Some(v) = &resolution.version {
-        println!("  version   : {v}");
+        ui::detail("version", v);
     }
     if !resolution.values_files.is_empty() {
-        println!("  values (resolved):");
+        ui::bullet("values (resolved):");
         for v in &resolution.values_files {
-            println!("    - {}", v.display());
+            ui::bullet(&format!("  - {}", v.display()));
         }
     }
     if !platform.helm_sets.is_empty() {
-        println!("  platform overrides:");
+        ui::bullet("platform overrides:");
         for s in &platform.helm_sets {
-            println!("    --set {s}");
+            ui::bullet(&format!("  --set {s}"));
         }
     }
     if let Some(rev) = &platform.istio_revision {
-        println!("  istio revision (discovered): {rev}");
+        ui::detail("istio rev", &format!("{rev} (discovered)"));
     }
     if args.with_radius {
-        println!("  with-radius: workspace={} group={}", args.radius_workspace, args.radius_group);
+        ui::detail(
+            "with-radius",
+            &format!("workspace={} group={}", args.radius_workspace, args.radius_group),
+        );
     }
     println!();
-    println!("$ {}", render_command(&helm));
+
+    // Provision a local k3d cluster before helm runs on --platform localk8s.
+    if matches!(args.platform, Some(Platform::Localk8s)) && !args.skip_cluster_provision {
+        provision_k3d_cluster(&args.k3d_cluster, args.dry_run)?;
+        println!();
+    }
+
+    ui::command(&render_command(&helm));
 
     if args.dry_run {
-        println!("\n(dry-run: not executing)");
+        ui::dry_run("not executing helm");
         if args.with_radius {
             install_radius(&args)?;
         }
         return Ok(());
     }
 
+    ui::tool_banner("helm", "upgrade --install");
     let status = helm.status().with_context(|| "failed to spawn helm")?;
     if !status.success() {
         bail!("helm exited with status {status}");
     }
+    ui::ok("helm install complete");
 
     if args.with_radius {
         install_radius(&args)?;
@@ -285,10 +314,72 @@ pub fn run(args: BootstrapArgs) -> Result<()> {
 
     if let Some(rev) = &platform.istio_revision {
         println!();
-        println!("# AKS Istio add-on revision (use to label app namespaces):");
+        ui::note("AKS Istio add-on revision (use to label app namespaces):");
         println!("export ISTIO_REVISION={rev}");
     }
     Ok(())
+}
+
+/// Idempotently provision a local k3d cluster. If a cluster with the
+/// requested name already exists we just switch the kubectl context to
+/// it; otherwise we create it. Requires `k3d` and `kubectl` on PATH.
+fn provision_k3d_cluster(name: &str, dry_run: bool) -> Result<()> {
+    ensure_tool("k3d")?;
+    let context = format!("k3d-{name}");
+
+    ui::heading("Local cluster");
+    ui::detail("k3d cluster", name);
+    ui::detail("kube context", &context);
+
+    if dry_run {
+        ui::dry_run(&format!(
+            "would run: k3d cluster create {name} (if absent), then kubectl config use-context {context}"
+        ));
+        return Ok(());
+    }
+
+    let exists = k3d_cluster_exists(name)?;
+    if exists {
+        ui::step(&format!("k3d cluster `{name}` already exists, reusing"));
+    } else {
+        ui::step(&format!("creating k3d cluster `{name}`"));
+        let mut cmd = Command::new("k3d");
+        cmd.args(["cluster", "create", name]);
+        ui::tool_banner("k3d", &render_command(&cmd));
+        let status = cmd.status().context("failed to spawn `k3d cluster create`")?;
+        if !status.success() {
+            bail!("`k3d cluster create {name}` exited with status {status}");
+        }
+    }
+
+    ui::step(&format!("switching kubectl context to `{context}`"));
+    let status = Command::new("kubectl")
+        .args(["config", "use-context", &context])
+        .status()
+        .context("failed to spawn `kubectl config use-context`")?;
+    if !status.success() {
+        bail!("`kubectl config use-context {context}` failed");
+    }
+    ui::ok(&format!("local cluster `{name}` ready"));
+    Ok(())
+}
+
+fn k3d_cluster_exists(name: &str) -> Result<bool> {
+    let out = Command::new("k3d")
+        .args(["cluster", "list", "--no-headers"])
+        .output()
+        .context("failed to run `k3d cluster list`")?;
+    if !out.status.success() {
+        bail!(
+            "`k3d cluster list` failed: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        );
+    }
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    Ok(stdout
+        .lines()
+        .filter_map(|l| l.split_whitespace().next())
+        .any(|n| n == name))
 }
 
 struct Resolution {
@@ -452,8 +543,9 @@ fn apply_aks_automation(args: &BootstrapArgs) -> Result<PlatformOutcome> {
     if let Some(sub) = &args.azure_subscription {
         ensure_tool("az")?;
         if args.dry_run {
-            println!("(dry-run) would run: az account set --subscription {sub}");
+            ui::dry_run(&format!("would run: az account set --subscription {sub}"));
         } else {
+            ui::step(&format!("az account set --subscription {sub}"));
             let status = Command::new("az")
                 .args(["account", "set", "--subscription"])
                 .arg(sub)
@@ -515,9 +607,9 @@ fn discover_aks_istio_revision(
 ) -> Result<String> {
     ensure_tool("az")?;
     if dry_run {
-        println!(
-            "(dry-run) would run: az aks show -g {resource_group} -n {cluster} --query 'serviceMeshProfile.istio.revisions[0]' -o tsv"
-        );
+        ui::dry_run(&format!(
+            "would run: az aks show -g {resource_group} -n {cluster} --query 'serviceMeshProfile.istio.revisions[0]' -o tsv"
+        ));
         return Ok("<discovered-at-apply>".to_string());
     }
     let out = Command::new("az")
@@ -577,22 +669,22 @@ fn install_radius(args: &BootstrapArgs) -> Result<()> {
 
     let steps = [&rad_install, &rad_workspace, &rad_switch, &rad_group];
     println!();
-    println!("Radius bootstrap plan:");
+    ui::heading("Radius bootstrap plan:");
     for s in steps {
-        println!("  $ {}", render_command(s));
+        ui::command(&render_command(s));
     }
 
     let azure_creds_planned = wants_azure_credential_automation(args);
     if azure_creds_planned {
-        println!(
-            "  + provision Azure credential for Radius (Entra app `{}-radius-app`, federate radius-system SAs, grant Owner on `{}`, rad credential register azure wi)",
+        ui::bullet(&format!(
+            "+ provision Azure credential for Radius (Entra app `{}-radius-app`, federate radius-system SAs, grant Owner on `{}`, rad credential register azure wi)",
             args.aks_cluster.as_deref().unwrap_or(""),
             args.resource_group.as_deref().unwrap_or(""),
-        );
+        ));
     }
 
     if args.dry_run {
-        println!("(dry-run: not executing Radius install)");
+        ui::dry_run("not executing Radius install");
         if azure_creds_planned {
             provision_azure_credential(args)?;
         }
@@ -601,6 +693,7 @@ fn install_radius(args: &BootstrapArgs) -> Result<()> {
 
     for mut cmd in [rad_install, rad_workspace, rad_switch, rad_group] {
         let label = render_command(&cmd);
+        ui::tool_banner("rad", &label);
         let status = cmd
             .status()
             .with_context(|| format!("failed to spawn: {label}"))?;
@@ -608,6 +701,7 @@ fn install_radius(args: &BootstrapArgs) -> Result<()> {
             bail!("command failed ({status}): {label}");
         }
     }
+    ui::ok("Radius bootstrap complete");
 
     if azure_creds_planned {
         provision_azure_credential(args)?;
@@ -653,17 +747,23 @@ fn provision_azure_credential(args: &BootstrapArgs) -> Result<()> {
     let app_name = format!("{cluster}-radius-app");
 
     println!();
-    println!("Azure credential provisioning for Radius:");
-    println!("  entra app    : {app_name}");
-    println!("  federated SAs: radius-system/{{{}}}", RADIUS_FEDERATED_SAS
-        .iter()
-        .map(|(_, sa)| *sa)
-        .collect::<Vec<_>>()
-        .join(","));
-    println!("  rbac scope   : /subscriptions/<sub>/resourceGroups/{rg} (Owner)");
+    ui::heading("Azure credential provisioning for Radius:");
+    ui::detail("entra app", &app_name);
+    ui::detail(
+        "federated",
+        &format!(
+            "radius-system/{{{}}}",
+            RADIUS_FEDERATED_SAS
+                .iter()
+                .map(|(_, sa)| *sa)
+                .collect::<Vec<_>>()
+                .join(",")
+        ),
+    );
+    ui::detail("rbac scope", &format!("/subscriptions/<sub>/resourceGroups/{rg} (Owner)"));
 
     if args.dry_run {
-        println!("(dry-run) would discover AKS OIDC issuer, create/reuse Entra app, federate SAs, grant Owner, rad credential register azure wi");
+        ui::dry_run("would discover AKS OIDC issuer, create/reuse Entra app, federate SAs, grant Owner, rad credential register azure wi");
         return Ok(());
     }
 
@@ -699,7 +799,7 @@ fn provision_azure_credential(args: &BootstrapArgs) -> Result<()> {
         "existing Entra app id",
     )?;
     let app_id = if existing.is_empty() {
-        println!("  -> creating Entra application `{app_name}`");
+        ui::step(&format!("creating Entra application `{app_name}`"));
         az_query(
             &[
                 "ad", "app", "create", "--display-name", &app_name,
@@ -708,7 +808,7 @@ fn provision_azure_credential(args: &BootstrapArgs) -> Result<()> {
             "new Entra app id",
         )?
     } else {
-        println!("  -> reusing existing Entra application `{app_name}` ({existing})");
+        ui::step(&format!("reusing existing Entra application `{app_name}` ({existing})"));
         existing
     };
     let app_object_id = az_query(
@@ -730,14 +830,14 @@ fn provision_azure_credential(args: &BootstrapArgs) -> Result<()> {
 
     for (fc_name, sa) in RADIUS_FEDERATED_SAS {
         if existing_fc.contains(fc_name) {
-            println!("  -> federated credential `{fc_name}` already exists, skipping");
+            ui::step(&format!("federated credential `{fc_name}` already exists, skipping"));
             continue;
         }
         let subject = format!("system:serviceaccount:radius-system:{sa}");
         let params = format!(
             r#"{{"name":"{fc_name}","issuer":"{oidc_issuer}","subject":"{subject}","description":"Radius {sa} service account","audiences":["api://AzureADTokenExchange"]}}"#
         );
-        println!("  -> creating federated credential `{fc_name}` for {subject}");
+        ui::step(&format!("creating federated credential `{fc_name}` for {subject}"));
         let status = Command::new("az")
             .args([
                 "ad", "app", "federated-credential", "create",
@@ -753,14 +853,14 @@ fn provision_azure_credential(args: &BootstrapArgs) -> Result<()> {
 
     // Ensure service principal exists (idempotent: ignore failure if it
     // already exists).
-    println!("  -> ensuring service principal for app `{app_id}`");
+    ui::step(&format!("ensuring service principal for app `{app_id}`"));
     let _ = Command::new("az")
         .args(["ad", "sp", "create", "--id", &app_id])
         .status();
 
     // Grant Owner on the resource group.
     let scope = format!("/subscriptions/{subscription_id}/resourceGroups/{rg}");
-    println!("  -> granting Owner to `{app_id}` on `{scope}`");
+    ui::step(&format!("granting Owner to `{app_id}` on `{scope}`"));
     let status = Command::new("az")
         .args([
             "role", "assignment", "create",
@@ -772,11 +872,13 @@ fn provision_azure_credential(args: &BootstrapArgs) -> Result<()> {
         .context("failed to run `az role assignment create`")?;
     if !status.success() {
         // Role assignment fails if it already exists; that's fine.
-        println!("     (role assignment may already exist; continuing)");
+        ui::warn("role assignment may already exist; continuing");
     }
 
     // Register with Radius.
-    println!("  -> rad credential register azure wi --client-id {app_id} --tenant-id {tenant_id}");
+    ui::step(&format!(
+        "rad credential register azure wi --client-id {app_id} --tenant-id {tenant_id}"
+    ));
     let status = Command::new("rad")
         .args([
             "credential", "register", "azure", "wi",
@@ -790,7 +892,7 @@ fn provision_azure_credential(args: &BootstrapArgs) -> Result<()> {
     }
 
     println!();
-    println!("# Azure credential registered. For reference:");
+    ui::note("Azure credential registered. For reference:");
     println!("export APPLICATION_CLIENT_ID={app_id}");
     println!("export TENANT_ID={tenant_id}");
     Ok(())
