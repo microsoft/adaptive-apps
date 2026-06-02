@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
-use crate::commands::{bootstrap, package};
+use crate::commands::{bootstrap, oidc, package};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -23,6 +23,9 @@ enum Command {
 
     /// Analyze an app source folder and emit a Radius app.bicep file.
     Package(package::PackageArgs),
+
+    /// Manage OIDC clients in a chart-deployed Keycloak.
+    Oidc(oidc::OidcArgs),
 }
 
 impl Cli {
@@ -30,6 +33,7 @@ impl Cli {
         match self.command {
             Command::Bootstrap(args) => bootstrap::run(args),
             Command::Package(args) => package::run(args),
+            Command::Oidc(args) => oidc::run(args),
         }
     }
 }

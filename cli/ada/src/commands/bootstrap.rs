@@ -11,6 +11,7 @@ use std::process::Command;
 use anyhow::{anyhow, bail, Context, Result};
 use clap::{Args, ValueEnum};
 
+use crate::commands::oidc::{self, SetupClientArgs};
 use crate::ui;
 
 /// Default OCI repository prefix for published portfolio charts.
@@ -137,6 +138,26 @@ pub struct BootstrapArgs {
     #[arg(long, default_value = "adaptive")]
     radius_group: String,
 
+    /// Radius environment name to create (must match the environment
+    /// resource name in the env bicep file, e.g. `trading` in
+    /// `local-env.bicep`).
+    #[arg(long, default_value = "trading")]
+    radius_environment: String,
+
+    /// Directory containing `resource-types/types.yaml` and the
+    /// environment bicep files (`local-env.bicep`, `aks-env.bicep`).
+    /// Used by `--with-radius` to register the custom resource types
+    /// and deploy the Radius Environment + recipes. Defaults to
+    /// `radius` relative to the current working directory.
+    #[arg(long, default_value = "radius")]
+    radius_dir: PathBuf,
+
+    /// Skip registering the project's Radius resource types and
+    /// deploying the environment bicep when `--with-radius` is set.
+    /// Pass this flag if you want to deploy the env file manually.
+    #[arg(long)]
+    skip_radius_recipes: bool,
+
     /// Skip automatic Azure credential provisioning. By default, when
     /// `--with-radius` is combined with `--platform aks` and both
     /// `--resource-group` and `--aks-cluster` are supplied, `ada` creates
@@ -201,6 +222,42 @@ pub struct BootstrapArgs {
     /// switches the kubectl context to `k3d-<name>` before installing.
     #[arg(long)]
     skip_cluster_provision: bool,
+
+    /// Skip automatic Keycloak OIDC client provisioning. By default, after
+    /// helm install succeeds, `ada` connects to the chart-deployed
+    /// Keycloak via port-forward and creates (or reuses) an OIDC client
+    /// so the operator doesn't have to do it through the admin console.
+    /// Pass this flag to skip and provision the client manually.
+    #[arg(long)]
+    skip_oidc_client: bool,
+
+    /// OIDC clientId to provision in Keycloak.
+    #[arg(long, default_value = "portable-apps")]
+    oidc_client_id: String,
+
+    /// Valid redirect URI for the OIDC client (repeatable).
+    #[arg(long = "oidc-redirect-uri", default_values_t = vec!["http://localhost:3000/*".to_string()])]
+    oidc_redirect_uris: Vec<String>,
+
+    /// Keycloak realm hosting the OIDC client.
+    #[arg(long, default_value = "master")]
+    oidc_realm: String,
+
+    /// Keycloak admin username (defaults to the chart's default).
+    #[arg(long, default_value = "admin")]
+    keycloak_admin_user: String,
+
+    /// Keycloak admin password (defaults to the chart's default).
+    #[arg(long, default_value = "admin")]
+    keycloak_admin_password: String,
+
+    /// After provisioning the OIDC client, keep the `kubectl port-forward`
+    /// to Keycloak running in the foreground (press Ctrl-C to stop).
+    /// Use this when you want to run `rad deploy` from another terminal
+    /// against `http://localhost:8080` without setting up port-forwarding
+    /// yourself.
+    #[arg(long)]
+    keep_port_forward: bool,
 }
 
 pub fn run(args: BootstrapArgs) -> Result<()> {
@@ -297,7 +354,9 @@ pub fn run(args: BootstrapArgs) -> Result<()> {
         ui::dry_run("not executing helm");
         if args.with_radius {
             install_radius(&args)?;
+            print_app_deploy_hint(&args);
         }
+        maybe_provision_oidc_client(&args)?;
         return Ok(());
     }
 
@@ -310,7 +369,10 @@ pub fn run(args: BootstrapArgs) -> Result<()> {
 
     if args.with_radius {
         install_radius(&args)?;
+        print_app_deploy_hint(&args);
     }
+
+    maybe_provision_oidc_client(&args)?;
 
     if let Some(rev) = &platform.istio_revision {
         println!();
@@ -667,7 +729,12 @@ fn install_radius(args: &BootstrapArgs) -> Result<()> {
     let mut rad_group = Command::new("rad");
     rad_group.args(["group", "create", &args.radius_group]);
 
-    let steps = [&rad_install, &rad_workspace, &rad_switch, &rad_group];
+    // Set the workspace's default group so subsequent `rad resource`
+    // commands (e.g. `rad resource expose`) work without `--group`.
+    let mut rad_group_switch = Command::new("rad");
+    rad_group_switch.args(["group", "switch", &args.radius_group]);
+
+    let steps = [&rad_install, &rad_workspace, &rad_switch, &rad_group, &rad_group_switch];
     println!();
     ui::heading("Radius bootstrap plan:");
     for s in steps {
@@ -691,7 +758,7 @@ fn install_radius(args: &BootstrapArgs) -> Result<()> {
         return Ok(());
     }
 
-    for mut cmd in [rad_install, rad_workspace, rad_switch, rad_group] {
+    for mut cmd in [rad_install, rad_workspace, rad_switch, rad_group, rad_group_switch] {
         let label = render_command(&cmd);
         ui::tool_banner("rad", &label);
         let status = cmd
@@ -706,6 +773,112 @@ fn install_radius(args: &BootstrapArgs) -> Result<()> {
     if azure_creds_planned {
         provision_azure_credential(args)?;
     }
+
+    install_radius_recipes(args)?;
+    Ok(())
+}
+
+/// Print the `--group` / `--environment` the operator should pass to
+/// `rad deploy app.bicep`. Useful when defaults don't match the
+/// environment name baked into the env bicep (e.g. group=`adaptive`,
+/// env=`trading`).
+fn print_app_deploy_hint(args: &BootstrapArgs) {
+    println!();
+    ui::note("when you deploy your app, use:");
+    println!(
+        "  rad deploy app.bicep --group {} --environment {} --parameters ...",
+        args.radius_group, args.radius_environment
+    );
+}
+
+/// Register the project's custom Radius resource types and deploy the
+/// environment bicep (which also pins the recipe versions). Mirrors
+/// steps 5–6 of the deploy-to-k8s tutorials. Idempotent: `rad
+/// resource-type create` is a re-runnable upsert and `rad deploy`
+/// reconciles the environment in place.
+fn install_radius_recipes(args: &BootstrapArgs) -> Result<()> {
+    if args.skip_radius_recipes {
+        return Ok(());
+    }
+    let types_file = args.radius_dir.join("resource-types/types.yaml");
+    let env_bicep = match args.platform {
+        Some(Platform::Aks) => args.radius_dir.join("aks-env.bicep"),
+        _ => args.radius_dir.join("local-env.bicep"),
+    };
+
+    if !args.dry_run {
+        if !types_file.exists() {
+            ui::note(&format!(
+                "skipping Radius recipe install: `{}` not found (pass --radius-dir or --skip-radius-recipes)",
+                types_file.display()
+            ));
+            return Ok(());
+        }
+        if !env_bicep.exists() {
+            ui::note(&format!(
+                "skipping Radius env deploy: `{}` not found (pass --radius-dir or --skip-radius-recipes)",
+                env_bicep.display()
+            ));
+            return Ok(());
+        }
+    }
+
+    println!();
+    ui::heading("Radius resource types + environment");
+    ui::detail("types file", &types_file.display().to_string());
+    ui::detail("env bicep", &env_bicep.display().to_string());
+    ui::detail("group", &args.radius_group);
+    ui::detail("environment", &args.radius_environment);
+
+    let mut type_cmd = Command::new("rad");
+    type_cmd.args(["resource-type", "create", "--from-file"])
+        .arg(&types_file);
+
+    let mut env_create_cmd = Command::new("rad");
+    env_create_cmd.args([
+        "environment",
+        "create",
+        &args.radius_environment,
+        "--group",
+        &args.radius_group,
+    ]);
+
+    let mut deploy_cmd = Command::new("rad");
+    deploy_cmd
+        .arg("deploy")
+        .arg(&env_bicep)
+        .args(["--group", &args.radius_group]);
+    if matches!(args.platform, Some(Platform::Aks)) {
+        if let Some(sub) = &args.azure_subscription {
+            deploy_cmd.args(["--parameters", &format!("azureSubscriptionId={sub}")]);
+        }
+        if let Some(rg) = &args.resource_group {
+            deploy_cmd.args(["--parameters", &format!("azureResourceGroup={rg}")]);
+        }
+    }
+
+    ui::command(&render_command(&type_cmd));
+    ui::command(&render_command(&env_create_cmd));
+    ui::command(&render_command(&deploy_cmd));
+
+    if args.dry_run {
+        ui::dry_run("not executing Radius recipe install");
+        return Ok(());
+    }
+
+    // `rad resource-type create` and `rad environment create` are idempotent
+    // upserts; `rad deploy` reconciles in place.
+    for mut cmd in [type_cmd, env_create_cmd, deploy_cmd] {
+        let label = render_command(&cmd);
+        ui::tool_banner("rad", &label);
+        let status = cmd
+            .status()
+            .with_context(|| format!("failed to spawn: {label}"))?;
+        if !status.success() {
+            bail!("command failed ({status}): {label}");
+        }
+    }
+    ui::ok("Radius recipes ready");
     Ok(())
 }
 
@@ -717,6 +890,80 @@ fn wants_azure_credential_automation(args: &BootstrapArgs) -> bool {
         && matches!(args.platform, Some(Platform::Aks))
         && args.resource_group.is_some()
         && args.aks_cluster.is_some()
+}
+
+/// OIDC client provisioning entry point used by bootstrap. Skips silently
+/// when Keycloak is not present in the target namespace (e.g. the
+/// operator installed an Entra-only configuration with
+/// `global.components.keycloak.enabled=false`).
+fn maybe_provision_oidc_client(args: &BootstrapArgs) -> Result<()> {
+    if args.skip_oidc_client {
+        return Ok(());
+    }
+    let service = format!("{}-keycloak", args.release);
+    if !args.dry_run && !keycloak_service_present(&args.namespace, &service)? {
+        ui::note(&format!(
+            "keycloak service `{}/{service}` not found; skipping OIDC client provisioning",
+            args.namespace
+        ));
+        return Ok(());
+    }
+    // Derive web-origins from redirect URIs by stripping trailing `/*`;
+    // always include the canonical frontend origin too.
+    let mut web_origins: Vec<String> = args
+        .oidc_redirect_uris
+        .iter()
+        .filter_map(|u| u.strip_suffix("/*").map(str::to_string))
+        .collect();
+    if !web_origins.iter().any(|o| o == "http://localhost:3000") {
+        web_origins.push("http://localhost:3000".to_string());
+    }
+    let setup = SetupClientArgs {
+        namespace: args.namespace.clone(),
+        release: args.release.clone(),
+        client_id: args.oidc_client_id.clone(),
+        redirect_uris: args.oidc_redirect_uris.clone(),
+        web_origins,
+        realm: args.oidc_realm.clone(),
+        admin_user: args.keycloak_admin_user.clone(),
+        admin_password: args.keycloak_admin_password.clone(),
+        local_port: 8080,
+        pod_ready_timeout_secs: 180,
+        keep_port_forward: args.keep_port_forward,
+        dry_run: args.dry_run,
+    };
+    let (result, pf) = oidc::provision_client_keep(&setup)?;
+    oidc::print_exports(&setup, &result);
+    if let Some(mut pf) = pf {
+        println!();
+        ui::note(&format!(
+            "keeping port-forward to svc/{}-keycloak on http://localhost:{} — press Ctrl-C to stop",
+            args.release, setup.local_port
+        ));
+        ui::note("run `rad deploy app.bicep ...` in another terminal while this stays open");
+        let _ = pf.wait();
+    }
+    Ok(())
+}
+
+/// Probe for `svc/<name>` in `namespace`. Returns Ok(false) on a clean
+/// NotFound, Err on any other kubectl failure.
+fn keycloak_service_present(namespace: &str, service: &str) -> Result<bool> {
+    let out = Command::new("kubectl")
+        .args(["-n", namespace, "get", "svc", service, "-o", "name"])
+        .output()
+        .context("failed to run `kubectl get svc`")?;
+    if out.status.success() {
+        return Ok(true);
+    }
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    if stderr.contains("NotFound") || stderr.contains("not found") {
+        return Ok(false);
+    }
+    bail!(
+        "`kubectl get svc -n {namespace} {service}` failed: {}",
+        stderr.trim()
+    );
 }
 
 /// Federated identity subjects for the Radius control plane service
