@@ -192,7 +192,7 @@ cp -R radius/. "$HOME/.adaptive/radius/"
 
 * `ada init` — (re)create the `$ADA_HOME` layout.
 * `ada radius path --artifact <root|bicepconfig|types|types-bundle|recipes|local-env|aks-env|app>` — resolve a bundled artifact for scripting.
-* `ada bootstrap --portfolio <min|core|ent> [--with ai] [--platform <localk8s|aks|arc>]` — install a portfolio onto the current `kubectl` context.
+* `ada bootstrap --portfolio <min|min-ai|core|core-ai|ent|ent-ai> [--platform <k3s|k8s|aks|arc|azure-local>]` — install a portfolio onto the current `kubectl` context.
 * `ada oidc setup-client …` — provision an OIDC client in a chart-deployed Keycloak.
 * `ada package -i <src> -o app.bicep [--llm]` — analyze a `docker-compose.yml` and emit a Radius `app.bicep`.
 

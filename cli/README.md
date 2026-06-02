@@ -9,7 +9,7 @@ context is a single command instead of a tutorial walkthrough.
 Early scaffolding. Currently supports a single command:
 
 ```bash
-ada bootstrap --portfolio <min|core|ent> [--platform <localk8s|aks|arc>] [--with ai]
+ada bootstrap --portfolio <min|min-ai|core|core-ai|ent|ent-ai> [--platform <k3s|k8s|aks|arc|azure-local>]
 ```
 
 ## Install
@@ -108,7 +108,7 @@ Istio add-on; pass `--azure-subscription <id>` to switch subscriptions via
 Dry-run the published `ent + ai` chart against the current cluster:
 
 ```bash
-ada bootstrap --portfolio ent --with ai --dry-run
+ada bootstrap --portfolio ent-ai --dry-run
 ```
 
 Pin a specific chart version:

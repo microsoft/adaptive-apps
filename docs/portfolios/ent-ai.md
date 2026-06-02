@@ -10,4 +10,4 @@ The Ent-AI Portfolio combines the [Min-AI Portfolio](./min-ai.md) and the [Ent P
 ## Additional Guidance
 
 * [`ent-ai` chart README](../../charts/portfolios/ent-ai/README.md) — install and configuration.
-* [Getting started with the Ent-AI portfolio](../../tutorials/ent-ai-getting-started/README.md)
+* [Getting started with the Ent-AI portfolio](../../tutorials/getting-started/README.md) (set `PORTFOLIO=ent-ai`)

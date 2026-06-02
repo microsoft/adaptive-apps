@@ -1,4 +1,4 @@
-// app.bicep — Radius application model for portable-apps
+// app.bicep — Radius application model for adaptive-apps
 //
 // Deploys the full stock-trading simulator on Kubernetes via Radius:
 //   • Radius.Resources/postgreSqlDatabases  → PostgreSQL 16 (with trading schema)
@@ -168,7 +168,7 @@ var kubernetesMetadataExtension = enableIstioInjection ? [
 ]
 
 resource tradingApp 'Applications.Core/applications@2023-10-01-preview' = {
-  name: 'portable-apps'
+  name: 'adaptive-apps'
   properties: {
     environment: environment
   }
@@ -247,7 +247,7 @@ resource tradingAI 'Radius.Resources/aiModels@2025-08-01-preview' = if (isLocalA
 var aiAgentBaseEnv = {
   ASPNETCORE_URLS: { value: 'http://+:7000' }
   OTEL_SERVICE_NAME: { value: 'trading-ai-agent' }
-  OTEL_RESOURCE_ATTRIBUTES: { value: 'service.namespace=portable-apps,service.version=1.0.0,deployment.environment=radius' }
+  OTEL_RESOURCE_ATTRIBUTES: { value: 'service.namespace=adaptive-apps,service.version=1.0.0,deployment.environment=radius' }
   OTEL_EXPORTER_OTLP_ENDPOINT: { value: otelCollectorEndpoint }
   OTEL_EXPORTER_OTLP_PROTOCOL: { value: 'http/protobuf' }
 }
@@ -314,7 +314,7 @@ resource backend 'Applications.Core/containers@2023-10-01-preview' = {
       env: {
         ASPNETCORE_URLS: { value: 'http://+:8080' }
         OTEL_SERVICE_NAME: { value: 'trading-backend' }
-        OTEL_RESOURCE_ATTRIBUTES: { value: 'service.namespace=portable-apps,service.version=1.0.0,deployment.environment=radius' }
+        OTEL_RESOURCE_ATTRIBUTES: { value: 'service.namespace=adaptive-apps,service.version=1.0.0,deployment.environment=radius' }
         OTEL_EXPORTER_OTLP_ENDPOINT: { value: otelCollectorEndpoint }
         OTEL_EXPORTER_OTLP_PROTOCOL: { value: 'http/protobuf' }
         // Radius auto-injects CONNECTION_DB_HOST, CONNECTION_DB_PORT,

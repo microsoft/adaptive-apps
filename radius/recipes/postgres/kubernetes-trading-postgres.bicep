@@ -1,7 +1,7 @@
 // kubernetes-trading-postgres.bicep
 // Radius Recipe: Radius.Resources/postgreSqlDatabases
 //
-// Deploys a PostgreSQL 16 container on Kubernetes with the portable-apps
+// Deploys a PostgreSQL 16 container on Kubernetes with the adaptive-apps
 // trading schema pre-loaded via an init ConfigMap mounted at
 // /docker-entrypoint-initdb.d/init.sql.
 

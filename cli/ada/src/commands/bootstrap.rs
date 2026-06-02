@@ -21,61 +21,88 @@ const DEFAULT_CHART_REGISTRY: &str = "oci://ghcr.io/microsoft/adaptive-apps/char
 /// Default chart version pulled when `--version` is not supplied.
 const DEFAULT_CHART_VERSION: &str = "0.1.0";
 
-#[derive(Debug, Copy, Clone, ValueEnum)]
-#[value(rename_all = "lowercase")]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, ValueEnum)]
+#[value(rename_all = "kebab-case")]
 pub enum Portfolio {
     Min,
+    MinAi,
     Core,
+    CoreAi,
     Ent,
+    EntAi,
 }
 
 impl Portfolio {
+    /// Full slug used as the chart name and profile filename
+    /// (e.g. `core`, `core-ai`).
     fn as_str(self) -> &'static str {
         match self {
             Portfolio::Min => "min",
+            Portfolio::MinAi => "min-ai",
             Portfolio::Core => "core",
+            Portfolio::CoreAi => "core-ai",
             Portfolio::Ent => "ent",
+            Portfolio::EntAi => "ent-ai",
         }
+    }
+
+    /// Base portfolio without the `-ai` suffix (e.g. `core-ai` -> `core`).
+    fn base(self) -> &'static str {
+        match self {
+            Portfolio::Min | Portfolio::MinAi => "min",
+            Portfolio::Core | Portfolio::CoreAi => "core",
+            Portfolio::Ent | Portfolio::EntAi => "ent",
+        }
+    }
+
+    /// True for the `*-ai` variants.
+    fn has_ai(self) -> bool {
+        matches!(self, Portfolio::MinAi | Portfolio::CoreAi | Portfolio::EntAi)
     }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, ValueEnum)]
-#[value(rename_all = "lowercase")]
+#[value(rename_all = "kebab-case")]
 pub enum Platform {
-    /// Local Kubernetes (kind, k3d, Docker Desktop, minikube).
-    Localk8s,
-    /// Azure Kubernetes Service.
+    /// Local k3s via k3d. `ada bootstrap` will auto-provision a cluster
+    /// (`k3d cluster create <name>`) and switch the kubectl context to it.
+    /// Pass `--skip-cluster-provision` to reuse an existing k3d cluster.
+    K3s,
+    /// Bring-your-own standard Kubernetes distribution (kind, Docker
+    /// Desktop, minikube, vanilla k8s, etc.). Cluster must already exist;
+    /// `ada` runs helm/kubectl/rad against whatever cluster the current
+    /// kubectl context points at — no provisioning, no platform overrides.
+    K8s,
+    /// Azure Kubernetes Service. Cluster must already exist; `ada` discovers
+    /// the Istio add-on revision and applies the matching helm overrides.
     Aks,
-    /// Azure Arc-enabled Kubernetes.
+    /// Azure Arc-enabled Kubernetes (on-prem, edge, other clouds). Cluster
+    /// must already exist and be Arc-connected; `ada` does no cloud-side
+    /// automation — just runs helm/kubectl/rad against the current context.
     Arc,
+    /// Azure Local (formerly Azure Stack HCI). Cluster must already exist;
+    /// `ada` does no cloud-side automation — just runs helm/kubectl/rad
+    /// against the current context.
+    AzureLocal,
 }
 
 impl Platform {
     fn as_str(self) -> &'static str {
         match self {
-            Platform::Localk8s => "localk8s",
+            Platform::K3s => "k3s",
+            Platform::K8s => "k8s",
             Platform::Aks => "aks",
             Platform::Arc => "arc",
+            Platform::AzureLocal => "azure-local",
         }
     }
 }
 
-/// Additive capability overlays. Today only `ai` exists; more axes
-/// (edge, airgap, …) will be added as overlays rather than as new
-/// portfolios so the matrix doesn't explode.
-#[derive(Debug, Copy, Clone, ValueEnum)]
-#[value(rename_all = "lowercase")]
-pub enum Capability {
-    Ai,
-}
-
-impl Capability {
-    fn as_str(self) -> &'static str {
-        match self {
-            Capability::Ai => "ai",
-        }
-    }
-}
+/// Additive capability overlays. Reserved for future axes (edge, airgap,
+/// …); the `ai` overlay is folded into the portfolio enum itself
+/// (`--portfolio core-ai`, etc.). No `--with` flag is currently exposed.
+#[allow(dead_code)]
+struct Capability;
 
 #[derive(Debug, Args)]
 pub struct BootstrapArgs {
@@ -86,12 +113,22 @@ pub struct BootstrapArgs {
     /// Target platform. Selects platform-specific helm overrides and (where
     /// applicable) auto-discovers cluster facts via the cloud CLI.
     ///
-    /// - `aks`  — assumes the AKS Istio add-on owns the mesh control plane
-    ///           (sets `istio.install.enabled=false`, `istio.namespace=aks-istio-system`).
-    ///           If `--azure-subscription` is set, runs `az account set`
-    ///           before invoking helm.
-    /// - `arc`  — reserved; no automation today.
-    /// - `localk8s` — chart installs Istio itself.
+    /// - `k3s` — chart installs Istio itself. `ada bootstrap` will
+    ///           auto-provision a local k3d cluster (pass
+    ///           `--skip-cluster-provision` to use an existing one).
+    /// - `k8s` — bring-your-own standard Kubernetes distribution. No
+    ///           auto-provisioning, no platform overrides; `ada` just runs
+    ///           helm/kubectl/rad against the current `kubectl` context.
+    /// - `aks` — assumes the AKS Istio add-on owns the mesh control plane
+    ///           (sets `istio.install.enabled=false`,
+    ///           `istio.namespace=aks-istio-system`). If
+    ///           `--azure-subscription` is set, runs `az account set`
+    ///           before invoking helm. Cluster must already exist.
+    /// - `arc`, `azure-local` — no automation; `ada` just runs
+    ///           helm/kubectl/rad against whatever cluster the current
+    ///           `kubectl` context points at. Use these when you've
+    ///           provisioned the cluster yourself with the standard
+    ///           Kubernetes toolchain.
     ///
     /// Optional. When omitted no platform overrides are applied and the
     /// install targets whatever cluster the current `kubectl` context
@@ -169,9 +206,11 @@ pub struct BootstrapArgs {
     #[arg(long)]
     skip_azure_credentials: bool,
 
-    /// Additive capability overlays (repeatable). e.g. `--with ai`.
-    #[arg(long = "with", value_enum, num_args = 0..)]
-    with: Vec<Capability>,
+    /// Additive capability overlays (repeatable). Reserved for future
+    /// axes; the `ai` overlay is now part of the portfolio enum itself
+    /// (e.g. `--portfolio core-ai`).
+    #[arg(skip)]
+    with: Vec<()>,
 
     /// Helm release name.
     #[arg(long, default_value = "adaptive-apps")]
@@ -196,9 +235,19 @@ pub struct BootstrapArgs {
     /// Install from a local chart directory instead of the published OCI
     /// registry. Points at the directory that contains the portfolio
     /// charts (legacy layout: `<chart-root>/portfolios/<portfolio>[-ai]`)
-    /// or a unified `adaptive-apps/` chart.
+    /// or a unified `adaptive-apps/` chart (with `--unified`).
     #[arg(long, env = "ADA_CHART_ROOT")]
     chart_root: Option<PathBuf>,
+
+    /// **Transitional.** Install from the unified `adaptive-apps` chart
+    /// (chart at `<chart-root>/adaptive-apps`, profile at
+    /// `<chart-root>/adaptive-apps/profiles/<portfolio>[-ai].yaml`) instead
+    /// of the legacy per-portfolio chart under
+    /// `<chart-root>/portfolios/<portfolio>[-ai]`. Requires `--chart-root`.
+    /// This flag will be removed once the unified chart fully replaces
+    /// the legacy layout and the legacy charts are deleted.
+    #[arg(long)]
+    unified: bool,
 
     /// Chart version to pull from the OCI registry. Ignored when
     /// `--chart-root` is set.
@@ -212,13 +261,13 @@ pub struct BootstrapArgs {
     chart_registry: String,
 
     /// Name of the local k3d cluster to provision/reuse when
-    /// `--platform localk8s` is set. The resulting kube context is
+    /// `--platform k3s` is set. The resulting kube context is
     /// `k3d-<name>`.
-    #[arg(long, default_value = "localk8s")]
+    #[arg(long, default_value = "k3s")]
     k3d_cluster: String,
 
     /// Skip automatic local-cluster provisioning. By default `--platform
-    /// localk8s` runs `k3d cluster create <name>` (idempotent) and
+    /// k3s` runs `k3d cluster create <name>` (idempotent) and
     /// switches the kubectl context to `k3d-<name>` before installing.
     #[arg(long)]
     skip_cluster_provision: bool,
@@ -232,7 +281,7 @@ pub struct BootstrapArgs {
     skip_oidc_client: bool,
 
     /// OIDC clientId to provision in Keycloak.
-    #[arg(long, default_value = "portable-apps")]
+    #[arg(long, default_value = "adaptive-apps")]
     oidc_client_id: String,
 
     /// Valid redirect URI for the OIDC client (repeatable).
@@ -309,13 +358,13 @@ pub fn run(args: BootstrapArgs) -> Result<()> {
             );
         }
     }
-    if !args.with.is_empty() {
-        let with: Vec<&str> = args.with.iter().map(|c| c.as_str()).collect();
-        ui::detail("with", &with.join(","));
-    }
+    let _ = &args.with; // reserved for future overlays
     ui::detail("release", &args.release);
     ui::detail("namespace", &args.namespace);
     ui::detail("chart", &resolution.chart_ref.to_string_lossy());
+    if args.unified {
+        ui::detail("layout", "unified (transitional --unified)");
+    }
     if let Some(v) = &resolution.version {
         ui::detail("version", v);
     }
@@ -342,8 +391,8 @@ pub fn run(args: BootstrapArgs) -> Result<()> {
     }
     println!();
 
-    // Provision a local k3d cluster before helm runs on --platform localk8s.
-    if matches!(args.platform, Some(Platform::Localk8s)) && !args.skip_cluster_provision {
+    // Provision a local k3d cluster before helm runs on --platform k3s.
+    if matches!(args.platform, Some(Platform::K3s)) && !args.skip_cluster_provision {
         provision_k3d_cluster(&args.k3d_cluster, args.dry_run)?;
         println!();
     }
@@ -456,6 +505,12 @@ struct Resolution {
 /// context. When `--chart-root` is set we install from a local source tree;
 /// otherwise we pull the published OCI chart at `--version`.
 fn resolve_chart_and_values(args: &BootstrapArgs) -> Result<Resolution> {
+    if args.unified && args.chart_root.is_none() {
+        bail!(
+            "--unified currently requires --chart-root (the unified chart is not yet published to {DEFAULT_CHART_REGISTRY}).\n\
+             Pass --chart-root <path-to-charts-dir> pointing at a tree containing `adaptive-apps/`."
+        );
+    }
     if let Some(chart_root) = args.chart_root.as_deref() {
         return resolve_local(chart_root, args);
     }
@@ -474,42 +529,36 @@ fn resolve_oci(args: &BootstrapArgs) -> Result<Resolution> {
 }
 
 fn resolve_local(chart_root: &Path, args: &BootstrapArgs) -> Result<Resolution> {
-    let unified_chart = chart_root.join("adaptive-apps");
-    if unified_chart.join("Chart.yaml").is_file() {
-        return resolve_unified(&unified_chart, args);
+    if args.unified {
+        return resolve_unified(chart_root, args);
     }
     resolve_legacy_per_portfolio(chart_root, args)
 }
 
-fn resolve_unified(chart: &Path, args: &BootstrapArgs) -> Result<Resolution> {
-    let values_dir = chart.join("values");
-    let mut files = Vec::new();
-
-    let portfolio_file = values_dir.join(format!("{}.yaml", args.portfolio.as_str()));
-    require_file(&portfolio_file, "portfolio preset")?;
-    files.push(portfolio_file);
-
-    for cap in &args.with {
-        let overlay = values_dir
-            .join("overlays")
-            .join(format!("{}.yaml", cap.as_str()));
-        require_file(&overlay, "capability overlay")?;
-        files.push(overlay);
+/// Resolve against the unified `adaptive-apps` chart. The chart lives at
+/// `<chart-root>/adaptive-apps` and per-portfolio feature flags come from
+/// `<chart>/profiles/<portfolio>[-ai].yaml` (the `-ai` is baked into the
+/// profile filename, not a separate overlay).
+fn resolve_unified(chart_root: &Path, args: &BootstrapArgs) -> Result<Resolution> {
+    let chart = chart_root.join("adaptive-apps");
+    if !chart.join("Chart.yaml").is_file() {
+        bail!(
+            "no unified chart at {} (Chart.yaml missing).\n\
+             --unified expects `<chart-root>/adaptive-apps/Chart.yaml`.",
+            chart.display()
+        );
     }
 
-    if let Some(p) = args.platform {
-        let ctx_overlay = values_dir
-            .join("overlays")
-            .join(format!("platform-{}.yaml", p.as_str()));
-        if ctx_overlay.is_file() {
-            files.push(ctx_overlay);
-        }
-    }
+    let profile_name = portfolio_chart_name(args); // e.g. `core` or `core-ai`
+    let profile_file = chart
+        .join("profiles")
+        .join(format!("{profile_name}.yaml"));
+    require_file(&profile_file, "unified profile")?;
 
     Ok(Resolution {
-        chart_ref: chart.as_os_str().to_owned(),
+        chart_ref: chart.into_os_string(),
         version: None,
-        values_files: files,
+        values_files: vec![profile_file],
     })
 }
 
@@ -533,12 +582,7 @@ fn resolve_legacy_per_portfolio(chart_root: &Path, args: &BootstrapArgs) -> Resu
 }
 
 fn portfolio_chart_name(args: &BootstrapArgs) -> String {
-    let has_ai = args.with.iter().any(|c| matches!(c, Capability::Ai));
-    if has_ai {
-        format!("{}-ai", args.portfolio.as_str())
-    } else {
-        args.portfolio.as_str().to_string()
-    }
+    args.portfolio.as_str().to_string()
 }
 
 fn require_file(path: &Path, what: &str) -> Result<()> {
@@ -584,7 +628,7 @@ fn apply_platform_automation(args: &BootstrapArgs) -> Result<PlatformOutcome> {
 
     match platform {
         Platform::Aks => apply_aks_automation(args),
-        Platform::Localk8s | Platform::Arc => {
+        Platform::K3s | Platform::K8s | Platform::Arc | Platform::AzureLocal => {
             if args.azure_subscription.is_some()
                 || args.resource_group.is_some()
                 || args.aks_cluster.is_some()
@@ -628,15 +672,24 @@ fn apply_aks_automation(args: &BootstrapArgs) -> Result<PlatformOutcome> {
     // AKS owns the Istio control plane via the Istio add-on. The chart
     // must not install its own Istio, and the post-install PeerAuthn
     // hook must target the AKS-managed namespace.
-    //
-    // The `istio.*` values live in the `core` subchart, so prefix the
-    // override path based on where `core` sits in the dependency chain.
-    let prefix = istio_values_prefix(args);
-    Ok(PlatformOutcome {
-        helm_sets: vec![
+    let helm_sets = if args.unified {
+        // Unified chart: feature flag + top-level istio.namespace.
+        vec![
+            "features.istio.install=false".to_string(),
+            format!("istio.namespace={}", args.aks_istio_namespace),
+        ]
+    } else {
+        // Legacy charts: `istio.*` values live in the `core` subchart, so
+        // prefix the override path based on where `core` sits in the
+        // dependency chain.
+        let prefix = istio_values_prefix(args);
+        vec![
             format!("{prefix}istio.install.enabled=false"),
             format!("{prefix}istio.namespace={}", args.aks_istio_namespace),
-        ],
+        ]
+    };
+    Ok(PlatformOutcome {
+        helm_sets,
         istio_revision,
     })
 }
@@ -645,18 +698,17 @@ fn apply_aks_automation(args: &BootstrapArgs) -> Result<PlatformOutcome> {
 /// subchart's `istio.*` values from the top of the chart being installed.
 /// Empty string when installing `core` itself.
 fn istio_values_prefix(args: &BootstrapArgs) -> &'static str {
-    let has_ai = args.with.iter().any(|c| matches!(c, Capability::Ai));
-    match (args.portfolio, has_ai) {
+    match (args.portfolio.base(), args.portfolio.has_ai()) {
         // `core` is the parent chart — istio values are at the top.
-        (Portfolio::Core, false) => "",
+        ("core", false) => "",
         // `core-ai` → core subchart.
-        (Portfolio::Core, true) => "core.",
+        ("core", true) => "core.",
         // `ent` → core subchart.
-        (Portfolio::Ent, false) => "core.",
+        ("ent", false) => "core.",
         // `ent-ai` → ent subchart → core subchart.
-        (Portfolio::Ent, true) => "ent.core.",
+        ("ent", true) => "ent.core.",
         // `min` doesn't bundle istio; sets are still harmless.
-        (Portfolio::Min, _) => "",
+        _ => "",
     }
 }
 

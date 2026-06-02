@@ -12,14 +12,16 @@
 
 The Adaptive App CLI provides a streamlined experience of configuring everything you need to get ready for a Radius application deployment. Use this tool if you want to quickly set up a test/demo environment. Or, you can follow the manual steps in OPTION 2 below.
 
+### 1. Set up the infrastructure
+
 1. Setup the Adaptive App CLI.
 
     Follow instructions [here](../../common/prepare-cli.md) to set up Adaptive App CLI.
 
-2.  Bootstrap the infrastructure. This sets up a local K3s cluster, installs Radius, registers Radius resource types and prepares Radius group and enviornment. It also automates creation of KeyCloak client secret and enables port forwarding on KeyCloak service.
+2.  Bootstrap the infrastructure. This sets up a local K3s cluster, installs Radius, registers Radius resource types and prepares Radius group and environment. It also automates creation of Keycloak client secret and enables port forwarding on the Keycloak service.
 
     ```bash
-    ada bootstrap --portfolio min --platform localk8s --release min --namespace min --with-radius --keep-port-forward
+    ada bootstrap --portfolio min --platform k3s --release min --namespace min --with-radius --keep-port-forward
     ```
 
     The command generates a number of `export` commands. Copy those commands for the next step.
@@ -35,7 +37,10 @@ The Adaptive App CLI provides a streamlined experience of configuring everything
     export OIDC_USERINFO_ENDPOINT=http://min-keycloak.min.svc.cluster.local:8080/realms/master/protocol/openid-connect/userinfo
     export OIDC_BROWSER_AUTH_ENDPOINT=http://localhost:8080/realms/master/protocol/openid-connect/auth
     ```
-4. Deploy the Radius app:
+
+### 2. Deploy and test the sample app
+
+1. Deploy the Radius app:
 
     ```bash
     # under the radius folder
@@ -70,6 +75,19 @@ The Adaptive App CLI provides a streamlined experience of configuring everything
 
 4. Login using local account admin/admin, or click on "Sign in with OIDC" button to use Keycloak to login with federated credential.
 
+### 3. Clean up
+
+1. Delete the app:
+
+    ```
+    rad app delete portable-apps
+    ```
+
+2. Delete the K3s cluster:
+
+    ```
+    k3d cluster delete localk8s
+    ```
 
 ## OPTION 2: Manual Setup
 

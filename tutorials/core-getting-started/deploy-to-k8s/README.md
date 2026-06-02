@@ -8,9 +8,100 @@
 * [rad](https://docs.radapp.io/guides/tooling/rad-cli/howto-rad-cli/)
 * (optional) An [OpenAI API Key](https://platform.openai.com/api-keys) or [Azure OpenAI deployment key](https://azure.microsoft.com/en-us/products/ai-foundry/models/openai)
 
+## OPTION 1: Use Adaptive App Tools
 
-## 1. Prepare a local Kubernetes cluster
-To demostrate local deployments, you need a local Kubernetes cluster such as [k3s](https://github.com/rancher/k3s) or [Kind](https://kind.sigs.k8s.io/), or a full-scale Kubernetes cluster. We'll use k3s in this tutorial.
+The Adaptive App CLI provides a streamlined experience of configuring everything you need to get ready for a Radius application deployment. Use this tool if you want to quickly set up a test/demo environment. Or, you can follow the manual steps in OPTION 2 below.
+
+### 1. Set up the infrastructure
+
+1. Setup the Adaptive App CLI.
+
+    Follow instructions [here](../../common/prepare-cli.md) to set up Adaptive App CLI.
+
+2.  Bootstrap the infrastructure. This sets up a local K3s cluster, installs Radius (control plane + resource types + group + environment), installs the `core` Helm chart (Keycloak + Istio + observability), automates Keycloak client creation, and starts a port-forward on the Keycloak service.
+
+    ```bash
+    ada bootstrap --portfolio core --platform k3s --release core --namespace core --with-radius --keep-port-forward
+    ```
+
+    The command generates a number of `export` commands. Copy those commands for the next step.
+
+3. In another terminal window, execute the above `export` commands to set the environment variables.
+
+    ```bash
+    export OIDC_CLIENT_ID=portable-apps
+    export OIDC_CLIENT_SECRET=<OIDC client secret>
+    export OIDC_ISSUER=http://core-keycloak.core.svc.cluster.local:8080/realms/master
+    export OIDC_AUTH_ENDPOINT=http://core-keycloak.core.svc.cluster.local:8080/realms/master/protocol/openid-connect/auth
+    export OIDC_TOKEN_ENDPOINT=http://core-keycloak.core.svc.cluster.local:8080/realms/master/protocol/openid-connect/token
+    export OIDC_USERINFO_ENDPOINT=http://core-keycloak.core.svc.cluster.local:8080/realms/master/protocol/openid-connect/userinfo
+    export OIDC_BROWSER_AUTH_ENDPOINT=http://localhost:8080/realms/master/protocol/openid-connect/auth
+    ```
+
+### 2. Deploy and test the sample app
+
+1. Deploy the Radius app:
+
+    ```bash
+    # under the radius folder
+    rad deploy app.bicep \
+    --group adaptive \
+    --environment trading \
+    --parameters imageRegistry=ghcr.io/microsoft/adaptive-apps \
+    --parameters imageTag=latest \
+    --parameters authUsername=admin \
+    --parameters authPassword=admin \
+    --parameters otelCollectorEndpoint=http://otel-collector.core:4318 \
+    --parameters oidcIssuer=$OIDC_ISSUER \
+    --parameters oidcIssuerOverride=http://localhost:8080/realms/master \
+    --parameters oidcAuthEndpoint=$OIDC_AUTH_ENDPOINT \
+    --parameters oidcBrowserAuthEndpoint=$OIDC_BROWSER_AUTH_ENDPOINT \
+    --parameters oidcTokenEndpoint=$OIDC_TOKEN_ENDPOINT \
+    --parameters oidcUserInfoEndpoint=$OIDC_USERINFO_ENDPOINT \
+    --parameters oidcClientId=$OIDC_CLIENT_ID \
+    --parameters oidcClientSecret=$OIDC_CLIENT_SECRET \
+    --parameters aiProvider=openai \
+    --parameters aiModelName=gpt-4o \
+    --parameters aiApiKey=<OpenAI API Key>
+    ```
+
+2. Enable Istio sidecar injection on the app namespace and restart the workloads so they come back with sidecars (Radius owns the app namespace, so the chart can't label it for you):
+
+    ```bash
+    export APP_NAMESPACE=trading-portable-apps
+    kubectl label namespace $APP_NAMESPACE istio-injection=enabled --overwrite
+    kubectl rollout restart deployment -n $APP_NAMESPACE
+    ```
+
+3. Expose the frontend:
+
+    ```bash
+    rad resource expose Applications.Core/containers frontend -a portable-apps --port 3000 --remote-port 3000
+    ```
+
+4. Open the app at `http://localhost:3000`.
+
+5. Login using local account admin/admin, or click on "Sign in with OIDC" button to use Keycloak to login with federated credential.
+
+### 3. Clean up
+
+1. Delete the app:
+
+    ```
+    rad app delete portable-apps
+    ```
+
+2. Delete the K3s cluster:
+
+    ```
+    k3d cluster delete localk8s
+    ```
+
+
+## OPTION 2: Manual Setup
+
+### 1. Prepare a local Kubernetes cluster
+To demonstrate local deployments, you need a local Kubernetes cluster such as [k3s](https://github.com/rancher/k3s) or [Kind](https://kind.sigs.k8s.io/), or a full-scale Kubernetes cluster. We'll use k3s in this tutorial.
 
 1. Install k3d:
 
@@ -30,7 +121,7 @@ To demostrate local deployments, you need a local Kubernetes cluster such as [k3
     # Set K3D_FIX_DNS=0 helps cluster creation complete in environments where it otherwise stalls at configuring CoreDNS configmap
     ```
 
-## 2. Set up Radius
+### 2. Set up Radius
 
 Set up Radius on the local cluster and register the custom resource types used by the app model.
 
@@ -75,7 +166,7 @@ Set up Radius on the local cluster and register the custom resource types used b
     rad environment list --group trading
     ```
 
-## 3. Install Adaptive App Capability Portfolio (Core)
+### 3. Install Adaptive App Capability Portfolio (Core)
 
 Start with the `core` portfolio Helm chart. The first bundled component is Keycloak.
 
@@ -118,11 +209,11 @@ Start with the `core` portfolio Helm chart. The first bundled component is Keycl
     kubectl port-forward -n core svc/core-keycloak 8080:8080
     ```
 
-5. Open a browser and navigate to `localhost:8080`. Log in to KeyCloak portal with user `admin` and password `admin` (which are defined in the `values.yaml` for the Helm chart).
+5. Open a browser and navigate to `localhost:8080`. Log in to Keycloak portal with user `admin` and password `admin` (which are defined in the `values.yaml` for the Helm chart).
 
 6. Click on "Clients" in the left pane, and click on the "Create Client" button to create a new client. Set up a name for the client and accept all default values across screens except for:
 
-    * `Cleint authentication`: set to **On**.
+    * `Client authentication`: set to **On**.
     * `Valid redirect URIs`: set to `http://localhost:3000/*` (or more specifically `http://localhost:3000/auth/oidc/callback`). 
     
     Click "Save" to save the client definition.
@@ -148,7 +239,7 @@ Start with the `core` portfolio Helm chart. The first bundled component is Keycl
     export OIDC_BROWSER_AUTH_ENDPOINT=http://localhost:8080/realms/master/protocol/openid-connect/auth
     ```
 
-## 4. Install the app
+### 4. Install the app
 
 Deploy the app model to the Radius environment created above.
 
@@ -225,9 +316,9 @@ This separation allows apps to remain portable; the environment (Helm chart) dec
     ```
 
 5. Open the app at `http://localhost:3000`.
-6. Login using local account admin/admin, or click on "Sign in with OIDC" button to use KeyCloak to login with federated credential.
+6. Login using local account admin/admin, or click on "Sign in with OIDC" button to use Keycloak to login with federated credential.
 
-## 5. Clean up
+### 5. Clean up
 
 1. Delete the app:
 
@@ -247,9 +338,9 @@ This separation allows apps to remain portable; the environment (Helm chart) dec
 
     ```bash
     k3d cluster delete localk8s
-    k3d cluster create localk8s --k3s-arg "--resolv-conf=/etc/reslov.conf@server:0"
+    k3d cluster create localk8s --k3s-arg "--resolv-conf=/etc/resolv.conf@server:0"
     ```
-2. If you have podman also enabled, it may interfer with K3s and Docker operations, depending on how your system is configured. Make sure podman is stopped:
+2. If you have podman also enabled, it may interfere with K3s and Docker operations, depending on how your system is configured. Make sure podman is stopped:
     ```bash
     systemctl --user stop podman.socket
     systemctl --user stop podman.service 
@@ -268,6 +359,6 @@ This separation allows apps to remain portable; the environment (Helm chart) dec
 ## Additional Topics
 
 * [Deploy Keycloak behind an ingress](../../../docs/authentication/keycloak-ingress.md)
-* [Configure KeyCloak federation with Azure Entra ID](../../../docs/authentication/keycloak-entra.md)
+* [Configure Keycloak federation with Azure Entra ID](../../../docs/authentication/keycloak-entra.md)
 * [Configure Keycloak federation with a local Active Directory](../../../docs/authentication/keycloak-active-directory.md)
 * [Configure credential sync from local Active Directory to an Azure Entra tenant](../../../docs/authentication/microsoft-entra-connect.md)

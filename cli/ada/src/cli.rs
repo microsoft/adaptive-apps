@@ -7,8 +7,9 @@ use crate::commands::{bootstrap, home_cmd, oidc, package};
 #[command(
     name = "ada",
     about = "Adaptive Apps CLI",
-    long_about = "ada bootstraps and manages portable-app platform portfolios \
-                  (min, core, ent) across target contexts (localk8s, aks, arc).",
+    long_about = "ada bootstraps and manages adaptive-app platform portfolios \
+                  (min, min-ai, core, core-ai, ent, ent-ai) across target \
+                  contexts (k3s, k8s, aks, arc, azure-local).",
     version
 )]
 pub struct Cli {

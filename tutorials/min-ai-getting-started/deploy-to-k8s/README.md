@@ -2,7 +2,7 @@
 
 ## 0. Prerequisites
 
-* NVIDIA GPU with >= 4G memory, preferrably >= 16G 
+* NVIDIA GPU with >= 4G memory, preferably >= 16G 
 * Latest NVIDIA driver installed (with WSL support if using WSL)
 * [docker](https://docs.docker.com/)
 * [Helm](https://helm.sh/)
@@ -10,9 +10,97 @@
 * [rad](https://docs.radapp.io/guides/tooling/rad-cli/howto-rad-cli/)
 * (optional) An [OpenAI API Key](https://platform.openai.com/api-keys) or [Azure OpenAI deployment key](https://azure.microsoft.com/en-us/products/ai-foundry/models/openai)
 
+## OPTION 1: Use Adaptive App Tools
 
-## 1. Prepare a local Kubernetes cluster
-To demostrate local deployments, you need a local Kubernetes cluster such as [k3s](https://github.com/rancher/k3s) or [Kind](https://kind.sigs.k8s.io/), or a full-scale Kubernetes cluster. We'll use k3s in this tutorial.
+The Adaptive App CLI provides a streamlined experience of configuring everything you need to get ready for a Radius application deployment. Use this tool if you want to quickly set up a test/demo environment. Or, you can follow the manual steps in OPTION 2 below.
+
+> **Heads up — GPU prerequisites still need to be set up manually.** `ada bootstrap` does not configure NVIDIA / Kaito on your host or cluster. Before running the CLI, complete the GPU-specific setup in OPTION 2: [§1. Prepare a local Kubernetes cluster](#1-prepare-a-local-kubernetes-cluster) (custom k3d image, kyverno, GPU bootstrap, node labels) and [§2. Set up Kaito](#2-set-up-kaito). After those, you can skip ahead to the CLI flow below.
+
+### 1. Set up the infrastructure
+
+1. Setup the Adaptive App CLI.
+
+    Follow instructions [here](../../common/prepare-cli.md) to set up Adaptive App CLI.
+
+2.  Bootstrap the rest of the stack. This installs Radius (control plane + resource types + group + environment), installs the `min-ai` Helm chart (Keycloak + Kaito-aware overlays), automates Keycloak client creation, and starts a port-forward on the Keycloak service. The GPU-enabled K3s cluster and Kaito from the prerequisites above are reused as-is.
+
+    ```bash
+    ada bootstrap --portfolio min-ai --platform k3s --release min-ai --namespace min-ai --with-radius --keep-port-forward
+    ```
+
+    The command generates a number of `export` commands. Copy those commands for the next step.
+
+3. In another terminal window, execute the above `export` commands to set the environment variables.
+
+    ```bash
+    export OIDC_CLIENT_ID=portable-apps
+    export OIDC_CLIENT_SECRET=<OIDC client secret>
+    export OIDC_ISSUER=http://min-ai-keycloak.min-ai.svc.cluster.local:8080/realms/master
+    export OIDC_AUTH_ENDPOINT=http://min-ai-keycloak.min-ai.svc.cluster.local:8080/realms/master/protocol/openid-connect/auth
+    export OIDC_TOKEN_ENDPOINT=http://min-ai-keycloak.min-ai.svc.cluster.local:8080/realms/master/protocol/openid-connect/token
+    export OIDC_USERINFO_ENDPOINT=http://min-ai-keycloak.min-ai.svc.cluster.local:8080/realms/master/protocol/openid-connect/userinfo
+    export OIDC_BROWSER_AUTH_ENDPOINT=http://localhost:8080/realms/master/protocol/openid-connect/auth
+    ```
+
+### 2. Deploy and test the sample app
+
+1. Deploy the Radius app:
+
+    ```bash
+    # under the radius folder
+    rad deploy app.bicep \
+    --group adaptive \
+    --environment trading \
+    --parameters imageRegistry=ghcr.io/microsoft/adaptive-apps \
+    --parameters imageTag=latest \
+    --parameters authUsername=admin \
+    --parameters authPassword=admin \
+    --parameters otelCollectorEndpoint=http://otel-collector.core:4318 \
+    --parameters oidcIssuer=$OIDC_ISSUER \
+    --parameters oidcIssuerOverride=http://localhost:8080/realms/master \
+    --parameters oidcAuthEndpoint=$OIDC_AUTH_ENDPOINT \
+    --parameters oidcBrowserAuthEndpoint=$OIDC_BROWSER_AUTH_ENDPOINT \
+    --parameters oidcTokenEndpoint=$OIDC_TOKEN_ENDPOINT \
+    --parameters oidcUserInfoEndpoint=$OIDC_USERINFO_ENDPOINT \
+    --parameters oidcClientId=$OIDC_CLIENT_ID \
+    --parameters oidcClientSecret=$OIDC_CLIENT_SECRET \
+    --parameters aiProvider=local \
+    --parameters aiModel=Qwen/Qwen3-0.6B
+    ```
+
+    > **NOTE:** Your GPU size limits which models you can use. For a 4G memory GPU, the only feasible model seems to be `Qwen/Qwen3-0.6B`. For slightly bigger GPU, you can try `ministral-3-3b-instruct`. See troubleshoot guide #5 below.
+
+2. Expose the frontend:
+
+    ```bash
+    rad resource expose Applications.Core/containers frontend -a portable-apps --port 3000 --remote-port 3000
+    ```
+
+    > **NOTE:** The AI model container may take several minutes to set up, as the model needs to be downloaded and configured. Watch the pods under the `trading-portable-apps` namespace.
+
+3. Open the app at `http://localhost:3000`.
+
+4. Login using local account admin/admin, or click on "Sign in with OIDC" button to use Keycloak to login with federated credential.
+
+### 3. Clean up
+
+1. Delete the app:
+
+    ```
+    rad app delete portable-apps
+    ```
+
+2. Delete the K3s cluster:
+
+    ```
+    k3d cluster delete localk8s
+    ```
+
+
+## OPTION 2: Manual Setup
+
+### 1. Prepare a local Kubernetes cluster
+To demonstrate local deployments, you need a local Kubernetes cluster such as [k3s](https://github.com/rancher/k3s) or [Kind](https://kind.sigs.k8s.io/), or a full-scale Kubernetes cluster. We'll use k3s in this tutorial.
 
 1. Install k3d:
 
@@ -108,7 +196,7 @@ To demostrate local deployments, you need a local Kubernetes cluster such as [k3
     | Node estimator `ignores max-model-len` from ConfigMap and over-estimates `targetNodeCount` |	Inflate the `nvidia.com/gpu.memory` node label to satisfy the estimator |
 
 
-## 2. Set up Kaito
+### 2. Set up Kaito
 
 1. Install Kaito
     ```
@@ -124,7 +212,7 @@ To demostrate local deployments, you need a local Kubernetes cluster such as [k3
     ```
     > **NOTE:** Minimum required Kaito version is 0.9.0. `nvidiaDevicePlugin.enabled=false` avoids conflict with an existing device-plugin DaemonSet. `disableNodeAutoProvisioning=true` is required for BYO GPU mode (note: the flag changed to lowercase `d` in v0.9.0).
 
-## 3. Set up Radius
+### 3. Set up Radius
 
 Set up Radius on the local cluster and register the custom resource types used by the app model.
 
@@ -169,9 +257,9 @@ Set up Radius on the local cluster and register the custom resource types used b
     rad environment list --group trading
     ```
 
-## 4. Install Adaptive App Capability Portfolio (Min-AI)
+### 4. Install Adaptive App Capability Portfolio (Min-AI)
 
-Start with the `mi-ai` portfolio Helm chart. The first bundled component is Keycloak.
+Start with the `min-ai` portfolio Helm chart. The first bundled component is Keycloak.
 
 1. Create namespace:
 
@@ -207,11 +295,11 @@ Start with the `mi-ai` portfolio Helm chart. The first bundled component is Keyc
     kubectl port-forward -n min-ai svc/min-ai-keycloak 8080:8080
     ```
 
-5. Open a browser and navigate to `localhost:8080`. Log in to KeyCloak portal with user `admin` and password `admin` (which are defined in the `values.yaml` for the Helm chart).
+5. Open a browser and navigate to `localhost:8080`. Log in to Keycloak portal with user `admin` and password `admin` (which are defined in the `values.yaml` for the Helm chart).
 
 6. Click on "Clients" in the left pane, and click on the "Create Client" button to create a new client. Set up a name for the client and accept all default values across screens except for:
 
-    * `Cleint authentication`: set to **On**.
+    * `Client authentication`: set to **On**.
     * `Valid redirect URIs`: set to `http://localhost:3000/*` (or more specifically `http://localhost:3000/auth/oidc/callback`). 
     
     Click "Save" to save the client definition.
@@ -237,7 +325,7 @@ Start with the `mi-ai` portfolio Helm chart. The first bundled component is Keyc
     export OIDC_BROWSER_AUTH_ENDPOINT=http://localhost:8080/realms/master/protocol/openid-connect/auth
     ```
 
-## 5. Install the app
+### 5. Install the app
 
 Deploy the app model to the Radius environment created above.
 
@@ -284,14 +372,14 @@ Deploy the app model to the Radius environment created above.
     rad resource expose Applications.Core/containers frontend -a portable-apps --port 3000 --remote-port 3000
     ```
 
-    >**NOTE:** The AI model container may take serveral minutes to set up, as model needs to be downloaded and configured. Watch the pods under the `trading-portable-apps` namespace.
+    >**NOTE:** The AI model container may take several minutes to set up, as model needs to be downloaded and configured. Watch the pods under the `trading-portable-apps` namespace.
 
 3. Open the app at `http://localhost:3000`.
-4. Login using local account admin/admin, or click on "Sign in with OIDC" button to use KeyCloak to login with federated credential.
+4. Login using local account admin/admin, or click on "Sign in with OIDC" button to use Keycloak to login with federated credential.
 
 This is intentionally independent of the app model in `radius/app.bicep`. The app stays portable; the environment decides whether service-to-service traffic is meshed.
 
-## 6. Clean up
+### 6. Clean up
 
 1. Delete the app:
 
@@ -304,7 +392,7 @@ This is intentionally independent of the app model in `radius/app.bicep`. The ap
     ```
     k3d cluster delete localk8s
     ```
-3. Remove the volumne folder:
+3. Remove the volume folder:
 
     ```
     sudo rm -rf ~/k3d/localk8s-storage
@@ -314,9 +402,9 @@ This is intentionally independent of the app model in `radius/app.bicep`. The ap
 
     ```bash
     k3d cluster delete localk8s
-    k3d cluster create localk8s --k3s-arg "--resolv-conf=/etc/reslov.conf@server:0"
+    k3d cluster create localk8s --k3s-arg "--resolv-conf=/etc/resolv.conf@server:0"
     ```
-2. If you have podman also enabled, it may interfer with K3s and Docker operations, depending on how your system is configured. Make sure podman is stopped:
+2. If you have podman also enabled, it may interfere with K3s and Docker operations, depending on how your system is configured. Make sure podman is stopped:
     ```bash
     systemctl --user stop podman.socket
     systemctl --user stop podman.service 
@@ -333,16 +421,16 @@ This is intentionally independent of the app model in `radius/app.bicep`. The ap
     ```
 5. You can trick Kaito scheduler by overclaiming the `nvidia.com/gpu.memory` label to make it think your GPU has bigger memory. For example, by labeling a 4GiB GPU to `12288`, Kaito can be tricked to schedule `Qwen/Qwen3-0.6B` on a single node, which seems to work for the demo.
 
-6. Manully labeling the node seems to lead Kaito GPU feature discovery pod to crash. This doesn't appear to affect the demo flow.
+6. Manually labeling the node seems to lead Kaito GPU feature discovery pod to crash. This doesn't appear to affect the demo flow.
 
-7. If Radius got stuck at a "The target resource is in progress state: Updating." conflict, the best known approch to restore is to re-create the Kubernetes cluster.
+7. If Radius got stuck at a "The target resource is in progress state: Updating." conflict, the best known approach to restore is to re-create the Kubernetes cluster.
 
 8. To get a list of models supported by the currently installed version of Kaito:
 
     ```bash
     kubectl get cm kaito-supported-models -n kaito-workspace -o yaml
     ```
-9. If you face disk pressure, try wth relaxed eviction policy:
+9. If you face disk pressure, try with relaxed eviction policy:
 
     ```bash
     k3d cluster create localk8s \
@@ -360,6 +448,6 @@ This is intentionally independent of the app model in `radius/app.bicep`. The ap
 ## Additional Topics
 
 * [Deploy Keycloak behind an ingress](../../../docs/authentication/keycloak-ingress.md)
-* [Configure KeyCloak federation with Azure Entra ID](../../../docs/authentication/keycloak-entra.md)
+* [Configure Keycloak federation with Azure Entra ID](../../../docs/authentication/keycloak-entra.md)
 * [Configure Keycloak federation with a local Active Directory](../../../docs/authentication/keycloak-active-directory.md)
 * [Configure credential sync from local Active Directory to an Azure Entra tenant](../../../docs/authentication/microsoft-entra-connect.md)

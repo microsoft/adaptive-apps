@@ -50,7 +50,7 @@ services:
     environment:
       ASPNETCORE_URLS: http://+:8080
       OTEL_SERVICE_NAME: trading-backend
-      OTEL_RESOURCE_ATTRIBUTES: service.namespace=portable-apps,service.version=1.0.0,deployment.environment=local
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=adaptive-apps,service.version=1.0.0,deployment.environment=local
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
       OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
       CONNECTION_DB_HOST: postgres
@@ -73,7 +73,7 @@ services:
     environment:
       ASPNETCORE_URLS: http://+:7000
       OTEL_SERVICE_NAME: trading-ai-agent
-      OTEL_RESOURCE_ATTRIBUTES: service.namespace=portable-apps,service.version=1.0.0,deployment.environment=local
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=adaptive-apps,service.version=1.0.0,deployment.environment=local
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
       OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
       CONNECTION_AI_PROVIDER: ${CONNECTION_AI_PROVIDER:-openai}
@@ -90,7 +90,7 @@ services:
     environment:
       PORT: 3000
       OTEL_SERVICE_NAME: trading-frontend
-      OTEL_RESOURCE_ATTRIBUTES: service.namespace=portable-apps,service.version=1.0.0,deployment.environment=local
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=adaptive-apps,service.version=1.0.0,deployment.environment=local
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
       OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
       BACKEND_URL: http://backend:8080

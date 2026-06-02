@@ -47,7 +47,7 @@ pub struct SetupClientArgs {
     pub release: String,
 
     /// OIDC clientId to create. Reused if it already exists.
-    #[arg(long, default_value = "portable-apps")]
+    #[arg(long, default_value = "adaptive-apps")]
     pub client_id: String,
 
     /// Valid redirect URIs (repeatable). Defaults to the tutorial value.

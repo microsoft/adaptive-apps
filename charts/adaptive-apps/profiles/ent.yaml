@@ -1,0 +1,19 @@
+# Reproduces the legacy `ent` portfolio chart.
+# Same as core; OPA governance manifests are available but disabled by
+# default (matches the legacy `ent` chart, which ships OPA disabled and
+# defers enforcement to the Radius governance recipe). Flip
+# features.governance.opa=true (and features.governance.istioExtAuthz=true
+# to wire it into Istio) to enable.
+features:
+  identity:
+    enabled: true
+  istio:
+    install: true
+    mtls: true
+  observability:
+    enabled: true
+  governance:
+    opa: false
+    istioExtAuthz: false
+  ai:
+    enabled: false

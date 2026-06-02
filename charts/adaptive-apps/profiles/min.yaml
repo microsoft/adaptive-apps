@@ -1,0 +1,15 @@
+# Reproduces the legacy `min` portfolio chart.
+# Keycloak + PostgreSQL only.
+features:
+  identity:
+    enabled: true
+  istio:
+    install: false
+    mtls: false
+  observability:
+    enabled: false
+  governance:
+    opa: false
+    istioExtAuthz: false
+  ai:
+    enabled: false

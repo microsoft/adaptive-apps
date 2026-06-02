@@ -14,5 +14,5 @@ service mesh.
 ## Additional Guidance
 
 * [`ent` chart README](../../charts/portfolios/ent/README.md) — install, configuration, and a sample `AuthorizationPolicy` that delegates decisions to OPA.
-* [Getting started with the Ent portfolio](../../tutorials/ent-getting-started/README.md)
+* [Getting started with the Ent portfolio](../../tutorials/getting-started/README.md) (set `PORTFOLIO=ent`)
 * [Policies overview](../policies/README.md) — rationale for OPA as the default policy engine.
