@@ -12,6 +12,66 @@ Early scaffolding. Currently supports a single command:
 ada bootstrap --portfolio <min|core|ent> [--platform <localk8s|aks|arc>] [--with ai]
 ```
 
+## Install
+
+One-line installers download the latest signed release archive and lay
+the binary + bundled Radius artifacts out under `~/.adaptive` (the
+default `$ADA_HOME`):
+
+```bash
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/microsoft/adaptive-apps/main/cli/install.sh | bash
+```
+
+```powershell
+# Windows PowerShell
+iwr -useb https://raw.githubusercontent.com/microsoft/adaptive-apps/main/cli/install.ps1 | iex
+```
+
+Override defaults with environment variables:
+
+| Variable          | Scope      | Purpose                                                         |
+| ----------------- | ---------- | --------------------------------------------------------------- |
+| `ADA_VERSION`     | both       | Pin a release tag (e.g. `cli-v0.1.0`).                          |
+| `ADA_HOME`        | both       | Root for bundled artifacts (default `~/.adaptive`).             |
+| `ADA_INSTALL_DIR` | shell only | Where the binary is installed (default `/usr/local/bin`).       |
+| `ADA_REPO`        | both       | Source GitHub `owner/repo` (default `microsoft/adaptive-apps`). |
+
+On macOS / Linux the shell installer places `ada` into
+`/usr/local/bin` (or `$ADA_INSTALL_DIR`) using `sudo` automatically when
+required, so it's already on `PATH`. On Windows the PowerShell installer
+appends `%USERPROFILE%\.adaptive\bin` to the *User* `PATH` and refreshes
+the current session.
+
+The installed tree is:
+
+```text
+~/.adaptive/                # Windows: %USERPROFILE%\.adaptive
+├── bin/ada                 # binary (ada.exe on Windows; absent on Unix when ADA_INSTALL_DIR is /usr/local/bin)
+└── radius/                 # Radius artifacts shipped with the CLI
+    ├── app.bicep
+    ├── local-env.bicep
+    ├── aks-env.bicep
+    ├── bicepconfig.json
+    ├── types.tgz
+    ├── resource-types/types.yaml
+    └── recipes/…
+```
+
+`ada` resolves `$ADA_HOME` (defaulting to `~/.adaptive`) when it needs
+to locate bundled assets. Use `ada radius path --artifact <name>` to
+print the resolved path of any bundled artifact — handy for scripting:
+
+```bash
+rad resource-type create --from-file "$(ada radius path --artifact types --require-exists)"
+rad bicep publish-extension \
+  --from-file "$(ada radius path --artifact types)" \
+  --target    "$(ada radius path --artifact types-bundle)"
+```
+
+Run `ada init` once after installation if you skipped the installer and
+want the directories pre-created.
+
 ## Build
 
 ```bash

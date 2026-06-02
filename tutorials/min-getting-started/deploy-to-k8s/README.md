@@ -8,29 +8,77 @@
 * [rad](https://docs.radapp.io/guides/tooling/rad-cli/howto-rad-cli/)
 * (optional) An [OpenAI API Key](https://platform.openai.com/api-keys) or [Azure OpenAI deployment key](https://azure.microsoft.com/en-us/products/ai-foundry/models/openai)
 
+## OPTION 1: Use Adaptive App Tools
 
-## 1. Prepare a local Kubernetes cluster
-To demostrate local deployments, you need a local Kubernetes cluster such as [k3s](https://github.com/rancher/k3s) or [Kind](https://kind.sigs.k8s.io/), or a full-scale Kubernetes cluster. We'll use k3s in this tutorial.
+The Adaptive App CLI provides a streamlined experience of configuring everything you need to get ready for a Radius application deployment. Use this tool if you want to quickly set up a test/demo environment. Or, you can follow the manual steps in OPTION 2 below.
 
-1. Install k3d:
+1. Setup the Adaptive App CLI.
 
-    ```bash
-    curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
-    ```    
+    Follow instructions [here](../../common/prepare-cli.md) to set up Adaptive App CLI.
 
-2. Verify installation:
+2.  Bootstrap the infrastructure. This sets up a local K3s cluster, installs Radius, registers Radius resource types and prepares Radius group and enviornment. It also automates creation of KeyCloak client secret and enables port forwarding on KeyCloak service.
 
     ```bash
-    k3d --version
-    ```
-3. Create a K3s cluster:
-
-    ```bash
-    k3d cluster create localk8s
-    # Set K3D_FIX_DNS=0 helps cluster creation complete in environments where it otherwise stalls at configuring CoreDNS configmap
+    ada bootstrap --portfolio min --platform localk8s --release min --namespace min --with-radius --keep-port-forward
     ```
 
-## 2. Set up Radius
+    The command generates a number of `export` commands. Copy those commands for the next step.
+    
+3. In another terminal window, execute the above `export` commands to set the environment variables.
+
+    ```bash
+    export OIDC_CLIENT_ID=portable-apps
+    export OIDC_CLIENT_SECRET=<OIDC client secret>
+    export OIDC_ISSUER=http://min-keycloak.min.svc.cluster.local:8080/realms/master
+    export OIDC_AUTH_ENDPOINT=http://min-keycloak.min.svc.cluster.local:8080/realms/master/protocol/openid-connect/auth
+    export OIDC_TOKEN_ENDPOINT=http://min-keycloak.min.svc.cluster.local:8080/realms/master/protocol/openid-connect/token
+    export OIDC_USERINFO_ENDPOINT=http://min-keycloak.min.svc.cluster.local:8080/realms/master/protocol/openid-connect/userinfo
+    export OIDC_BROWSER_AUTH_ENDPOINT=http://localhost:8080/realms/master/protocol/openid-connect/auth
+    ```
+4. Deploy the Radius app:
+
+    ```bash
+    # under the radius folder
+    rad deploy app.bicep \
+    --group adaptive \
+    --environment trading \
+    --parameters imageRegistry=ghcr.io/microsoft/adaptive-apps \
+    --parameters imageTag=latest \
+    --parameters authUsername=admin \
+    --parameters authPassword=admin \
+    --parameters otelCollectorEndpoint=http://otel-collector.core:4318 \
+    --parameters oidcIssuer=$OIDC_ISSUER \
+    --parameters oidcIssuerOverride=http://localhost:8080/realms/master \
+    --parameters oidcAuthEndpoint=$OIDC_AUTH_ENDPOINT \
+    --parameters oidcBrowserAuthEndpoint=$OIDC_BROWSER_AUTH_ENDPOINT \
+    --parameters oidcTokenEndpoint=$OIDC_TOKEN_ENDPOINT \
+    --parameters oidcUserInfoEndpoint=$OIDC_USERINFO_ENDPOINT \
+    --parameters oidcClientId=$OIDC_CLIENT_ID \
+    --parameters oidcClientSecret=$OIDC_CLIENT_SECRET \
+    --parameters aiProvider=openai \
+    --parameters aiModelName=gpt-4o \
+    --parameters aiApiKey=<OpenAI API Key>
+    ```
+
+2. Expose the frontend:
+
+    ```bash
+    rad resource expose Applications.Core/containers frontend -a portable-apps --port 3000 --remote-port 3000
+    ```
+
+3. Open the app at `http://localhost:3000`.
+
+4. Login using local account admin/admin, or click on "Sign in with OIDC" button to use Keycloak to login with federated credential.
+
+
+## OPTION 2: Manual Setup
+
+### 1. Prepare a local Kubernetes cluster
+To demonstrate local deployments, you need a local Kubernetes cluster such as [k3s](https://github.com/rancher/k3s) or [Kind](https://kind.sigs.k8s.io/), or a full-scale Kubernetes cluster. We'll use k3s in this tutorial.
+
+Follow instructions [here](../../common/prepare-k3s.md) to provision a K3s cluster.
+
+### 2. Set up Radius
 
 Set up Radius on the local cluster and register the custom resource types used by the app model.
 
@@ -75,7 +123,7 @@ Set up Radius on the local cluster and register the custom resource types used b
     rad environment list --group trading
     ```
 
-## 3. Install Adaptive App Capability Portfolio (Min)
+### 3. Install Adaptive App Capability Portfolio (Min)
 
 Start with the `min` portfolio Helm chart. The first bundled component is Keycloak.
 
@@ -113,11 +161,11 @@ Start with the `min` portfolio Helm chart. The first bundled component is Keyclo
     kubectl port-forward -n min svc/min-keycloak 8080:8080
     ```
 
-5. Open a browser and navigate to `localhost:8080`. Log in to KeyCloak portal with user `admin` and password `admin` (which are defined in the `values.yaml` for the Helm chart).
+5. Open a browser and navigate to `localhost:8080`. Log in to Keycloak portal with user `admin` and password `admin` (which are defined in the `values.yaml` for the Helm chart).
 
 6. Click on "Clients" in the left pane, and click on the "Create Client" button to create a new client. Set up a name for the client and accept all default values across screens except for:
 
-    * `Cleint authentication`: set to **On**.
+    * `Client authentication`: set to **On**.
     * `Valid redirect URIs`: set to `http://localhost:3000/*` (or more specifically `http://localhost:3000/auth/oidc/callback`). 
     
     Click "Save" to save the client definition.
@@ -143,7 +191,7 @@ Start with the `min` portfolio Helm chart. The first bundled component is Keyclo
     export OIDC_BROWSER_AUTH_ENDPOINT=http://localhost:8080/realms/master/protocol/openid-connect/auth
     ```
 
-## 4. Install the app
+### 4. Install the app
 
 Deploy the app model to the Radius environment created above.
 
@@ -191,11 +239,10 @@ Deploy the app model to the Radius environment created above.
     ```
 
 3. Open the app at `http://localhost:3000`.
-4. Login using local account admin/admin, or click on "Sign in with OIDC" button to use KeyCloak to login with federated credential.
+4. Login using local account admin/admin, or click on "Sign in with OIDC" button to use Keycloak to login with federated credential.
 
-This is intentionally independent of the app model in `radius/app.bicep`. The app stays portable; the environment decides whether service-to-service traffic is meshed.
 
-## 5. Clean up
+### 5. Clean up
 
 1. Delete the app:
 
@@ -215,9 +262,9 @@ This is intentionally independent of the app model in `radius/app.bicep`. The ap
 
     ```bash
     k3d cluster delete localk8s
-    k3d cluster create localk8s --k3s-arg "--resolv-conf=/etc/reslov.conf@server:0"
+    k3d cluster create localk8s --k3s-arg "--resolv-conf=/etc/resolv.conf@server:0"
     ```
-2. If you have podman also enabled, it may interfer with K3s and Docker operations, depending on how your system is configured. Make sure podman is stopped:
+2. If you have podman also enabled, it may interfere with K3s and Docker operations, depending on how your system is configured. Make sure podman is stopped:
     ```bash
     systemctl --user stop podman.socket
     systemctl --user stop podman.service 
@@ -236,6 +283,6 @@ This is intentionally independent of the app model in `radius/app.bicep`. The ap
 ## Additional Topics
 
 * [Deploy Keycloak behind an ingress](../../../docs/authentication/keycloak-ingress.md)
-* [Configure KeyCloak federation with Azure Entra ID](../../../docs/authentication/keycloak-entra.md)
+* [Configure Keycloak federation with Azure Entra ID](../../../docs/authentication/keycloak-entra.md)
 * [Configure Keycloak federation with a local Active Directory](../../../docs/authentication/keycloak-active-directory.md)
 * [Configure credential sync from local Active Directory to an Azure Entra tenant](../../../docs/authentication/microsoft-entra-connect.md)
