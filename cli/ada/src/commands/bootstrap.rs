@@ -14,9 +14,9 @@ use clap::{Args, ValueEnum};
 use crate::commands::oidc::{self, SetupClientArgs};
 use crate::ui;
 
-/// Default OCI repository prefix for published portfolio charts.
-/// Concrete chart reference is `<prefix>/<portfolio>[-ai]`.
-const DEFAULT_CHART_REGISTRY: &str = "oci://ghcr.io/microsoft/adaptive-apps/charts/portfolios";
+/// Default OCI repository prefix for the published `adaptive-apps` chart.
+/// Concrete chart reference is `<prefix>/adaptive-apps`.
+const DEFAULT_CHART_REGISTRY: &str = "oci://ghcr.io/microsoft/adaptive-apps/charts";
 
 /// Default chart version pulled when `--version` is not supplied.
 const DEFAULT_CHART_VERSION: &str = "0.1.0";
@@ -44,20 +44,6 @@ impl Portfolio {
             Portfolio::Ent => "ent",
             Portfolio::EntAi => "ent-ai",
         }
-    }
-
-    /// Base portfolio without the `-ai` suffix (e.g. `core-ai` -> `core`).
-    fn base(self) -> &'static str {
-        match self {
-            Portfolio::Min | Portfolio::MinAi => "min",
-            Portfolio::Core | Portfolio::CoreAi => "core",
-            Portfolio::Ent | Portfolio::EntAi => "ent",
-        }
-    }
-
-    /// True for the `*-ai` variants.
-    fn has_ai(self) -> bool {
-        matches!(self, Portfolio::MinAi | Portfolio::CoreAi | Portfolio::EntAi)
     }
 }
 
@@ -233,29 +219,19 @@ pub struct BootstrapArgs {
     dry_run: bool,
 
     /// Install from a local chart directory instead of the published OCI
-    /// registry. Points at the directory that contains the portfolio
-    /// charts (legacy layout: `<chart-root>/portfolios/<portfolio>[-ai]`)
-    /// or a unified `adaptive-apps/` chart (with `--unified`).
+    /// registry. Points at the directory that contains the
+    /// `adaptive-apps/` chart (i.e. so that
+    /// `<chart-root>/adaptive-apps/Chart.yaml` exists).
     #[arg(long, env = "ADA_CHART_ROOT")]
     chart_root: Option<PathBuf>,
-
-    /// **Transitional.** Install from the unified `adaptive-apps` chart
-    /// (chart at `<chart-root>/adaptive-apps`, profile at
-    /// `<chart-root>/adaptive-apps/profiles/<portfolio>[-ai].yaml`) instead
-    /// of the legacy per-portfolio chart under
-    /// `<chart-root>/portfolios/<portfolio>[-ai]`. Requires `--chart-root`.
-    /// This flag will be removed once the unified chart fully replaces
-    /// the legacy layout and the legacy charts are deleted.
-    #[arg(long)]
-    unified: bool,
 
     /// Chart version to pull from the OCI registry. Ignored when
     /// `--chart-root` is set.
     #[arg(long, default_value = DEFAULT_CHART_VERSION)]
     version: String,
 
-    /// OCI repository prefix to pull charts from. The concrete reference
-    /// becomes `<chart-registry>/<portfolio>[-ai]`. Ignored when
+    /// OCI repository prefix to pull the chart from. The concrete
+    /// reference becomes `<chart-registry>/adaptive-apps`. Ignored when
     /// `--chart-root` is set.
     #[arg(long, default_value = DEFAULT_CHART_REGISTRY, env = "ADA_CHART_REGISTRY")]
     chart_registry: String,
@@ -362,9 +338,6 @@ pub fn run(args: BootstrapArgs) -> Result<()> {
     ui::detail("release", &args.release);
     ui::detail("namespace", &args.namespace);
     ui::detail("chart", &resolution.chart_ref.to_string_lossy());
-    if args.unified {
-        ui::detail("layout", "unified (transitional --unified)");
-    }
     if let Some(v) = &resolution.version {
         ui::detail("version", v);
     }
@@ -505,12 +478,6 @@ struct Resolution {
 /// context. When `--chart-root` is set we install from a local source tree;
 /// otherwise we pull the published OCI chart at `--version`.
 fn resolve_chart_and_values(args: &BootstrapArgs) -> Result<Resolution> {
-    if args.unified && args.chart_root.is_none() {
-        bail!(
-            "--unified currently requires --chart-root (the unified chart is not yet published to {DEFAULT_CHART_REGISTRY}).\n\
-             Pass --chart-root <path-to-charts-dir> pointing at a tree containing `adaptive-apps/`."
-        );
-    }
     if let Some(chart_root) = args.chart_root.as_deref() {
         return resolve_local(chart_root, args);
     }
@@ -518,71 +485,44 @@ fn resolve_chart_and_values(args: &BootstrapArgs) -> Result<Resolution> {
 }
 
 fn resolve_oci(args: &BootstrapArgs) -> Result<Resolution> {
-    let chart_name = portfolio_chart_name(args);
     let registry = args.chart_registry.trim_end_matches('/');
-    let chart_ref = format!("{registry}/{chart_name}");
+    let chart_ref = format!("{registry}/adaptive-apps");
     Ok(Resolution {
         chart_ref: OsString::from(chart_ref),
         version: Some(args.version.clone()),
+        // OCI install: profiles are not auto-applied (the profile file
+        // is bundled inside the OCI artifact and not extractable until
+        // after `helm pull`). Operators using OCI install must pass
+        // `--values` for the right profile, or use `--chart-root` to
+        // install from source for automatic profile selection.
         values_files: Vec::new(),
     })
 }
 
+/// Resolve against the `adaptive-apps` chart at
+/// `<chart-root>/adaptive-apps`. Per-portfolio feature flags come from
+/// `<chart>/profiles/<portfolio>.yaml`.
 fn resolve_local(chart_root: &Path, args: &BootstrapArgs) -> Result<Resolution> {
-    if args.unified {
-        return resolve_unified(chart_root, args);
-    }
-    resolve_legacy_per_portfolio(chart_root, args)
-}
-
-/// Resolve against the unified `adaptive-apps` chart. The chart lives at
-/// `<chart-root>/adaptive-apps` and per-portfolio feature flags come from
-/// `<chart>/profiles/<portfolio>[-ai].yaml` (the `-ai` is baked into the
-/// profile filename, not a separate overlay).
-fn resolve_unified(chart_root: &Path, args: &BootstrapArgs) -> Result<Resolution> {
     let chart = chart_root.join("adaptive-apps");
     if !chart.join("Chart.yaml").is_file() {
         bail!(
-            "no unified chart at {} (Chart.yaml missing).\n\
-             --unified expects `<chart-root>/adaptive-apps/Chart.yaml`.",
+            "no chart at {} (Chart.yaml missing).\n\
+             --chart-root expects `<chart-root>/adaptive-apps/Chart.yaml`.",
             chart.display()
         );
     }
 
-    let profile_name = portfolio_chart_name(args); // e.g. `core` or `core-ai`
+    let profile_name = args.portfolio.as_str(); // e.g. `core` or `core-ai`
     let profile_file = chart
         .join("profiles")
         .join(format!("{profile_name}.yaml"));
-    require_file(&profile_file, "unified profile")?;
+    require_file(&profile_file, "portfolio profile")?;
 
     Ok(Resolution {
         chart_ref: chart.into_os_string(),
         version: None,
         values_files: vec![profile_file],
     })
-}
-
-fn resolve_legacy_per_portfolio(chart_root: &Path, args: &BootstrapArgs) -> Result<Resolution> {
-    let chart_name = portfolio_chart_name(args);
-    let chart_path = chart_root.join("portfolios").join(&chart_name);
-    if !chart_path.join("Chart.yaml").is_file() {
-        bail!(
-            "no chart at {} (looked for legacy per-portfolio chart; unified chart not present either).\n\
-             Pass --chart-root <dir> to point at a different chart-source directory, \
-             or omit --chart-root to pull the published chart from {}.",
-            chart_path.display(),
-            DEFAULT_CHART_REGISTRY
-        );
-    }
-    Ok(Resolution {
-        chart_ref: chart_path.into_os_string(),
-        version: None,
-        values_files: Vec::new(),
-    })
-}
-
-fn portfolio_chart_name(args: &BootstrapArgs) -> String {
-    args.portfolio.as_str().to_string()
 }
 
 fn require_file(path: &Path, what: &str) -> Result<()> {
@@ -646,70 +586,58 @@ fn apply_platform_automation(args: &BootstrapArgs) -> Result<PlatformOutcome> {
 }
 
 fn apply_aks_automation(args: &BootstrapArgs) -> Result<PlatformOutcome> {
-    if let Some(sub) = &args.azure_subscription {
-        ensure_tool("az")?;
-        if args.dry_run {
-            ui::dry_run(&format!("would run: az account set --subscription {sub}"));
-        } else {
-            ui::step(&format!("az account set --subscription {sub}"));
-            let status = Command::new("az")
-                .args(["account", "set", "--subscription"])
-                .arg(sub)
-                .status()
-                .context("failed to run `az account set`")?;
-            if !status.success() {
-                bail!("`az account set --subscription {sub}` failed");
-            }
+    // --platform aks needs enough context to actually talk to the cluster:
+    // a subscription to set, plus the rg/cluster pair used to discover the
+    // Istio add-on revision and (with --with-radius) to federate identity.
+    let mut missing = Vec::new();
+    if args.azure_subscription.is_none() {
+        missing.push("--azure-subscription");
+    }
+    if args.resource_group.is_none() {
+        missing.push("--resource-group");
+    }
+    if args.aks_cluster.is_none() {
+        missing.push("--aks-cluster");
+    }
+    if !missing.is_empty() {
+        bail!(
+            "--platform aks requires {}. Re-run with the missing flag(s) so `ada` can \
+             select the subscription and discover the Istio add-on revision.",
+            missing.join(", ")
+        );
+    }
+
+    let sub = args.azure_subscription.as_deref().expect("checked above");
+    ensure_tool("az")?;
+    if args.dry_run {
+        ui::dry_run(&format!("would run: az account set --subscription {sub}"));
+    } else {
+        ui::step(&format!("az account set --subscription {sub}"));
+        let status = Command::new("az")
+            .args(["account", "set", "--subscription"])
+            .arg(sub)
+            .status()
+            .context("failed to run `az account set`")?;
+        if !status.success() {
+            bail!("`az account set --subscription {sub}` failed");
         }
     }
 
-    let istio_revision = match (&args.resource_group, &args.aks_cluster) {
-        (Some(rg), Some(cluster)) => Some(discover_aks_istio_revision(rg, cluster, args.dry_run)?),
-        (None, None) => None,
-        _ => bail!("--resource-group and --aks-cluster must be supplied together"),
-    };
+    let rg = args.resource_group.as_deref().expect("checked above");
+    let cluster = args.aks_cluster.as_deref().expect("checked above");
+    let istio_revision = Some(discover_aks_istio_revision(rg, cluster, args.dry_run)?);
 
     // AKS owns the Istio control plane via the Istio add-on. The chart
     // must not install its own Istio, and the post-install PeerAuthn
     // hook must target the AKS-managed namespace.
-    let helm_sets = if args.unified {
-        // Unified chart: feature flag + top-level istio.namespace.
-        vec![
-            "features.istio.install=false".to_string(),
-            format!("istio.namespace={}", args.aks_istio_namespace),
-        ]
-    } else {
-        // Legacy charts: `istio.*` values live in the `core` subchart, so
-        // prefix the override path based on where `core` sits in the
-        // dependency chain.
-        let prefix = istio_values_prefix(args);
-        vec![
-            format!("{prefix}istio.install.enabled=false"),
-            format!("{prefix}istio.namespace={}", args.aks_istio_namespace),
-        ]
-    };
+    let helm_sets = vec![
+        "features.istio.install=false".to_string(),
+        format!("istio.namespace={}", args.aks_istio_namespace),
+    ];
     Ok(PlatformOutcome {
         helm_sets,
         istio_revision,
     })
-}
-
-/// Return the dotted helm-values prefix needed to address the `core`
-/// subchart's `istio.*` values from the top of the chart being installed.
-/// Empty string when installing `core` itself.
-fn istio_values_prefix(args: &BootstrapArgs) -> &'static str {
-    match (args.portfolio.base(), args.portfolio.has_ai()) {
-        // `core` is the parent chart — istio values are at the top.
-        ("core", false) => "",
-        // `core-ai` → core subchart.
-        ("core", true) => "core.",
-        // `ent` → core subchart.
-        ("ent", false) => "core.",
-        // `ent-ai` → ent subchart → core subchart.
-        ("ent", true) => "ent.core.",
-        // `min` doesn't bundle istio; sets are still harmless.
-        _ => "",
-    }
 }
 
 /// Run `az aks show ... --query 'serviceMeshProfile.istio.revisions[0]'`

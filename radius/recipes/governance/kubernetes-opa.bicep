@@ -16,8 +16,8 @@
 //
 // MIGRATION NOTE
 //   This recipe is the portable equivalent of:
-//     - charts/portfolios/ent/templates/opa.yaml                       (PDP workload)
-//     - charts/portfolios/ent/templates/post-install-istio-extauthz.yaml (mesh wiring)
+//     - charts/adaptive-apps/templates/governance/opa.yaml                       (PDP workload)
+//     - charts/adaptive-apps/templates/governance/post-install-istio-extauthz.yaml (mesh wiring)
 //   When migrating, set `ent.opa.enabled=false` and `ent.istioExtAuthz.enabled=false`
 //   in the Helm values, deploy this recipe with `istioIntegration=true`, and
 //   AuthorizationPolicy resources can continue to use the same provider name
@@ -102,7 +102,7 @@ var commonLabels = {
 }
 
 // Default-allow policy applied when the caller does not supply one. Mirrors
-// the default in charts/portfolios/ent/templates/opa.yaml.
+// the default in charts/adaptive-apps/templates/governance/opa.yaml.
 var defaultPolicyRego = '''package envoy.authz
 
 import rego.v1
@@ -325,7 +325,7 @@ var decisionServiceDns = '${opaService.metadata.name}.${namespace}.svc.cluster.l
 
 // ------------------------------------------------------------------
 // Optional Istio integration — patch MeshConfig.extensionProviders.
-// Mirrors charts/portfolios/ent/templates/post-install-istio-extauthz.yaml.
+// Mirrors charts/adaptive-apps/templates/governance/post-install-istio-extauthz.yaml.
 // All four resources are guarded by `istioIntegration` and only
 // referenced in `output.resources` when present (avoids conditional
 // dependsOn pitfalls).

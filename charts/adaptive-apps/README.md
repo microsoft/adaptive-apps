@@ -1,16 +1,10 @@
 # adaptive-apps (unified capability chart)
 
-A single Helm chart that supersedes the per-portfolio charts under
-[charts/portfolios/](../portfolios). Capability stacks (identity, mesh,
-observability, governance, AI marker) are toggled via `features.*` flags,
-and the six [`profiles/`](./profiles) overlays reproduce the legacy
-`min`, `core`, `ent`, `min-ai`, `core-ai`, `ent-ai` portfolios.
-
-> **Status:** parallel introduction. The existing
-> `charts/portfolios/{min,core,ent,min-ai,core-ai,ent-ai}` charts remain
-> the source of truth for tutorials and the `ada` CLI for now. The plan
-> is to migrate `ada bootstrap` and the tutorials onto this chart, then
-> retire the per-portfolio charts.
+A single Helm chart that delivers all Adaptive Apps capability portfolios.
+Capability stacks (identity, mesh, observability, governance, AI marker)
+are toggled via `features.*` flags, and the six [`profiles/`](./profiles)
+overlays realize the `min`, `core`, `ent`, `min-ai`, `core-ai`, `ent-ai`
+portfolios.
 
 ## Feature flags
 
@@ -95,14 +89,11 @@ charts/adaptive-apps/
     └── governance/      # OPA + Istio extensionProvider patch
 ```
 
-## Migration notes
+## Notes
 
-* Existing releases of the per-portfolio charts must be uninstalled before
-  installing this chart into the same namespace — resource names overlap
-  by design so that downstream Radius recipes keep working unchanged.
-* `_helpers.tpl` keeps `min.*` / `core.*` / `ent.*` named templates as
-  shims pointing at the new `adaptive.*` helpers, so templates copied
-  from `charts/portfolios/*` render unchanged.
+* `_helpers.tpl` exposes `min.*` / `core.*` / `ent.*` named-template
+  aliases pointing at the shared `adaptive.*` helpers, so identity / mesh /
+  governance templates can be referenced under either name.
 * The `features.ai.enabled` flag exists for downstream tooling (CLI,
   Radius recipes) to detect intent; no manifests are gated on it inside
   the chart today.

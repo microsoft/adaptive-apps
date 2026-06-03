@@ -1,11 +1,10 @@
 apiVersion: v2
 name: adaptive-apps
 description: |
-  Unified capability chart for Adaptive Apps. Replaces the per-portfolio
-  charts under charts/portfolios/* with a single chart whose capabilities
-  (identity, mesh, observability, governance, ai marker) are toggled via
-  feature flags. Six values overlays under ./profiles reproduce the
-  legacy min, core, ent, min-ai, core-ai, ent-ai portfolios.
+  Unified capability chart for Adaptive Apps. A single chart whose
+  capabilities (identity, mesh, observability, governance, ai marker)
+  are toggled via feature flags. Six values overlays under ./profiles
+  realize the min, core, ent, min-ai, core-ai, ent-ai portfolios.
 type: application
 version: 0.1.0
 appVersion: "1.0.0"

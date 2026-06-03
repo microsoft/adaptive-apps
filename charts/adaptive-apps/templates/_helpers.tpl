@@ -1,9 +1,9 @@
 {{/*
   adaptive-apps unified chart helpers.
 
-  Canonical helpers are under the `adaptive.*` namespace. Legacy `min.*`,
-  `core.*`, `ent.*` names are kept as thin shims so templates copied from
-  charts/portfolios/* render without modification.
+  Canonical helpers are under the `adaptive.*` namespace. `min.*`, `core.*`,
+  `ent.*` aliases are exposed below so identity/mesh/governance templates
+  can be referenced under either name.
 */}}
 
 {{/* Chart name */}}
@@ -84,8 +84,7 @@ true
 {{- end -}}
 
 {{/*
-  Legacy alias used by identity templates copied from charts/portfolios/min.
-  Maps to the new feature flag.
+  Alias used by identity templates. Maps to the new feature flag.
 */}}
 {{- define "adaptive.keycloakEnabled" -}}
 {{ include "adaptive.feature.identity" . }}

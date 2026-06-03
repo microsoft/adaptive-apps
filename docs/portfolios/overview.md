@@ -8,7 +8,7 @@ An application targets a specific capability portfolio and can be deployed to an
 
 ## Portfolio dependency chain
 
-Each portfolio is delivered as a Helm chart under [charts/portfolios](../../charts/portfolios/) and is composed by depending on a smaller portfolio. The non-AI and AI chains are kept linear (no diamond dependencies); each `*-ai` portfolio layers AI capabilities on top of its non-AI peer:
+Each portfolio is delivered by the unified [`charts/adaptive-apps`](../../charts/adaptive-apps/) Helm chart, parametrized by a profile file at `charts/adaptive-apps/profiles/<portfolio>.yaml`. Capability composition is described conceptually as a chain of supersets (each higher tier includes everything from the lower tier); the non-AI and AI chains are kept linear (no diamond dependencies), and each `*-ai` portfolio layers AI capabilities on top of its non-AI peer:
 
 ```
 min ── core ── ent
@@ -53,9 +53,9 @@ The following table maps capabilities to product/OSS offerings in different envi
 
 ## Implementation notes
 
-- **Keycloak** is installed by the `min` chart and is therefore present in every portfolio. An optional `customCert` value mounts a CA certificate into the Keycloak pod; `hostAliases` can inject host-to-IP entries for on-prem domain controllers. See [charts/portfolios/min/README.md](../../charts/portfolios/min/README.md).
-- **Istio** is installed by the `core` chart via Helm on local Kubernetes, or enabled as the AKS Istio add-on (`istio.install.enabled=false`). Strict `PeerAuthentication` is applied to enrolled namespaces. See [charts/portfolios/core/README.md](../../charts/portfolios/core/README.md).
-- **Observability** (OpenTelemetry Collector, Prometheus, Zipkin) is provisioned by the `core` chart and toggled via `observability.enabled`.
-- **Policy enforcement** is provided by the `ent` chart, which deploys OPA with the `opa-envoy-plugin` and registers it with Istio as the `opa-ext-authz-grpc` `extensionProvider`. Applications opt in via `AuthorizationPolicy` resources with `action: CUSTOM`. See [charts/portfolios/ent/README.md](../../charts/portfolios/ent/README.md).
+- **Keycloak** is installed by the `min` profile and is therefore present in every portfolio. An optional `customCert` value mounts a CA certificate into the Keycloak pod; `hostAliases` can inject host-to-IP entries for on-prem domain controllers.
+- **Istio** is installed by the chart on local Kubernetes (gated by `features.istio.install`), or enabled as the AKS Istio add-on (`--set features.istio.install=false --set istio.namespace=aks-istio-system`). Strict `PeerAuthentication` is applied to enrolled namespaces.
+- **Observability** (OpenTelemetry Collector, Prometheus, Zipkin) is enabled by the `core` and higher profiles via `features.observability.enabled`.
+- **Policy enforcement** is provided in the `ent` and `ent-ai` profiles, which deploy OPA with the `opa-envoy-plugin` and register it with Istio as the `opa-ext-authz-grpc` `extensionProvider`. Applications opt in via `AuthorizationPolicy` resources with `action: CUSTOM`. See the [governance tutorial](../../tutorials/governance/README.md).
 - **Workload identity** is provided through Radius recipes ([radius/recipes/workload-identity](../../radius/recipes/workload-identity)) rather than the portfolio chart itself, so apps can bind the appropriate implementation (Azure workload identity or a local no-op) at deployment time.
 - **AI inference** is exposed through the `aiModel` Radius resource type ([radius/recipes/ai-agent](../../radius/recipes/ai-agent)). All portfolios can bind `aiModel` to an internet-hosted endpoint (e.g. Azure OpenAI). The `*-ai` portfolios additionally support binding `aiModel` to an in-cluster [KAITO](https://github.com/kaito-project/kaito) workspace for self-hosted inference.

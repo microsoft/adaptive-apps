@@ -70,8 +70,27 @@ the portfolio chart is running, and OIDC env vars are exported". Pick **one**:
       --platform $PLATFORM \
       --release $RELEASE \
       --namespace $NAMESPACE \
-      --chart-root charts --unified \
+      --chart-root charts \
       --with-radius \
+      --keep-port-forward
+    ```
+
+    If your are using AKS, you need to pass in three additional parameters:
+    `--azure-subscription`, `--resource-group`, and `--aks-cluster`. `ada`
+    uses the rg/cluster pair to discover the active Istio add-on revision
+    and (with `--with-radius`) to federate the Radius service accounts.
+
+    ```bash
+    ada bootstrap \
+      --portfolio $PORTFOLIO \
+      --platform aks \
+      --release $RELEASE \
+      --namespace $NAMESPACE \
+      --chart-root charts \
+      --with-radius \
+      --azure-subscription <Your Azure subscription Id> \
+      --resource-group <Your Azure resource group> \
+      --aks-cluster <Your AKS cluster name> \
       --keep-port-forward
     ```
 
@@ -96,10 +115,6 @@ the portfolio chart is running, and OIDC env vars are exported". Pick **one**:
 
 4. Copy the `export OIDC_*` lines into the terminal you'll use for §3 and
 skip ahead to [§3 Deploy the sample app](#3-deploy-the-sample-app).
-
-> The `--unified` switch is transitional — it tells `ada` to install the
-> unified `adaptive-apps` chart instead of the legacy per-portfolio charts.
-> It will be removed once the legacy charts are deleted.
 
 ### 2.2 OPTION 2 — Manual
 
@@ -195,6 +210,24 @@ rad env create trading --group adaptive --namespace trading-adaptive-apps
 rad env switch trading
 ```
 
+> **AKS only — register the Azure credential.** The `wi-helper.sh` you ran
+> in [`prepare-aks.md`](../common/prepare-aks.md) created an Entra app named
+> `$AKS_CLUSTER-radius-app` and federated it to the Radius service
+> accounts. Now bind it to the Radius control plane (`ada bootstrap
+> --with-radius --platform aks` does this for you):
+>
+> ```bash
+> export APPLICATION_CLIENT_ID=$(az ad app list \
+>   --display-name "$AKS_CLUSTER-radius-app" --query '[].appId' -o tsv)
+> export TENANT_ID=$(az account show --query tenantId -o tsv)
+>
+> rad credential register azure wi \
+>   --client-id $APPLICATION_CLIENT_ID --tenant-id $TENANT_ID
+>
+> # Verify (may take 30+ seconds to refresh):
+> rad credential show azure
+> ```
+
 Register the resource types used by the sample app:
 
 ```bash
@@ -212,6 +245,32 @@ rad deploy radius/local-env.bicep --group adaptive --environment trading
 ---
 
 ## 3. Deploy the sample app
+
+### 3.0 (AKS only) Provision per-app workload identities
+
+The sample app's `backend` and `frontend` containers need Azure managed
+identities federated to their Kubernetes service accounts. Run
+`app-wi-setup.sh` once per workload — it creates the managed identity,
+federates it, and assigns the needed RBAC. Skip this section on every
+other platform.
+
+```bash
+cd tutorials/getting-started/assets
+
+./app-wi-setup.sh backend  $RESOURCE_GROUP $AZURE_SUBSCRIPTION $AKS_OIDC_ISSUER trading default
+./app-wi-setup.sh frontend $RESOURCE_GROUP $AZURE_SUBSCRIPTION $AKS_OIDC_ISSUER trading default
+
+export BACKEND_CLIENT_ID=$(az identity show -g $RESOURCE_GROUP -n backend  --query clientId -o tsv)
+export FRONTEND_CLIENT_ID=$(az identity show -g $RESOURCE_GROUP -n frontend --query clientId -o tsv)
+cd -
+```
+
+> Run this **once** per cluster. Re-deploying the app later does not
+> re-provision identities. Pass `$BACKEND_CLIENT_ID` /
+> `$FRONTEND_CLIENT_ID` to `rad deploy radius/app.bicep` as parameters
+> wired to the bicep's workload-identity inputs.
+
+### 3.1 Pick an AI provider
 
 Pick how the sample app's AI agent reaches a model. The choice is
 **independent of the portfolio** — any portfolio can use either provider:

@@ -88,17 +88,19 @@ Installs or upgrades a portfolio onto the kube context currently selected by
 By default the chart is pulled from the published OCI registry:
 
 ```
-oci://ghcr.io/microsoft/adaptive-apps/charts/portfolios/<portfolio>[-ai]
+oci://ghcr.io/microsoft/adaptive-apps/charts/adaptive-apps
 ```
 
-at the version selected by `--version` (default `0.1.0`). Pass `--chart-root
-<dir>` to install from a local chart source tree instead; the resolver
-auto-detects the unified chart (`<chart-root>/adaptive-apps`) or falls back
-to the legacy per-portfolio layout (`<chart-root>/portfolios/<portfolio>[-ai]`).
+at the version selected by `--version` (default `0.1.0`). The portfolio
+selection becomes a profile file inside the chart — `profiles/<portfolio>.yaml`.
+
+Pass `--chart-root <dir>` to install from a local chart source tree
+instead; ada expects `<chart-root>/adaptive-apps/Chart.yaml` and applies
+`<chart-root>/adaptive-apps/profiles/<portfolio>.yaml` automatically.
 
 `--platform` is optional. When omitted no platform overrides are applied and
 the install targets whatever cluster the current `kubectl` context points at.
-When `--platform aks` is set, ada appends `--set istio.install.enabled=false`
+When `--platform aks` is set, ada appends `--set features.istio.install=false`
 and `--set istio.namespace=aks-istio-system` so the chart defers to the AKS
 Istio add-on; pass `--azure-subscription <id>` to switch subscriptions via
 `az account set` before invoking helm.
