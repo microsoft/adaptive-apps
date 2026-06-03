@@ -1,6 +1,6 @@
-# Radius Deployment Guide — portable-apps
+# Radius Deployment Guide — adaptive-apps
 
-This directory contains all Radius assets needed to deploy the **portable-apps** stock-trading simulator on Kubernetes.
+This directory contains all Radius assets needed to deploy the **adaptive-apps** stock-trading simulator on Kubernetes.
 
 ```
 radius/
@@ -161,8 +161,8 @@ rad deploy app.bicep --group trading --environment trading --parameters imageReg
 Monitor deployment:
 
 ```bash
-rad app graph -a portable-apps
-rad resource list Applications.Core/containers -a portable-apps
+rad app graph -a adaptive-apps
+rad resource list Applications.Core/containers -a adaptive-apps
 ```
 
 ---
@@ -173,7 +173,7 @@ The frontend server proxies all API, AI-agent, and MQTT WebSocket traffic, so
 you only need to expose one port:
 
 ```bash
-rad resource expose Applications.Core/containers frontend -a portable-apps --port 3000 --remote-port 3000
+rad resource expose Applications.Core/containers frontend -a adaptive-apps --port 3000 --remote-port 3000
 ```
 
 Then open **http://localhost:3000** and log in with the `authUsername` / `authPassword` you passed above.
@@ -294,7 +294,7 @@ Same as the local workflow:
 
 ```bash
 rad resource expose Applications.Core/containers frontend \
-  -a portable-apps --port 3000 --remote-port 3000
+  -a adaptive-apps --port 3000 --remote-port 3000
 ```
 
 Or configure an Ingress / Load Balancer for production access.
@@ -304,7 +304,7 @@ Or configure an Ingress / Load Balancer for production access.
 ## Tear down
 
 ```bash
-rad app delete portable-apps
+rad app delete adaptive-apps
 rad resource delete Applications.Core/environments trading --group trading
 rad group delete trading
 ```
@@ -315,7 +315,7 @@ rad group delete trading
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│  Radius Application: portable-apps                                   │
+│  Radius Application: adaptive-apps                                   │
 │                                                                      │
 │  ┌──────────┐ /api/* ┌──────────┐  PostgreSQL  ┌────────────────┐  │
 │  │ frontend │───────▶│ backend  │─────────────▶│  trading-db    │  │

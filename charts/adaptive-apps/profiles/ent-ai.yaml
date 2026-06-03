@@ -1,0 +1,16 @@
+# Reproduces the legacy `ent-ai` portfolio chart.
+# Full stack: identity + mesh + observability + governance (off by default)
+# + ai marker. AI workloads are deployed via Radius (Kaito).
+features:
+  identity:
+    enabled: true
+  istio:
+    install: true
+    mtls: true
+  observability:
+    enabled: true
+  governance:
+    opa: false
+    istioExtAuthz: false
+  ai:
+    enabled: true

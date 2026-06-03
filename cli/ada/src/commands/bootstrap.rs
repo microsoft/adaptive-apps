@@ -11,70 +11,84 @@ use std::process::Command;
 use anyhow::{anyhow, bail, Context, Result};
 use clap::{Args, ValueEnum};
 
+use crate::commands::oidc::{self, SetupClientArgs};
 use crate::ui;
 
-/// Default OCI repository prefix for published portfolio charts.
-/// Concrete chart reference is `<prefix>/<portfolio>[-ai]`.
-const DEFAULT_CHART_REGISTRY: &str = "oci://ghcr.io/microsoft/adaptive-apps/charts/portfolios";
+/// Default OCI repository prefix for the published `adaptive-apps` chart.
+/// Concrete chart reference is `<prefix>/adaptive-apps`.
+const DEFAULT_CHART_REGISTRY: &str = "oci://ghcr.io/microsoft/adaptive-apps/charts";
 
 /// Default chart version pulled when `--version` is not supplied.
 const DEFAULT_CHART_VERSION: &str = "0.1.0";
 
-#[derive(Debug, Copy, Clone, ValueEnum)]
-#[value(rename_all = "lowercase")]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, ValueEnum)]
+#[value(rename_all = "kebab-case")]
 pub enum Portfolio {
     Min,
+    MinAi,
     Core,
+    CoreAi,
     Ent,
+    EntAi,
 }
 
 impl Portfolio {
+    /// Full slug used as the chart name and profile filename
+    /// (e.g. `core`, `core-ai`).
     fn as_str(self) -> &'static str {
         match self {
             Portfolio::Min => "min",
+            Portfolio::MinAi => "min-ai",
             Portfolio::Core => "core",
+            Portfolio::CoreAi => "core-ai",
             Portfolio::Ent => "ent",
+            Portfolio::EntAi => "ent-ai",
         }
     }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, ValueEnum)]
-#[value(rename_all = "lowercase")]
+#[value(rename_all = "kebab-case")]
 pub enum Platform {
-    /// Local Kubernetes (kind, k3d, Docker Desktop, minikube).
-    Localk8s,
-    /// Azure Kubernetes Service.
+    /// Local k3s via k3d. `ada bootstrap` will auto-provision a cluster
+    /// (`k3d cluster create <name>`) and switch the kubectl context to it.
+    /// Pass `--skip-cluster-provision` to reuse an existing k3d cluster.
+    K3s,
+    /// Bring-your-own standard Kubernetes distribution (kind, Docker
+    /// Desktop, minikube, vanilla k8s, etc.). Cluster must already exist;
+    /// `ada` runs helm/kubectl/rad against whatever cluster the current
+    /// kubectl context points at — no provisioning, no platform overrides.
+    K8s,
+    /// Azure Kubernetes Service. Cluster must already exist; `ada` discovers
+    /// the Istio add-on revision and applies the matching helm overrides.
     Aks,
-    /// Azure Arc-enabled Kubernetes.
+    /// Azure Arc-enabled Kubernetes (on-prem, edge, other clouds). Cluster
+    /// must already exist and be Arc-connected; `ada` does no cloud-side
+    /// automation — just runs helm/kubectl/rad against the current context.
     Arc,
+    /// Azure Local (formerly Azure Stack HCI). Cluster must already exist;
+    /// `ada` does no cloud-side automation — just runs helm/kubectl/rad
+    /// against the current context.
+    AzureLocal,
 }
 
 impl Platform {
     fn as_str(self) -> &'static str {
         match self {
-            Platform::Localk8s => "localk8s",
+            Platform::K3s => "k3s",
+            Platform::K8s => "k8s",
             Platform::Aks => "aks",
             Platform::Arc => "arc",
+            Platform::AzureLocal => "azure-local",
         }
     }
 }
 
-/// Additive capability overlays. Today only `ai` exists; more axes
-/// (edge, airgap, …) will be added as overlays rather than as new
-/// portfolios so the matrix doesn't explode.
-#[derive(Debug, Copy, Clone, ValueEnum)]
-#[value(rename_all = "lowercase")]
-pub enum Capability {
-    Ai,
-}
-
-impl Capability {
-    fn as_str(self) -> &'static str {
-        match self {
-            Capability::Ai => "ai",
-        }
-    }
-}
+/// Additive capability overlays. Reserved for future axes (edge, airgap,
+/// …); the `ai` overlay is folded into the portfolio enum itself
+/// (`--portfolio core-ai`, etc.). No `--with` flag is currently exposed.
+#[allow(dead_code)]
+struct Capability;
 
 #[derive(Debug, Args)]
 pub struct BootstrapArgs {
@@ -85,12 +99,22 @@ pub struct BootstrapArgs {
     /// Target platform. Selects platform-specific helm overrides and (where
     /// applicable) auto-discovers cluster facts via the cloud CLI.
     ///
-    /// - `aks`  — assumes the AKS Istio add-on owns the mesh control plane
-    ///           (sets `istio.install.enabled=false`, `istio.namespace=aks-istio-system`).
-    ///           If `--azure-subscription` is set, runs `az account set`
-    ///           before invoking helm.
-    /// - `arc`  — reserved; no automation today.
-    /// - `localk8s` — chart installs Istio itself.
+    /// - `k3s` — chart installs Istio itself. `ada bootstrap` will
+    ///           auto-provision a local k3d cluster (pass
+    ///           `--skip-cluster-provision` to use an existing one).
+    /// - `k8s` — bring-your-own standard Kubernetes distribution. No
+    ///           auto-provisioning, no platform overrides; `ada` just runs
+    ///           helm/kubectl/rad against the current `kubectl` context.
+    /// - `aks` — assumes the AKS Istio add-on owns the mesh control plane
+    ///           (sets `istio.install.enabled=false`,
+    ///           `istio.namespace=aks-istio-system`). If
+    ///           `--azure-subscription` is set, runs `az account set`
+    ///           before invoking helm. Cluster must already exist.
+    /// - `arc`, `azure-local` — no automation; `ada` just runs
+    ///           helm/kubectl/rad against whatever cluster the current
+    ///           `kubectl` context points at. Use these when you've
+    ///           provisioned the cluster yourself with the standard
+    ///           Kubernetes toolchain.
     ///
     /// Optional. When omitted no platform overrides are applied and the
     /// install targets whatever cluster the current `kubectl` context
@@ -137,6 +161,26 @@ pub struct BootstrapArgs {
     #[arg(long, default_value = "adaptive")]
     radius_group: String,
 
+    /// Radius environment name to create (must match the environment
+    /// resource name in the env bicep file, e.g. `trading` in
+    /// `local-env.bicep`).
+    #[arg(long, default_value = "trading")]
+    radius_environment: String,
+
+    /// Directory containing `resource-types/types.yaml` and the
+    /// environment bicep files (`local-env.bicep`, `aks-env.bicep`).
+    /// Used by `--with-radius` to register the custom resource types
+    /// and deploy the Radius Environment + recipes. Defaults to
+    /// `radius` relative to the current working directory.
+    #[arg(long, default_value = "radius")]
+    radius_dir: PathBuf,
+
+    /// Skip registering the project's Radius resource types and
+    /// deploying the environment bicep when `--with-radius` is set.
+    /// Pass this flag if you want to deploy the env file manually.
+    #[arg(long)]
+    skip_radius_recipes: bool,
+
     /// Skip automatic Azure credential provisioning. By default, when
     /// `--with-radius` is combined with `--platform aks` and both
     /// `--resource-group` and `--aks-cluster` are supplied, `ada` creates
@@ -148,9 +192,11 @@ pub struct BootstrapArgs {
     #[arg(long)]
     skip_azure_credentials: bool,
 
-    /// Additive capability overlays (repeatable). e.g. `--with ai`.
-    #[arg(long = "with", value_enum, num_args = 0..)]
-    with: Vec<Capability>,
+    /// Additive capability overlays (repeatable). Reserved for future
+    /// axes; the `ai` overlay is now part of the portfolio enum itself
+    /// (e.g. `--portfolio core-ai`).
+    #[arg(skip)]
+    with: Vec<()>,
 
     /// Helm release name.
     #[arg(long, default_value = "adaptive-apps")]
@@ -173,9 +219,9 @@ pub struct BootstrapArgs {
     dry_run: bool,
 
     /// Install from a local chart directory instead of the published OCI
-    /// registry. Points at the directory that contains the portfolio
-    /// charts (legacy layout: `<chart-root>/portfolios/<portfolio>[-ai]`)
-    /// or a unified `adaptive-apps/` chart.
+    /// registry. Points at the directory that contains the
+    /// `adaptive-apps/` chart (i.e. so that
+    /// `<chart-root>/adaptive-apps/Chart.yaml` exists).
     #[arg(long, env = "ADA_CHART_ROOT")]
     chart_root: Option<PathBuf>,
 
@@ -184,23 +230,59 @@ pub struct BootstrapArgs {
     #[arg(long, default_value = DEFAULT_CHART_VERSION)]
     version: String,
 
-    /// OCI repository prefix to pull charts from. The concrete reference
-    /// becomes `<chart-registry>/<portfolio>[-ai]`. Ignored when
+    /// OCI repository prefix to pull the chart from. The concrete
+    /// reference becomes `<chart-registry>/adaptive-apps`. Ignored when
     /// `--chart-root` is set.
     #[arg(long, default_value = DEFAULT_CHART_REGISTRY, env = "ADA_CHART_REGISTRY")]
     chart_registry: String,
 
     /// Name of the local k3d cluster to provision/reuse when
-    /// `--platform localk8s` is set. The resulting kube context is
+    /// `--platform k3s` is set. The resulting kube context is
     /// `k3d-<name>`.
-    #[arg(long, default_value = "localk8s")]
+    #[arg(long, default_value = "k3s")]
     k3d_cluster: String,
 
     /// Skip automatic local-cluster provisioning. By default `--platform
-    /// localk8s` runs `k3d cluster create <name>` (idempotent) and
+    /// k3s` runs `k3d cluster create <name>` (idempotent) and
     /// switches the kubectl context to `k3d-<name>` before installing.
     #[arg(long)]
     skip_cluster_provision: bool,
+
+    /// Skip automatic Keycloak OIDC client provisioning. By default, after
+    /// helm install succeeds, `ada` connects to the chart-deployed
+    /// Keycloak via port-forward and creates (or reuses) an OIDC client
+    /// so the operator doesn't have to do it through the admin console.
+    /// Pass this flag to skip and provision the client manually.
+    #[arg(long)]
+    skip_oidc_client: bool,
+
+    /// OIDC clientId to provision in Keycloak.
+    #[arg(long, default_value = "adaptive-apps")]
+    oidc_client_id: String,
+
+    /// Valid redirect URI for the OIDC client (repeatable).
+    #[arg(long = "oidc-redirect-uri", default_values_t = vec!["http://localhost:3000/*".to_string()])]
+    oidc_redirect_uris: Vec<String>,
+
+    /// Keycloak realm hosting the OIDC client.
+    #[arg(long, default_value = "master")]
+    oidc_realm: String,
+
+    /// Keycloak admin username (defaults to the chart's default).
+    #[arg(long, default_value = "admin")]
+    keycloak_admin_user: String,
+
+    /// Keycloak admin password (defaults to the chart's default).
+    #[arg(long, default_value = "admin")]
+    keycloak_admin_password: String,
+
+    /// After provisioning the OIDC client, keep the `kubectl port-forward`
+    /// to Keycloak running in the foreground (press Ctrl-C to stop).
+    /// Use this when you want to run `rad deploy` from another terminal
+    /// against `http://localhost:8080` without setting up port-forwarding
+    /// yourself.
+    #[arg(long)]
+    keep_port_forward: bool,
 }
 
 pub fn run(args: BootstrapArgs) -> Result<()> {
@@ -252,10 +334,7 @@ pub fn run(args: BootstrapArgs) -> Result<()> {
             );
         }
     }
-    if !args.with.is_empty() {
-        let with: Vec<&str> = args.with.iter().map(|c| c.as_str()).collect();
-        ui::detail("with", &with.join(","));
-    }
+    let _ = &args.with; // reserved for future overlays
     ui::detail("release", &args.release);
     ui::detail("namespace", &args.namespace);
     ui::detail("chart", &resolution.chart_ref.to_string_lossy());
@@ -285,8 +364,8 @@ pub fn run(args: BootstrapArgs) -> Result<()> {
     }
     println!();
 
-    // Provision a local k3d cluster before helm runs on --platform localk8s.
-    if matches!(args.platform, Some(Platform::Localk8s)) && !args.skip_cluster_provision {
+    // Provision a local k3d cluster before helm runs on --platform k3s.
+    if matches!(args.platform, Some(Platform::K3s)) && !args.skip_cluster_provision {
         provision_k3d_cluster(&args.k3d_cluster, args.dry_run)?;
         println!();
     }
@@ -297,7 +376,9 @@ pub fn run(args: BootstrapArgs) -> Result<()> {
         ui::dry_run("not executing helm");
         if args.with_radius {
             install_radius(&args)?;
+            print_app_deploy_hint(&args);
         }
+        maybe_provision_oidc_client(&args)?;
         return Ok(());
     }
 
@@ -310,7 +391,10 @@ pub fn run(args: BootstrapArgs) -> Result<()> {
 
     if args.with_radius {
         install_radius(&args)?;
+        print_app_deploy_hint(&args);
     }
+
+    maybe_provision_oidc_client(&args)?;
 
     if let Some(rev) = &platform.istio_revision {
         println!();
@@ -401,82 +485,44 @@ fn resolve_chart_and_values(args: &BootstrapArgs) -> Result<Resolution> {
 }
 
 fn resolve_oci(args: &BootstrapArgs) -> Result<Resolution> {
-    let chart_name = portfolio_chart_name(args);
     let registry = args.chart_registry.trim_end_matches('/');
-    let chart_ref = format!("{registry}/{chart_name}");
+    let chart_ref = format!("{registry}/adaptive-apps");
     Ok(Resolution {
         chart_ref: OsString::from(chart_ref),
         version: Some(args.version.clone()),
+        // OCI install: profiles are not auto-applied (the profile file
+        // is bundled inside the OCI artifact and not extractable until
+        // after `helm pull`). Operators using OCI install must pass
+        // `--values` for the right profile, or use `--chart-root` to
+        // install from source for automatic profile selection.
         values_files: Vec::new(),
     })
 }
 
+/// Resolve against the `adaptive-apps` chart at
+/// `<chart-root>/adaptive-apps`. Per-portfolio feature flags come from
+/// `<chart>/profiles/<portfolio>.yaml`.
 fn resolve_local(chart_root: &Path, args: &BootstrapArgs) -> Result<Resolution> {
-    let unified_chart = chart_root.join("adaptive-apps");
-    if unified_chart.join("Chart.yaml").is_file() {
-        return resolve_unified(&unified_chart, args);
-    }
-    resolve_legacy_per_portfolio(chart_root, args)
-}
-
-fn resolve_unified(chart: &Path, args: &BootstrapArgs) -> Result<Resolution> {
-    let values_dir = chart.join("values");
-    let mut files = Vec::new();
-
-    let portfolio_file = values_dir.join(format!("{}.yaml", args.portfolio.as_str()));
-    require_file(&portfolio_file, "portfolio preset")?;
-    files.push(portfolio_file);
-
-    for cap in &args.with {
-        let overlay = values_dir
-            .join("overlays")
-            .join(format!("{}.yaml", cap.as_str()));
-        require_file(&overlay, "capability overlay")?;
-        files.push(overlay);
-    }
-
-    if let Some(p) = args.platform {
-        let ctx_overlay = values_dir
-            .join("overlays")
-            .join(format!("platform-{}.yaml", p.as_str()));
-        if ctx_overlay.is_file() {
-            files.push(ctx_overlay);
-        }
-    }
-
-    Ok(Resolution {
-        chart_ref: chart.as_os_str().to_owned(),
-        version: None,
-        values_files: files,
-    })
-}
-
-fn resolve_legacy_per_portfolio(chart_root: &Path, args: &BootstrapArgs) -> Result<Resolution> {
-    let chart_name = portfolio_chart_name(args);
-    let chart_path = chart_root.join("portfolios").join(&chart_name);
-    if !chart_path.join("Chart.yaml").is_file() {
+    let chart = chart_root.join("adaptive-apps");
+    if !chart.join("Chart.yaml").is_file() {
         bail!(
-            "no chart at {} (looked for legacy per-portfolio chart; unified chart not present either).\n\
-             Pass --chart-root <dir> to point at a different chart-source directory, \
-             or omit --chart-root to pull the published chart from {}.",
-            chart_path.display(),
-            DEFAULT_CHART_REGISTRY
+            "no chart at {} (Chart.yaml missing).\n\
+             --chart-root expects `<chart-root>/adaptive-apps/Chart.yaml`.",
+            chart.display()
         );
     }
-    Ok(Resolution {
-        chart_ref: chart_path.into_os_string(),
-        version: None,
-        values_files: Vec::new(),
-    })
-}
 
-fn portfolio_chart_name(args: &BootstrapArgs) -> String {
-    let has_ai = args.with.iter().any(|c| matches!(c, Capability::Ai));
-    if has_ai {
-        format!("{}-ai", args.portfolio.as_str())
-    } else {
-        args.portfolio.as_str().to_string()
-    }
+    let profile_name = args.portfolio.as_str(); // e.g. `core` or `core-ai`
+    let profile_file = chart
+        .join("profiles")
+        .join(format!("{profile_name}.yaml"));
+    require_file(&profile_file, "portfolio profile")?;
+
+    Ok(Resolution {
+        chart_ref: chart.into_os_string(),
+        version: None,
+        values_files: vec![profile_file],
+    })
 }
 
 fn require_file(path: &Path, what: &str) -> Result<()> {
@@ -522,7 +568,7 @@ fn apply_platform_automation(args: &BootstrapArgs) -> Result<PlatformOutcome> {
 
     match platform {
         Platform::Aks => apply_aks_automation(args),
-        Platform::Localk8s | Platform::Arc => {
+        Platform::K3s | Platform::K8s | Platform::Arc | Platform::AzureLocal => {
             if args.azure_subscription.is_some()
                 || args.resource_group.is_some()
                 || args.aks_cluster.is_some()
@@ -540,62 +586,58 @@ fn apply_platform_automation(args: &BootstrapArgs) -> Result<PlatformOutcome> {
 }
 
 fn apply_aks_automation(args: &BootstrapArgs) -> Result<PlatformOutcome> {
-    if let Some(sub) = &args.azure_subscription {
-        ensure_tool("az")?;
-        if args.dry_run {
-            ui::dry_run(&format!("would run: az account set --subscription {sub}"));
-        } else {
-            ui::step(&format!("az account set --subscription {sub}"));
-            let status = Command::new("az")
-                .args(["account", "set", "--subscription"])
-                .arg(sub)
-                .status()
-                .context("failed to run `az account set`")?;
-            if !status.success() {
-                bail!("`az account set --subscription {sub}` failed");
-            }
+    // --platform aks needs enough context to actually talk to the cluster:
+    // a subscription to set, plus the rg/cluster pair used to discover the
+    // Istio add-on revision and (with --with-radius) to federate identity.
+    let mut missing = Vec::new();
+    if args.azure_subscription.is_none() {
+        missing.push("--azure-subscription");
+    }
+    if args.resource_group.is_none() {
+        missing.push("--resource-group");
+    }
+    if args.aks_cluster.is_none() {
+        missing.push("--aks-cluster");
+    }
+    if !missing.is_empty() {
+        bail!(
+            "--platform aks requires {}. Re-run with the missing flag(s) so `ada` can \
+             select the subscription and discover the Istio add-on revision.",
+            missing.join(", ")
+        );
+    }
+
+    let sub = args.azure_subscription.as_deref().expect("checked above");
+    ensure_tool("az")?;
+    if args.dry_run {
+        ui::dry_run(&format!("would run: az account set --subscription {sub}"));
+    } else {
+        ui::step(&format!("az account set --subscription {sub}"));
+        let status = Command::new("az")
+            .args(["account", "set", "--subscription"])
+            .arg(sub)
+            .status()
+            .context("failed to run `az account set`")?;
+        if !status.success() {
+            bail!("`az account set --subscription {sub}` failed");
         }
     }
 
-    let istio_revision = match (&args.resource_group, &args.aks_cluster) {
-        (Some(rg), Some(cluster)) => Some(discover_aks_istio_revision(rg, cluster, args.dry_run)?),
-        (None, None) => None,
-        _ => bail!("--resource-group and --aks-cluster must be supplied together"),
-    };
+    let rg = args.resource_group.as_deref().expect("checked above");
+    let cluster = args.aks_cluster.as_deref().expect("checked above");
+    let istio_revision = Some(discover_aks_istio_revision(rg, cluster, args.dry_run)?);
 
     // AKS owns the Istio control plane via the Istio add-on. The chart
     // must not install its own Istio, and the post-install PeerAuthn
     // hook must target the AKS-managed namespace.
-    //
-    // The `istio.*` values live in the `core` subchart, so prefix the
-    // override path based on where `core` sits in the dependency chain.
-    let prefix = istio_values_prefix(args);
+    let helm_sets = vec![
+        "features.istio.install=false".to_string(),
+        format!("istio.namespace={}", args.aks_istio_namespace),
+    ];
     Ok(PlatformOutcome {
-        helm_sets: vec![
-            format!("{prefix}istio.install.enabled=false"),
-            format!("{prefix}istio.namespace={}", args.aks_istio_namespace),
-        ],
+        helm_sets,
         istio_revision,
     })
-}
-
-/// Return the dotted helm-values prefix needed to address the `core`
-/// subchart's `istio.*` values from the top of the chart being installed.
-/// Empty string when installing `core` itself.
-fn istio_values_prefix(args: &BootstrapArgs) -> &'static str {
-    let has_ai = args.with.iter().any(|c| matches!(c, Capability::Ai));
-    match (args.portfolio, has_ai) {
-        // `core` is the parent chart — istio values are at the top.
-        (Portfolio::Core, false) => "",
-        // `core-ai` → core subchart.
-        (Portfolio::Core, true) => "core.",
-        // `ent` → core subchart.
-        (Portfolio::Ent, false) => "core.",
-        // `ent-ai` → ent subchart → core subchart.
-        (Portfolio::Ent, true) => "ent.core.",
-        // `min` doesn't bundle istio; sets are still harmless.
-        (Portfolio::Min, _) => "",
-    }
 }
 
 /// Run `az aks show ... --query 'serviceMeshProfile.istio.revisions[0]'`
@@ -667,7 +709,12 @@ fn install_radius(args: &BootstrapArgs) -> Result<()> {
     let mut rad_group = Command::new("rad");
     rad_group.args(["group", "create", &args.radius_group]);
 
-    let steps = [&rad_install, &rad_workspace, &rad_switch, &rad_group];
+    // Set the workspace's default group so subsequent `rad resource`
+    // commands (e.g. `rad resource expose`) work without `--group`.
+    let mut rad_group_switch = Command::new("rad");
+    rad_group_switch.args(["group", "switch", &args.radius_group]);
+
+    let steps = [&rad_install, &rad_workspace, &rad_switch, &rad_group, &rad_group_switch];
     println!();
     ui::heading("Radius bootstrap plan:");
     for s in steps {
@@ -691,7 +738,7 @@ fn install_radius(args: &BootstrapArgs) -> Result<()> {
         return Ok(());
     }
 
-    for mut cmd in [rad_install, rad_workspace, rad_switch, rad_group] {
+    for mut cmd in [rad_install, rad_workspace, rad_switch, rad_group, rad_group_switch] {
         let label = render_command(&cmd);
         ui::tool_banner("rad", &label);
         let status = cmd
@@ -706,6 +753,112 @@ fn install_radius(args: &BootstrapArgs) -> Result<()> {
     if azure_creds_planned {
         provision_azure_credential(args)?;
     }
+
+    install_radius_recipes(args)?;
+    Ok(())
+}
+
+/// Print the `--group` / `--environment` the operator should pass to
+/// `rad deploy app.bicep`. Useful when defaults don't match the
+/// environment name baked into the env bicep (e.g. group=`adaptive`,
+/// env=`trading`).
+fn print_app_deploy_hint(args: &BootstrapArgs) {
+    println!();
+    ui::note("when you deploy your app, use:");
+    println!(
+        "  rad deploy app.bicep --group {} --environment {} --parameters ...",
+        args.radius_group, args.radius_environment
+    );
+}
+
+/// Register the project's custom Radius resource types and deploy the
+/// environment bicep (which also pins the recipe versions). Mirrors
+/// steps 5–6 of the deploy-to-k8s tutorials. Idempotent: `rad
+/// resource-type create` is a re-runnable upsert and `rad deploy`
+/// reconciles the environment in place.
+fn install_radius_recipes(args: &BootstrapArgs) -> Result<()> {
+    if args.skip_radius_recipes {
+        return Ok(());
+    }
+    let types_file = args.radius_dir.join("resource-types/types.yaml");
+    let env_bicep = match args.platform {
+        Some(Platform::Aks) => args.radius_dir.join("aks-env.bicep"),
+        _ => args.radius_dir.join("local-env.bicep"),
+    };
+
+    if !args.dry_run {
+        if !types_file.exists() {
+            ui::note(&format!(
+                "skipping Radius recipe install: `{}` not found (pass --radius-dir or --skip-radius-recipes)",
+                types_file.display()
+            ));
+            return Ok(());
+        }
+        if !env_bicep.exists() {
+            ui::note(&format!(
+                "skipping Radius env deploy: `{}` not found (pass --radius-dir or --skip-radius-recipes)",
+                env_bicep.display()
+            ));
+            return Ok(());
+        }
+    }
+
+    println!();
+    ui::heading("Radius resource types + environment");
+    ui::detail("types file", &types_file.display().to_string());
+    ui::detail("env bicep", &env_bicep.display().to_string());
+    ui::detail("group", &args.radius_group);
+    ui::detail("environment", &args.radius_environment);
+
+    let mut type_cmd = Command::new("rad");
+    type_cmd.args(["resource-type", "create", "--from-file"])
+        .arg(&types_file);
+
+    let mut env_create_cmd = Command::new("rad");
+    env_create_cmd.args([
+        "environment",
+        "create",
+        &args.radius_environment,
+        "--group",
+        &args.radius_group,
+    ]);
+
+    let mut deploy_cmd = Command::new("rad");
+    deploy_cmd
+        .arg("deploy")
+        .arg(&env_bicep)
+        .args(["--group", &args.radius_group]);
+    if matches!(args.platform, Some(Platform::Aks)) {
+        if let Some(sub) = &args.azure_subscription {
+            deploy_cmd.args(["--parameters", &format!("azureSubscriptionId={sub}")]);
+        }
+        if let Some(rg) = &args.resource_group {
+            deploy_cmd.args(["--parameters", &format!("azureResourceGroup={rg}")]);
+        }
+    }
+
+    ui::command(&render_command(&type_cmd));
+    ui::command(&render_command(&env_create_cmd));
+    ui::command(&render_command(&deploy_cmd));
+
+    if args.dry_run {
+        ui::dry_run("not executing Radius recipe install");
+        return Ok(());
+    }
+
+    // `rad resource-type create` and `rad environment create` are idempotent
+    // upserts; `rad deploy` reconciles in place.
+    for mut cmd in [type_cmd, env_create_cmd, deploy_cmd] {
+        let label = render_command(&cmd);
+        ui::tool_banner("rad", &label);
+        let status = cmd
+            .status()
+            .with_context(|| format!("failed to spawn: {label}"))?;
+        if !status.success() {
+            bail!("command failed ({status}): {label}");
+        }
+    }
+    ui::ok("Radius recipes ready");
     Ok(())
 }
 
@@ -717,6 +870,80 @@ fn wants_azure_credential_automation(args: &BootstrapArgs) -> bool {
         && matches!(args.platform, Some(Platform::Aks))
         && args.resource_group.is_some()
         && args.aks_cluster.is_some()
+}
+
+/// OIDC client provisioning entry point used by bootstrap. Skips silently
+/// when Keycloak is not present in the target namespace (e.g. the
+/// operator installed an Entra-only configuration with
+/// `global.components.keycloak.enabled=false`).
+fn maybe_provision_oidc_client(args: &BootstrapArgs) -> Result<()> {
+    if args.skip_oidc_client {
+        return Ok(());
+    }
+    let service = format!("{}-keycloak", args.release);
+    if !args.dry_run && !keycloak_service_present(&args.namespace, &service)? {
+        ui::note(&format!(
+            "keycloak service `{}/{service}` not found; skipping OIDC client provisioning",
+            args.namespace
+        ));
+        return Ok(());
+    }
+    // Derive web-origins from redirect URIs by stripping trailing `/*`;
+    // always include the canonical frontend origin too.
+    let mut web_origins: Vec<String> = args
+        .oidc_redirect_uris
+        .iter()
+        .filter_map(|u| u.strip_suffix("/*").map(str::to_string))
+        .collect();
+    if !web_origins.iter().any(|o| o == "http://localhost:3000") {
+        web_origins.push("http://localhost:3000".to_string());
+    }
+    let setup = SetupClientArgs {
+        namespace: args.namespace.clone(),
+        release: args.release.clone(),
+        client_id: args.oidc_client_id.clone(),
+        redirect_uris: args.oidc_redirect_uris.clone(),
+        web_origins,
+        realm: args.oidc_realm.clone(),
+        admin_user: args.keycloak_admin_user.clone(),
+        admin_password: args.keycloak_admin_password.clone(),
+        local_port: 8080,
+        pod_ready_timeout_secs: 180,
+        keep_port_forward: args.keep_port_forward,
+        dry_run: args.dry_run,
+    };
+    let (result, pf) = oidc::provision_client_keep(&setup)?;
+    oidc::print_exports(&setup, &result);
+    if let Some(mut pf) = pf {
+        println!();
+        ui::note(&format!(
+            "keeping port-forward to svc/{}-keycloak on http://localhost:{} — press Ctrl-C to stop",
+            args.release, setup.local_port
+        ));
+        ui::note("run `rad deploy app.bicep ...` in another terminal while this stays open");
+        let _ = pf.wait();
+    }
+    Ok(())
+}
+
+/// Probe for `svc/<name>` in `namespace`. Returns Ok(false) on a clean
+/// NotFound, Err on any other kubectl failure.
+fn keycloak_service_present(namespace: &str, service: &str) -> Result<bool> {
+    let out = Command::new("kubectl")
+        .args(["-n", namespace, "get", "svc", service, "-o", "name"])
+        .output()
+        .context("failed to run `kubectl get svc`")?;
+    if out.status.success() {
+        return Ok(true);
+    }
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    if stderr.contains("NotFound") || stderr.contains("not found") {
+        return Ok(false);
+    }
+    bail!(
+        "`kubectl get svc -n {namespace} {service}` failed: {}",
+        stderr.trim()
+    );
 }
 
 /// Federated identity subjects for the Radius control plane service

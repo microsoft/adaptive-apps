@@ -1,4 +1,4 @@
-name: Release Helm Charts
+name: Release Helm Chart
 
 on:
   workflow_dispatch:
@@ -7,46 +7,20 @@ on:
       - main
     paths:
       - '.github/workflows/release-helm-charts.yml'
-      - 'charts/portfolios/**'
+      - 'charts/adaptive-apps/**'
 
 env:
   OCI_REGISTRY: ghcr.io
+  CHART_PATH: charts/adaptive-apps
+  CHART_NAME: adaptive-apps
 
 jobs:
   release:
-    name: Release ${{ matrix.portfolio }}-${{ matrix.chart }}
+    name: Release adaptive-apps chart
     runs-on: ubuntu-latest
     permissions:
       contents: write
       packages: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - portfolio: min
-            chart: min
-            chart_path: charts/portfolios/min
-            oci_repo: oci://ghcr.io/${{ github.repository_owner }}/adaptive-apps/charts/portfolios
-          - portfolio: core
-            chart: core
-            chart_path: charts/portfolios/core
-            oci_repo: oci://ghcr.io/${{ github.repository_owner }}/adaptive-apps/charts/portfolios
-          - portfolio: ent
-            chart: ent
-            chart_path: charts/portfolios/ent
-            oci_repo: oci://ghcr.io/${{ github.repository_owner }}/adaptive-apps/charts/portfolios
-          - portfolio: min-ai
-            chart: min-ai
-            chart_path: charts/portfolios/min-ai
-            oci_repo: oci://ghcr.io/${{ github.repository_owner }}/adaptive-apps/charts/portfolios
-          - portfolio: core-ai
-            chart: core-ai
-            chart_path: charts/portfolios/core-ai
-            oci_repo: oci://ghcr.io/${{ github.repository_owner }}/adaptive-apps/charts/portfolios
-          - portfolio: ent-ai
-            chart: ent-ai
-            chart_path: charts/portfolios/ent-ai
-            oci_repo: oci://ghcr.io/${{ github.repository_owner }}/adaptive-apps/charts/portfolios
 
     steps:
       - name: Checkout code
@@ -57,13 +31,14 @@ jobs:
 
       - name: Login to GitHub Container Registry
         run: |
-          echo "${{ github.token }}" | helm registry login ${{ env.OCI_REGISTRY }} -u "${{ github.actor }}" --password-stdin
+          echo "${{ github.token }}" | helm registry login ${{ env.OCI_REGISTRY }} \
+            -u "${{ github.actor }}" --password-stdin
 
       - name: Build chart dependencies
-        run: helm dependency build ${{ matrix.chart_path }}
+        run: helm dependency build ${{ env.CHART_PATH }}
 
       - name: Lint chart
-        run: helm lint ${{ matrix.chart_path }}
+        run: helm lint ${{ env.CHART_PATH }}
 
       - name: Package chart
         id: package
@@ -71,23 +46,27 @@ jobs:
           set -euo pipefail
 
           mkdir -p .helm-packages
-          helm package ${{ matrix.chart_path }} --destination .helm-packages
+          helm package ${{ env.CHART_PATH }} --destination .helm-packages
 
-          chart_version="$(helm show chart ${{ matrix.chart_path }} | awk -F': ' '/^version:/ {print $2}')"
-          package_file=".helm-packages/${{ matrix.chart }}-${chart_version}.tgz"
+          chart_version="$(helm show chart ${{ env.CHART_PATH }} \
+            | awk -F': ' '/^version:/ {print $2}')"
+          package_file=".helm-packages/${{ env.CHART_NAME }}-${chart_version}.tgz"
 
           if [[ ! -f "$package_file" ]]; then
             echo "Unable to find packaged chart at $package_file"
             exit 1
           fi
 
-          echo "version=$chart_version" >> "$GITHUB_OUTPUT"
-          echo "package_file=$package_file" >> "$GITHUB_OUTPUT"
-          echo "release_tag=helm-${{ matrix.portfolio }}-${{ matrix.chart }}-v${chart_version}" >> "$GITHUB_OUTPUT"
+          echo "version=$chart_version"               >> "$GITHUB_OUTPUT"
+          echo "package_file=$package_file"           >> "$GITHUB_OUTPUT"
+          echo "release_tag=helm-${{ env.CHART_NAME }}-v${chart_version}" >> "$GITHUB_OUTPUT"
+          echo "oci_repo=oci://${{ env.OCI_REGISTRY }}/${{ github.repository_owner }}/adaptive-apps/charts" \
+            >> "$GITHUB_OUTPUT"
 
       - name: Push chart to GHCR OCI registry
         run: |
-          helm push "${{ steps.package.outputs.package_file }}" "${{ matrix.oci_repo }}"
+          helm push "${{ steps.package.outputs.package_file }}" \
+            "${{ steps.package.outputs.oci_repo }}"
 
       - name: Create GitHub Release
         uses: ncipollo/release-action@v1
@@ -96,9 +75,21 @@ jobs:
           artifactErrorsFailBuild: true
           artifacts: ${{ steps.package.outputs.package_file }}
           tag: ${{ steps.package.outputs.release_tag }}
-          name: Helm ${{ matrix.portfolio }}/${{ matrix.chart }} v${{ steps.package.outputs.version }}
+          name: Helm ${{ env.CHART_NAME }} v${{ steps.package.outputs.version }}
           body: |
-            Released Helm chart `${{ matrix.chart }}` for capability portfolio `${{ matrix.portfolio }}`.
+            Released unified Helm chart `${{ env.CHART_NAME }}`.
 
-            OCI reference:
-            `${{ matrix.oci_repo }}/${{ matrix.chart }}:${{ steps.package.outputs.version }}`
+            Install:
+
+            ```bash
+            helm install <release> \
+              ${{ steps.package.outputs.oci_repo }}/${{ env.CHART_NAME }} \
+              --version ${{ steps.package.outputs.version }} \
+              -f profiles/<portfolio>.yaml
+            ```
+
+            Or with `ada`:
+
+            ```bash
+            ada bootstrap --portfolio <portfolio> --platform <platform>
+            ```

@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Adaptive Apps CLI: bootstrap and manage portable-app platform portfolios."
+description = "Adaptive Apps CLI: bootstrap and manage adaptive-app platform portfolios."
 
 [[bin]]
 name = "ada"

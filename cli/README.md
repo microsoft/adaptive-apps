@@ -9,8 +9,68 @@ context is a single command instead of a tutorial walkthrough.
 Early scaffolding. Currently supports a single command:
 
 ```bash
-ada bootstrap --portfolio <min|core|ent> [--platform <localk8s|aks|arc>] [--with ai]
+ada bootstrap --portfolio <min|min-ai|core|core-ai|ent|ent-ai> [--platform <k3s|k8s|aks|arc|azure-local>]
 ```
+
+## Install
+
+One-line installers download the latest signed release archive and lay
+the binary + bundled Radius artifacts out under `~/.adaptive` (the
+default `$ADA_HOME`):
+
+```bash
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/microsoft/adaptive-apps/main/cli/install.sh | bash
+```
+
+```powershell
+# Windows PowerShell
+iwr -useb https://raw.githubusercontent.com/microsoft/adaptive-apps/main/cli/install.ps1 | iex
+```
+
+Override defaults with environment variables:
+
+| Variable          | Scope      | Purpose                                                         |
+| ----------------- | ---------- | --------------------------------------------------------------- |
+| `ADA_VERSION`     | both       | Pin a release tag (e.g. `cli-v0.1.0`).                          |
+| `ADA_HOME`        | both       | Root for bundled artifacts (default `~/.adaptive`).             |
+| `ADA_INSTALL_DIR` | shell only | Where the binary is installed (default `/usr/local/bin`).       |
+| `ADA_REPO`        | both       | Source GitHub `owner/repo` (default `microsoft/adaptive-apps`). |
+
+On macOS / Linux the shell installer places `ada` into
+`/usr/local/bin` (or `$ADA_INSTALL_DIR`) using `sudo` automatically when
+required, so it's already on `PATH`. On Windows the PowerShell installer
+appends `%USERPROFILE%\.adaptive\bin` to the *User* `PATH` and refreshes
+the current session.
+
+The installed tree is:
+
+```text
+~/.adaptive/                # Windows: %USERPROFILE%\.adaptive
+├── bin/ada                 # binary (ada.exe on Windows; absent on Unix when ADA_INSTALL_DIR is /usr/local/bin)
+└── radius/                 # Radius artifacts shipped with the CLI
+    ├── app.bicep
+    ├── local-env.bicep
+    ├── aks-env.bicep
+    ├── bicepconfig.json
+    ├── types.tgz
+    ├── resource-types/types.yaml
+    └── recipes/…
+```
+
+`ada` resolves `$ADA_HOME` (defaulting to `~/.adaptive`) when it needs
+to locate bundled assets. Use `ada radius path --artifact <name>` to
+print the resolved path of any bundled artifact — handy for scripting:
+
+```bash
+rad resource-type create --from-file "$(ada radius path --artifact types --require-exists)"
+rad bicep publish-extension \
+  --from-file "$(ada radius path --artifact types)" \
+  --target    "$(ada radius path --artifact types-bundle)"
+```
+
+Run `ada init` once after installation if you skipped the installer and
+want the directories pre-created.
 
 ## Build
 
@@ -28,17 +88,19 @@ Installs or upgrades a portfolio onto the kube context currently selected by
 By default the chart is pulled from the published OCI registry:
 
 ```
-oci://ghcr.io/microsoft/adaptive-apps/charts/portfolios/<portfolio>[-ai]
+oci://ghcr.io/microsoft/adaptive-apps/charts/adaptive-apps
 ```
 
-at the version selected by `--version` (default `0.1.0`). Pass `--chart-root
-<dir>` to install from a local chart source tree instead; the resolver
-auto-detects the unified chart (`<chart-root>/adaptive-apps`) or falls back
-to the legacy per-portfolio layout (`<chart-root>/portfolios/<portfolio>[-ai]`).
+at the version selected by `--version` (default `0.1.0`). The portfolio
+selection becomes a profile file inside the chart — `profiles/<portfolio>.yaml`.
+
+Pass `--chart-root <dir>` to install from a local chart source tree
+instead; ada expects `<chart-root>/adaptive-apps/Chart.yaml` and applies
+`<chart-root>/adaptive-apps/profiles/<portfolio>.yaml` automatically.
 
 `--platform` is optional. When omitted no platform overrides are applied and
 the install targets whatever cluster the current `kubectl` context points at.
-When `--platform aks` is set, ada appends `--set istio.install.enabled=false`
+When `--platform aks` is set, ada appends `--set features.istio.install=false`
 and `--set istio.namespace=aks-istio-system` so the chart defers to the AKS
 Istio add-on; pass `--azure-subscription <id>` to switch subscriptions via
 `az account set` before invoking helm.
@@ -48,7 +110,7 @@ Istio add-on; pass `--azure-subscription <id>` to switch subscriptions via
 Dry-run the published `ent + ai` chart against the current cluster:
 
 ```bash
-ada bootstrap --portfolio ent --with ai --dry-run
+ada bootstrap --portfolio ent-ai --dry-run
 ```
 
 Pin a specific chart version:

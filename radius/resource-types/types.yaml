@@ -1,4 +1,4 @@
-# types.yaml — All portable-apps Radius Resource Type definitions
+# types.yaml — All adaptive-apps Radius Resource Type definitions
 #
 # A single namespace is used for all custom resources:
 #   Radius.Resources → postgreSqlDatabases, mqttBrokers, workloadIdentities, aiModels

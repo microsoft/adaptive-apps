@@ -12,4 +12,4 @@ The Min-AI Portfolio extends the [Min Portfolio](min.md) with capability to depl
 
 ## Additional Guidance
 
-* [Getting started with the Min-AI portfolio](../../tutorials/min-ai-getting-started/README.md)
+* [Getting started with the Min-AI portfolio](../../tutorials/getting-started/README.md) (set `PORTFOLIO=min-ai`)

@@ -1,0 +1,137 @@
+# =============================================================================
+# Feature flags
+# =============================================================================
+#
+# Each feature toggles a whole capability stack. Profiles under ./profiles set
+# these to reproduce the legacy portfolio charts. Individual sub-component
+# knobs further down still apply when the parent feature is enabled.
+#
+features:
+  identity:
+    enabled: true        # Keycloak + PostgreSQL (in-cluster IdP)
+  istio:
+    install: true        # Install Istio base + istiod (disable on AKS managed Istio)
+    mtls: true           # Apply mesh-wide STRICT PeerAuthentication
+  observability:
+    enabled: false       # OTel Collector + Prometheus + Zipkin
+  governance:
+    opa: false           # Deploy OPA (with Envoy ext_authz plugin)
+    istioExtAuthz: false # Patch Istio extensionProvider to use OPA
+  ai:
+    enabled: false       # Marker only; AI workloads are deployed via Radius
+
+# =============================================================================
+# Global naming / labels
+# =============================================================================
+nameOverride: ""
+fullnameOverride: ""
+commonLabels: {}
+
+serviceAccount:
+  create: false
+  name: ""
+
+# =============================================================================
+# Identity (Keycloak + PostgreSQL) — used when features.identity.enabled
+# =============================================================================
+oidc:
+  realm: master
+  clientId: ""
+  browserAuthEndpoint: ""
+  clientSecretRef:
+    name: ""
+    key: clientSecret
+  external:
+    issuer: ""
+    authEndpoint: ""
+    tokenEndpoint: ""
+    userInfoEndpoint: ""
+
+keycloak:
+  replicaCount: 2
+  image:
+    repository: quay.io/keycloak/keycloak
+    tag: "26.5.5"
+    pullPolicy: IfNotPresent
+  admin:
+    username: admin
+    password: admin
+  service:
+    type: ClusterIP
+    port: 8080
+  ingress:
+    enabled: false
+    className: ""
+  podSecurityContext:
+    fsGroup: 1000
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+  customCert:
+    crt: ""
+    fileName: custom-ca.crt
+    mountPath: /opt/keycloak/conf/certs
+
+postgresql:
+  enabled: true
+  image:
+    repository: mirror.gcr.io/postgres
+    tag: "17"
+    pullPolicy: IfNotPresent
+  auth:
+    database: keycloak
+    username: keycloak
+    password: keycloak
+  persistence:
+    enabled: true
+    size: 2Gi
+    storageClass: ""
+
+externalDatabase:
+  host: ""
+  port: 5432
+  database: keycloak
+  username: keycloak
+  password: ""
+
+# =============================================================================
+# Mesh (Istio) — used when features.istio.install / .mtls
+# =============================================================================
+istio:
+  version: "1.27.0"
+  namespace: istio-system
+  peerAuthJob:
+    image: ""  # default: alpine/k8s:1.31.13
+
+# =============================================================================
+# Observability — used when features.observability.enabled
+# =============================================================================
+observability: {}
+
+# =============================================================================
+# Governance (OPA + Istio ext authz) — used when features.governance.opa
+# =============================================================================
+opa:
+  name: opa
+  image:
+    repository: openpolicyagent/opa
+    tag: "1.10.0-envoy"
+    pullPolicy: IfNotPresent
+  replicas: 1
+  grpcPort: 9191
+  httpPort: 8181
+  diagnosticPort: 8282
+  defaultDecisionPath: /envoy/authz/allow
+  logLevel: info
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+istioExtAuthz:
+  istioNamespace: istio-system
+  istioConfigMap: istio
+  providerName: opa-ext-authz-grpc

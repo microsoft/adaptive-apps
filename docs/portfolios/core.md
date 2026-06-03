@@ -12,4 +12,4 @@ The Core Portfolio is designed for standard workloads in production. It covers a
 
 ## Additional Guidance
 
-* [Getting started with the Core portfolio](../../tutorials/core-getting-started/README.md)
+* [Getting started with the Core portfolio](../../tutorials/getting-started/README.md) (set `PORTFOLIO=core`)
