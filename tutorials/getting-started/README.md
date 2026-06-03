@@ -23,6 +23,13 @@ export RELEASE=$PORTFOLIO     # Helm release name; defaults to the portfolio
 export NAMESPACE=$PORTFOLIO   # Kubernetes namespace for the portfolio
 ```
 
+If your target is AKS, define a few more environment variables:
+```bash
+export AZURE_SUBSCRIPTION=<your Azure subscrption id>
+export RESOURCE_GROUP=<Azure resource group>
+export AKS_CLUSTER=<AKS cluster name>
+```
+
 | Portfolio | Identity | Service mesh (Istio) | Observability | Governance (OPA) | On-cluster AI (Kaito) |
 | --- | :-: | :-: | :-: | :-: | :-: |
 | `min` | ✓ | ✗ | ✗ | ✗ | ✗ |
@@ -88,9 +95,9 @@ the portfolio chart is running, and OIDC env vars are exported". Pick **one**:
       --namespace $NAMESPACE \
       --chart-root charts \
       --with-radius \
-      --azure-subscription <Your Azure subscription Id> \
-      --resource-group <Your Azure resource group> \
-      --aks-cluster <Your AKS cluster name> \
+      --azure-subscription $AZURE_SUBSCRIPTION \
+      --resource-group $RESOURCE_GROUP \
+      --aks-cluster $AKS_CLUSTER \
       --keep-port-forward
     ```
 
@@ -113,8 +120,8 @@ the portfolio chart is running, and OIDC env vars are exported". Pick **one**:
     `adaptive-apps` OIDC client, prints an `export OIDC_*` block, and (with
     `--keep-port-forward`) holds the port-forward open in the foreground.
 
-4. Copy the `export OIDC_*` lines into the terminal you'll use for §3 and
-skip ahead to [§3 Deploy the sample app](#3-deploy-the-sample-app).
+4. Copy the `export OIDC_*` lines into the terminal you'll use for step 3 and
+skip ahead to [3 Deploy the sample app](#3-deploy-the-sample-app).
 
 ### 2.2 OPTION 2 — Manual
 
