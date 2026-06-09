@@ -605,8 +605,9 @@ types:
               type: string
               description: >
                 (Optional) Sidecar container image override. When empty, the
-                recipe records its own default (typically published from
-                src/agt-sidecar/ in this repository).
+                recipe records its own default (the Microsoft-published
+                `ghcr.io/microsoft/agentmesh/governance-sidecar` image from
+                the agent-governance-toolkit repository).
             logLevel:
               type: string
               enum:

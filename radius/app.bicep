@@ -150,7 +150,7 @@ param agentGuardrailsMode string = 'enforce'
 @description('Inline policy bundle (YAML) handed to the agent guardrails sidecar. Leave empty to use the recipe default-allow placeholder.')
 param agentGuardrailsPolicies string = ''
 
-@description('Override the sidecar container image. When empty the recipe default (built from src/agt-sidecar/ in this repository) is used.')
+@description('Override the sidecar container image. When empty the recipe default (the Microsoft-published `ghcr.io/microsoft/agentmesh/governance-sidecar` image) is used.')
 param agentGuardrailsImage string = ''
 
 var effectiveOidcIssuer = oidcIssuerOverride != '' ? oidcIssuerOverride : oidcIssuer
@@ -192,7 +192,7 @@ var agentGuardrailsConfigMapName = '${toLower(replace(agentGuardrailsResourceNam
 var agentGuardrailsProxyPort     = 8081
 var agentGuardrailsMetricsPort   = 9091
 var agentGuardrailsMountPath     = '/policies'
-var agentGuardrailsDefaultImage  = 'ghcr.io/microsoft/adaptive-apps/agt-sidecar:latest'
+var agentGuardrailsDefaultImage  = 'ghcr.io/microsoft/agentmesh/governance-sidecar:4.0.0'
 var agentGuardrailsEffectiveImage = agentGuardrailsImage != '' ? agentGuardrailsImage : agentGuardrailsDefaultImage
 
 // Pod patch injected into both ai-agent variants when guardrails are active.

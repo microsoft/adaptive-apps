@@ -47,8 +47,8 @@ param policies string = ''
 @description('Sidecar container image override. When empty, the recipe default below is used.')
 param image string = ''
 
-@description('Default sidecar image when the caller does not override `image`. Built from src/agt-sidecar/ in this repository and published by the build-and-publish workflow.')
-param defaultImage string = 'ghcr.io/microsoft/adaptive-apps/agt-sidecar:latest'
+@description('Default sidecar image when the caller does not override `image`. Pinned to the Microsoft-published Agent Governance Toolkit sidecar at https://github.com/microsoft/agent-governance-toolkit (ghcr.io/microsoft/agentmesh/governance-sidecar).')
+param defaultImage string = 'ghcr.io/microsoft/agentmesh/governance-sidecar:4.0.0'
 
 @description('Sidecar log level (DEBUG, INFO, WARN, ERROR). Surfaced as the LOG_LEVEL env var by the application Bicep.')
 param logLevel string = 'INFO'
