@@ -1,7 +1,9 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using OpenAI;
@@ -162,13 +164,40 @@ Console.WriteLine($"AI provider : {provider}");
 Console.WriteLine($"AI endpoint : {(string.IsNullOrEmpty(endpoint) ? "(default)" : endpoint)}");
 Console.WriteLine($"AI model    : {model}");
 
+// --- Agent guardrails (Agent Governance Toolkit sidecar) --------------------
+//
+// When the agentGuardrails Radius resource is enabled, app.bicep injects the
+// AGT sidecar into the agent pod and surfaces the env vars below. We use the
+// sidecar's /api/v1/detect/injection endpoint to scan inbound prompts BEFORE
+// they reach the model. Calls are no-ops when GOVERNANCE_ENABLED is unset, so
+// the same binary runs in portfolios where guardrails are off.
+var guardrailsEnabled = string.Equals(
+    Environment.GetEnvironmentVariable("GOVERNANCE_ENABLED"),
+    "true",
+    StringComparison.OrdinalIgnoreCase);
+var guardrailsProxy = Environment.GetEnvironmentVariable("GOVERNANCE_PROXY")
+    ?? Environment.GetEnvironmentVariable("GOVERNANCE_API")
+    ?? "http://localhost:8081";
+var guardrailsMode  = (Environment.GetEnvironmentVariable("GOVERNANCE_MODE") ?? "enforce").ToLowerInvariant();
+
+builder.Services.AddHttpClient("guardrails", client =>
+{
+    client.BaseAddress = new Uri(guardrailsProxy);
+    // Keep the budget tight — the sidecar is on localhost; anything slower than
+    // a few hundred ms means the sidecar is unhealthy and we should fail open
+    // (or closed, depending on mode) rather than stall the advice request.
+    client.Timeout = TimeSpan.FromSeconds(2);
+});
+
+Console.WriteLine($"Guardrails  : {(guardrailsEnabled ? $"enabled (mode={guardrailsMode}, proxy={guardrailsProxy})" : "disabled")}");
+
 // --- HTTP pipeline -----------------------------------------------------------
 
 var app = builder.Build();
 app.UseCors();
 
 // POST /advice  –  { "question": "..." }  →  { "answer": "..." }
-app.MapPost("/advice", async (AdviceRequest req, AIAgent agent) =>
+app.MapPost("/advice", async (AdviceRequest req, AIAgent agent, IHttpClientFactory httpClientFactory) =>
 {
     using var activity = AiAgentTelemetry.ActivitySource.StartActivity("ai.generate_advice", ActivityKind.Internal);
     var question = req.Question?.Trim();
@@ -177,6 +206,25 @@ app.MapPost("/advice", async (AdviceRequest req, AIAgent agent) =>
         AiAgentTelemetry.AdviceRequests.Add(1,
             new KeyValuePair<string, object?>("status", "bad_request"));
         return Results.BadRequest(new { answer = "Please provide a question." });
+    }
+
+    if (guardrailsEnabled)
+    {
+        var verdict = await AgentGuardrails.DetectInjectionAsync(
+            httpClientFactory.CreateClient("guardrails"),
+            question,
+            guardrailsMode);
+
+        if (verdict.Blocked)
+        {
+            activity?.SetTag("guardrails.blocked", true);
+            activity?.SetTag("guardrails.reason", verdict.Reason);
+            AiAgentTelemetry.AdviceRequests.Add(1,
+                new KeyValuePair<string, object?>("status", "blocked"));
+            return Results.Json(
+                new { answer = $"Request was blocked by agent guardrails: {verdict.Reason}" },
+                statusCode: StatusCodes.Status422UnprocessableEntity);
+        }
     }
 
     try
@@ -198,7 +246,7 @@ app.MapPost("/advice", async (AdviceRequest req, AIAgent agent) =>
 });
 
 // GET /health
-app.MapGet("/health", () => Results.Ok(new { status = "ok", provider, model, endpoint }));
+app.MapGet("/health", () => Results.Ok(new { status = "ok", provider, model, endpoint, guardrails = guardrailsEnabled }));
 
 app.Run();
 
@@ -235,6 +283,99 @@ static class AiAgentTelemetry
     public static readonly Counter<long> AdviceRequests = Meter.CreateCounter<long>(
         "ai_agent_advice_requests_total",
         description: "Total number of AI advice requests");
+
+    public static readonly Counter<long> GuardrailsChecks = Meter.CreateCounter<long>(
+        "ai_agent_guardrails_checks_total",
+        description: "Total number of AGT sidecar prompt-injection checks (labels: result=allowed|blocked|audit|error)");
+}
+
+// ---------------------------------------------------------------------------
+// Agent guardrails — thin HTTP client for the AGT sidecar's
+// /api/v1/detect/injection endpoint. Documented at:
+//   https://microsoft.github.io/agent-governance-toolkit/deployment/openclaw-sidecar/
+//
+// Failure policy:
+//   • enforce  : sidecar unreachable / errored → BLOCK (fail closed).
+//                A detected injection → BLOCK.
+//   • audit    : sidecar unreachable / errored → ALLOW (fail open) and log.
+//                A detected injection is logged but ALLOWED through.
+//   • dryrun   : no API call is made; always ALLOW. Used to verify wiring
+//                without exercising the sidecar.
+// ---------------------------------------------------------------------------
+static class AgentGuardrails
+{
+    public record Verdict(bool Blocked, string? Reason);
+
+    public static async Task<Verdict> DetectInjectionAsync(HttpClient client, string text, string mode)
+    {
+        if (string.Equals(mode, "dryrun", StringComparison.OrdinalIgnoreCase))
+        {
+            AiAgentTelemetry.GuardrailsChecks.Add(1,
+                new KeyValuePair<string, object?>("result", "dryrun"));
+            return new Verdict(false, null);
+        }
+
+        InjectionResponse? result;
+        try
+        {
+            var resp = await client.PostAsJsonAsync("/api/v1/detect/injection", new InjectionRequest
+            {
+                Text = text,
+                Source = "user_input",
+                Sensitivity = "balanced"
+            });
+            resp.EnsureSuccessStatusCode();
+            result = await resp.Content.ReadFromJsonAsync<InjectionResponse>();
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Guardrails sidecar error: {ex.Message}");
+            AiAgentTelemetry.GuardrailsChecks.Add(1,
+                new KeyValuePair<string, object?>("result", "error"));
+            // Fail closed in enforce; fail open in audit.
+            return string.Equals(mode, "audit", StringComparison.OrdinalIgnoreCase)
+                ? new Verdict(false, null)
+                : new Verdict(true, "guardrails sidecar unavailable");
+        }
+
+        if (result is { IsInjection: true })
+        {
+            if (string.Equals(mode, "audit", StringComparison.OrdinalIgnoreCase))
+            {
+                Console.Error.WriteLine(
+                    $"[guardrails audit] prompt-injection detected (type={result.InjectionType}, confidence={result.Confidence:F2}) \u2014 allowing through per mode=audit");
+                AiAgentTelemetry.GuardrailsChecks.Add(1,
+                    new KeyValuePair<string, object?>("result", "audit"));
+                return new Verdict(false, null);
+            }
+
+            var reason = string.IsNullOrEmpty(result.InjectionType)
+                ? "prompt injection detected"
+                : $"prompt injection detected ({result.InjectionType})";
+            AiAgentTelemetry.GuardrailsChecks.Add(1,
+                new KeyValuePair<string, object?>("result", "blocked"));
+            return new Verdict(true, reason);
+        }
+
+        AiAgentTelemetry.GuardrailsChecks.Add(1,
+            new KeyValuePair<string, object?>("result", "allowed"));
+        return new Verdict(false, null);
+    }
+
+    private sealed class InjectionRequest
+    {
+        [JsonPropertyName("text")]        public string Text        { get; init; } = string.Empty;
+        [JsonPropertyName("source")]      public string Source      { get; init; } = "user_input";
+        [JsonPropertyName("sensitivity")] public string Sensitivity { get; init; } = "balanced";
+    }
+
+    private sealed class InjectionResponse
+    {
+        [JsonPropertyName("is_injection")]   public bool    IsInjection   { get; init; }
+        [JsonPropertyName("threat_level")]   public string? ThreatLevel   { get; init; }
+        [JsonPropertyName("injection_type")] public string? InjectionType { get; init; }
+        [JsonPropertyName("confidence")]     public double  Confidence    { get; init; }
+    }
 }
 
 // ---------------------------------------------------------------------------

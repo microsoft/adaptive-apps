@@ -1,7 +1,8 @@
 # types.yaml — All adaptive-apps Radius Resource Type definitions
 #
 # A single namespace is used for all custom resources:
-#   Radius.Resources → postgreSqlDatabases, mqttBrokers, workloadIdentities, aiModels
+#   Radius.Resources → postgreSqlDatabases, mqttBrokers, workloadIdentities,
+#                      aiModels, idProviders, governance, agentGuardrails
 #
 # Publish a single Bicep extension bundle from this file:
 #
@@ -515,6 +516,139 @@ types:
                 extensionProvider. Empty when the recipe does not perform
                 mesh integration. AuthorizationPolicy resources reference
                 this name via `provider.name` when `action: CUSTOM`.
+          required:
+            - environment
+            - application
+
+  agentGuardrails:
+    description: |
+      The Radius.Resources/agentGuardrails Resource Type provisions the
+      prerequisites for an in-pod *agent governance sidecar* — an
+      application-layer policy/safety proxy that the agent container talks to
+      over `localhost` (e.g. the Microsoft Agent Governance Toolkit "OpenClaw
+      sidecar" pattern). It is intentionally distinct from
+      Radius.Resources/governance, which models a service-mesh / external
+      authorization PDP at the network layer; the two can be enabled together.
+
+      Because a sidecar must live inside the agent's own pod, this Resource
+      Type does NOT deploy the sidecar container itself. Instead the recipe
+      stages the policy bundle ConfigMap (and, in the future, any secrets the
+      sidecar needs) and emits coordinates that the application Bicep uses to
+      compose a `runtimes.kubernetes.pod` patch on the agent
+      Applications.Core/containers resource.
+
+      Recipes provided in this repository:
+
+        kubernetes-agt-sidecar.bicep
+          Builds a ConfigMap holding the policy bundle the agent governance
+          toolkit (AGT) sidecar will mount at `/policies`. Outputs the
+          recommended sidecar image, port assignments, and ConfigMap name so
+          the application can render the sidecar PodSpec patch with
+          deterministic naming (no live dependency edge from the agent
+          container into this conditional resource — important to avoid the
+          `DeploymentResourceNoOperationJob` deployment-engine failure in
+          Radius v0.57.x).
+
+      Application model usage (see radius/app.bicep for the full pattern):
+
+        resource gr 'Radius.Resources/agentGuardrails@2025-08-01-preview' = {
+          name: 'ai-agent-guardrails'
+          properties: {
+            environment: environment
+            application: app.id
+            mode: 'enforce'
+            policies: '...inline YAML policy bundle...'
+          }
+        }
+
+      The agent container then receives the sidecar via:
+
+        runtimes: {
+          kubernetes: {
+            pod: {
+              containers: [ { name: 'agt-sidecar', image: '...', ... } ]
+              volumes:    [ { name: 'agt-policies', configMap: { name: '...' } } ]
+            }
+          }
+        }
+    apiVersions:
+      '2025-08-01-preview':
+        schema:
+          type: object
+          properties:
+            environment:
+              type: string
+              description: (Required) The Radius Environment ID. Typically set by the rad CLI.
+            application:
+              type: string
+              description: (Required) The Radius Application ID.
+            mode:
+              type: string
+              enum:
+                - enforce
+                - audit
+                - dryrun
+              description: >
+                (Optional) Enforcement mode hint for the sidecar. Surfaced via
+                the `AGT_MODE` env var on the sidecar; recipes/sidecar code
+                may interpret it (e.g. "audit" = log but do not block).
+                Defaults to "enforce".
+            policies:
+              type: string
+              description: >
+                (Optional) Inline policy bundle written to
+                `/policies/policies.yaml` inside the sidecar. When empty, the
+                recipe writes a default-allow placeholder so the ConfigMap
+                exists and the agent pod can mount it. Format is sidecar-
+                specific; see the Agent Governance Toolkit docs.
+            image:
+              type: string
+              description: >
+                (Optional) Sidecar container image override. When empty, the
+                recipe records its own default (typically published from
+                src/agt-sidecar/ in this repository).
+            logLevel:
+              type: string
+              enum:
+                - DEBUG
+                - INFO
+                - WARN
+                - ERROR
+              description: >
+                (Optional) Log level for the sidecar. Defaults to "INFO".
+                Surfaced as the `LOG_LEVEL` env var.
+            provider:
+              type: string
+              readOnly: true
+              description: >
+                (Read Only) Implementation provider materialized by the
+                recipe. Example: "agt-openclaw-sidecar".
+            policiesConfigMapName:
+              type: string
+              readOnly: true
+              description: >
+                (Read Only) Name of the ConfigMap holding the policy bundle.
+                The application uses this when constructing the PodSpec
+                patch's `volumes` entry.
+            sidecarImage:
+              type: string
+              readOnly: true
+              description: >
+                (Read Only) Container image the recipe recommends for the
+                sidecar. Echoes the `image` input when set; otherwise the
+                recipe default.
+            proxyPort:
+              type: integer
+              readOnly: true
+              description: (Read Only) HTTP port the sidecar listens on for the governance proxy/API (default 8081).
+            metricsPort:
+              type: integer
+              readOnly: true
+              description: (Read Only) HTTP port the sidecar exposes metrics on (default 9091).
+            policiesMountPath:
+              type: string
+              readOnly: true
+              description: (Read Only) Path inside the sidecar where the policies ConfigMap should be mounted (default `/policies`).
           required:
             - environment
             - application

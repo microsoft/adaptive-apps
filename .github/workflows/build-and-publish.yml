@@ -27,6 +27,8 @@ jobs:
             image: adaptive-apps/ai-agent
           - directory: src/frontend/
             image: adaptive-apps/frontend
+          - directory: src/agt-sidecar/
+            image: adaptive-apps/agt-sidecar
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
