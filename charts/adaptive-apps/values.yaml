@@ -19,6 +19,13 @@ features:
     istioExtAuthz: false # Patch Istio extensionProvider to use OPA
   ai:
     enabled: false       # Marker only; AI workloads are deployed via Radius
+  agentGuardrails:
+    enabled: false       # Marker only; AGT in-pod sidecar is deployed via Radius
+                         # (Radius.Resources/agentGuardrails). The chart adds no
+                         # manifests for this — the marker is purely advisory so
+                         # `*-ai` portfolios can recommend (or recommend against)
+                         # turning it on at app-deploy time via
+                         # `--parameters enableAgentGuardrails=true`.
 
 # =============================================================================
 # Global naming / labels

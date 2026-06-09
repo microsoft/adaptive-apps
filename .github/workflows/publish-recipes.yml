@@ -41,6 +41,8 @@ jobs:
             tag: recipes/ai-agent-azure-openai:latest
           - file: radius/recipes/governance/kubernetes-opa.bicep
             tag: recipes/governance-opa:latest
+          - file: radius/recipes/agent-guardrails/kubernetes-agt-sidecar.bicep
+            tag: recipes/agent-guardrails-agt:latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

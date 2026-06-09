@@ -13,3 +13,5 @@ features:
     istioExtAuthz: false
   ai:
     enabled: true
+  agentGuardrails:
+    enabled: false  # optional; opt in per-app with --parameters enableAgentGuardrails=true

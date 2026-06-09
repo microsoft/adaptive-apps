@@ -18,7 +18,7 @@
 3. Create a K3s cluster:
 
     ```bash
-    k3d cluster create localk8s
+    k3d cluster create k3s
     # Set K3D_FIX_DNS=0 helps cluster creation complete in environments where it otherwise stalls at configuring CoreDNS configmap
     ```
     

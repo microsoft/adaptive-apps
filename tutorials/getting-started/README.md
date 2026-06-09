@@ -148,7 +148,7 @@ proceeding.
 
 #### 2.2.2 Install the portfolio chart
 
-A single `helm install` against the unified chart, parametrized by a profile
+Use `helm install` to install the chart, parametrized by a profile
 file that turns on the right capabilities for `$PORTFOLIO`:
 
 ```bash
@@ -300,6 +300,18 @@ AI_PARAMS=(--parameters aiProvider=local --parameters aiModel=Qwen/Qwen3-0.6B)
 # OR — OpenAI / Azure OpenAI (works with any portfolio):
 AI_PARAMS=(--parameters aiProvider=openai --parameters aiModelName=gpt-4o --parameters aiApiKey=<OpenAI API Key>)
 ```
+
+> **Agent guardrails (AI portfolios only).** When `PORTFOLIO=ent-ai`
+> the in-pod [Agent Governance Toolkit](https://microsoft.github.io/agent-governance-toolkit/)
+> sidecar is the recommended default — opt in by appending
+> `--parameters enableAgentGuardrails=true` to the `rad deploy` below.
+> The sidecar scans every inbound prompt for prompt-injection attempts
+> before it reaches the model. It also works with `min-ai` and `core-ai`
+> on an opt-in basis. The recipe defaults to the Microsoft-published
+> [`ghcr.io/microsoft/agentmesh/governance-sidecar`](https://github.com/microsoft/agent-governance-toolkit/pkgs/container/agentmesh%2Fgovernance-sidecar)
+> image. See [docs/portfolios/overview.md](../../docs/portfolios/overview.md#features-by-portfolio)
+> for the per-portfolio matrix. The guardrails parameter is a no-op on
+> non-AI portfolios.
 
 Deploy:
 

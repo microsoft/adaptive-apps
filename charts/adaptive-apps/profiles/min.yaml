@@ -13,3 +13,5 @@ features:
     istioExtAuthz: false
   ai:
     enabled: false
+  agentGuardrails:
+    enabled: false

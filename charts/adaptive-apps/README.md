@@ -17,6 +17,7 @@ portfolios.
 | `features.governance.opa` | OPA Deployment with Envoy ext_authz plugin |
 | `features.governance.istioExtAuthz` | Post-install Job that patches the Istio ConfigMap to register OPA as an `extensionProvider` (requires `governance.opa=true`) |
 | `features.ai.enabled` | Marker only; AI workloads are deployed via Radius `aiModel` resource types — the chart adds no manifests for this |
+| `features.agentGuardrails.enabled` | Marker only; the in-pod Agent Governance Toolkit sidecar is deployed via Radius (`Radius.Resources/agentGuardrails`) per-app at deploy time — the chart adds no manifests for this. Set to `true` in `*-ai` profiles where the portfolio recommends turning the sidecar on. |
 
 Per-capability config (image tags, replica counts, OIDC endpoints, etc.)
 lives in [values.yaml](./values.yaml) under the same field names used by

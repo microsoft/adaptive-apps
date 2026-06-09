@@ -110,6 +110,8 @@ deploy an Adaptive App portfolio on local Kubernetes, AKS, Azure Local, or Azure
 
 ## Topics
 
+* [Agent Guardrails](./docs/agents/guard-rail.md)
 * [Authentication](./docs/authentication/README.md)
 * [Data Sync](./docs/data-sync/README.md)
 * [Policies](./docs/policies/README.md)
+

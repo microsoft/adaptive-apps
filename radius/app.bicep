@@ -5,6 +5,8 @@
 //   • Radius.Resources/mqttBrokers          → Eclipse Mosquitto 2 (MQTT + WS)
 //   • Radius.Resources/idProviders          → OIDC identity provider (Keycloak by default)
 //   • Radius.Resources/aiModels             → AI inference endpoint (only when aiProvider=='local')
+//   • Radius.Resources/governance           → Mesh-layer PDP (e.g. OPA + Envoy ext_authz; opt-in)
+//   • Radius.Resources/agentGuardrails      → In-pod agent governance sidecar (opt-in, only when AI is enabled)
 //   • Applications.Core/containers          → backend (.NET 8), ai-agent (.NET 8), frontend (Node)
 //
 // AI inference settings:
@@ -12,6 +14,14 @@
 //     a Recipe and its connection values are auto-injected into the ai-agent container.
 //   • Otherwise, the aiProvider / aiEndpoint / aiModelName / aiApiKey parameters are
 //     injected directly into the ai-agent container (no Recipe required).
+//
+// Agent guardrails (opt-in via enableAgentGuardrails=true; requires aiProvider != ''):
+//   • The agentGuardrails Recipe stages a policy ConfigMap and emits coordinates
+//     (image, ports, ConfigMap name). The ai-agent containers then inject the
+//     sidecar via runtimes.kubernetes.pod using DETERMINISTIC NAMES derived from
+//     the same resource name. The containers do NOT read .properties of the
+//     conditional guardrails resource — that would create a conditional
+//     dependency edge and trip the Deployment Engine in Radius v0.57.x.
 //
 // BEFORE DEPLOYING this file you must:
 //   1. Generate & register the Bicep extension (see README.md)
@@ -126,6 +136,23 @@ param governanceMode string = 'enforce'
 @description('When true (and enableGovernance is true), the governance recipe also registers itself as an Istio mesh extensionProvider so AuthorizationPolicy resources with `action: CUSTOM` can delegate to the PDP. Requires Istio to be installed in the cluster.')
 param governanceIstioIntegration bool = true
 
+@description('Deploy a Radius.Resources/agentGuardrails resource and inject the Agent Governance Toolkit (AGT) sidecar into the ai-agent pod. Application-layer, in-pod governance for the LLM agent (prompt-injection scanning, governed tool execution). Independent of `enableGovernance` (mesh-layer authz). Requires a non-empty `aiProvider`.')
+param enableAgentGuardrails bool = false
+
+@description('Enforcement mode for the agent guardrails sidecar. Surfaced as the AGT_MODE env var on the sidecar container.')
+@allowed([
+  'enforce'
+  'audit'
+  'dryrun'
+])
+param agentGuardrailsMode string = 'enforce'
+
+@description('Inline policy bundle (YAML) handed to the agent guardrails sidecar. Leave empty to use the recipe default-allow placeholder.')
+param agentGuardrailsPolicies string = ''
+
+@description('Override the sidecar container image. When empty the recipe default (the Microsoft-published `ghcr.io/microsoft/agentmesh/governance-sidecar` image) is used.')
+param agentGuardrailsImage string = ''
+
 var effectiveOidcIssuer = oidcIssuerOverride != '' ? oidcIssuerOverride : oidcIssuer
 var issuerBaseForDerivedEndpoints = endsWith(effectiveOidcIssuer, '/')
   ? substring(effectiveOidcIssuer, 0, max(length(effectiveOidcIssuer) - 1, 0))
@@ -147,6 +174,109 @@ var effectiveOidcUserInfoEndpoint = oidcUserInfoEndpoint != ''
     : ''
 
 var isLocalAi = aiProvider == 'local'
+var hasAi = aiProvider != ''
+var guardrailsActive = enableAgentGuardrails && hasAi
+
+// ---------------------------------------------------------------------------
+// Agent guardrails — deterministic coordinates.
+//
+// These names MUST match what the kubernetes-agt-sidecar recipe computes from
+// `context.resource.name` (see recipes/agent-guardrails/kubernetes-agt-sidecar.bicep).
+// Computing them here, instead of reading the recipe outputs via
+// `tradingAgentGuardrails.properties.*`, avoids the conditional dependency
+// edge that crashes the Radius Deployment Engine in v0.57.x with
+// "Unable to fetch resource reference from callback DeploymentResourceNoOperationJob".
+// ---------------------------------------------------------------------------
+var agentGuardrailsResourceName  = 'ai-agent-guardrails'
+var agentGuardrailsConfigMapName = '${toLower(replace(agentGuardrailsResourceName, '_', '-'))}-policies'
+var agentGuardrailsProxyPort     = 8081
+var agentGuardrailsMetricsPort   = 9091
+var agentGuardrailsMountPath     = '/policies'
+var agentGuardrailsDefaultImage  = 'ghcr.io/microsoft/agentmesh/governance-sidecar:4.0.0'
+var agentGuardrailsEffectiveImage = agentGuardrailsImage != '' ? agentGuardrailsImage : agentGuardrailsDefaultImage
+
+// Pod patch injected into both ai-agent variants when guardrails are active.
+// Empty otherwise — Radius treats `pod: {}` as a no-op merge.
+var agentGuardrailsPodPatch = guardrailsActive ? {
+  containers: [
+    {
+      name: 'agt-sidecar'
+      image: agentGuardrailsEffectiveImage
+      imagePullPolicy: 'IfNotPresent'
+      ports: [
+        {
+          name: 'agt-proxy'
+          containerPort: agentGuardrailsProxyPort
+          protocol: 'TCP'
+        }
+        {
+          name: 'agt-metrics'
+          containerPort: agentGuardrailsMetricsPort
+          protocol: 'TCP'
+        }
+      ]
+      env: [
+        { name: 'HOST',        value: '0.0.0.0' }
+        { name: 'PORT',        value: '${agentGuardrailsProxyPort}' }
+        { name: 'POLICY_DIR',  value: agentGuardrailsMountPath }
+        { name: 'LOG_LEVEL',   value: 'INFO' }
+        { name: 'AGT_MODE',    value: agentGuardrailsMode }
+      ]
+      volumeMounts: [
+        {
+          name: 'agt-policies'
+          mountPath: agentGuardrailsMountPath
+          readOnly: true
+        }
+      ]
+      readinessProbe: {
+        httpGet: {
+          path: '/ready'
+          port: agentGuardrailsProxyPort
+        }
+        initialDelaySeconds: 5
+        periodSeconds: 10
+      }
+      livenessProbe: {
+        httpGet: {
+          path: '/health'
+          port: agentGuardrailsProxyPort
+        }
+        initialDelaySeconds: 15
+        periodSeconds: 20
+      }
+      resources: {
+        requests: {
+          cpu: '100m'
+          memory: '256Mi'
+        }
+        limits: {
+          cpu: '500m'
+          memory: '512Mi'
+        }
+      }
+    }
+  ]
+  volumes: [
+    {
+      name: 'agt-policies'
+      configMap: {
+        name: agentGuardrailsConfigMapName
+      }
+    }
+  ]
+} : {}
+
+// Env vars surfaced into the ai-agent application so it can call the sidecar.
+// The agent code is responsible for actually invoking the governance API
+// before executing tools / forwarding prompts (per upstream AGT roadmap,
+// transparent interception is not yet available).
+var agentGuardrailsAgentEnv = guardrailsActive ? {
+  GOVERNANCE_PROXY:   { value: 'http://localhost:${agentGuardrailsProxyPort}' }
+  GOVERNANCE_API:     { value: 'http://localhost:${agentGuardrailsProxyPort}' }
+  GOVERNANCE_ENABLED: { value: 'true' }
+  GOVERNANCE_MODE:    { value: agentGuardrailsMode }
+} : {}
 
 var kubernetesMetadataExtension = enableIstioInjection ? [
   {
@@ -231,6 +361,26 @@ resource tradingGovernance 'Radius.Resources/governance@2025-08-01-preview' = if
   }
 }
 
+// ---------------------------------------------------------------------------
+// Agent guardrails (in-pod AGT sidecar) — opt-in, AI-only.
+//
+// The recipe only stages the policies ConfigMap. The sidecar container
+// itself is injected into the ai-agent pod below via `runtimes.kubernetes.pod`
+// using the DETERMINISTIC NAMES defined in the `agentGuardrails*` vars above
+// — the containers must not read `tradingAgentGuardrails.properties.*` or
+// they would create a conditional dependency edge (see header comment).
+// ---------------------------------------------------------------------------
+resource tradingAgentGuardrails 'Radius.Resources/agentGuardrails@2025-08-01-preview' = if (guardrailsActive) {
+  name: agentGuardrailsResourceName
+  properties: {
+    environment: environment
+    application: tradingApp.id
+    mode: agentGuardrailsMode
+    policies: agentGuardrailsPolicies
+    image: agentGuardrailsImage
+  }
+}
+
 resource tradingAI 'Radius.Resources/aiModels@2025-08-01-preview' = if (isLocalAi) {
   name: 'trading-ai'
   properties: {
@@ -269,12 +419,17 @@ resource aiAgentLocal 'Applications.Core/containers@2023-10-01-preview' = if (is
           containerPort: 7000
         }
       }
-      env: union(aiAgentBaseEnv, {
+      env: union(aiAgentBaseEnv, union(agentGuardrailsAgentEnv, {
         CONNECTION_AI_SECRETS_APIKEY: { value: tradingAI!.properties.secrets.apiKey }
-      })
+      }))
     }
     connections: {
       ai: { source: tradingAI!.id }
+    }
+    runtimes: {
+      kubernetes: {
+        pod: agentGuardrailsPodPatch
+      }
     }
   }
 }
@@ -290,12 +445,17 @@ resource aiAgentExternal 'Applications.Core/containers@2023-10-01-preview' = if 
           containerPort: 7000
         }
       }
-      env: union(aiAgentBaseEnv, {
+      env: union(aiAgentBaseEnv, union(agentGuardrailsAgentEnv, {
         CONNECTION_AI_PROVIDER:       { value: aiProvider }
         CONNECTION_AI_ENDPOINT:       { value: aiEndpoint }
         CONNECTION_AI_MODEL:          { value: aiModelName }
         CONNECTION_AI_SECRETS_APIKEY: { value: aiApiKey }
-      })
+      }))
+    }
+    runtimes: {
+      kubernetes: {
+        pod: agentGuardrailsPodPatch
+      }
     }
   }
 }
