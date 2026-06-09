@@ -28,6 +28,11 @@ If your target is AKS, define a few more environment variables:
 export AZURE_SUBSCRIPTION=<your Azure subscrption id>
 export RESOURCE_GROUP=<Azure resource group>
 export AKS_CLUSTER=<AKS cluster name>
+export AKS_OIDC_ISSUER=$(az aks show \
+      --resource-group $RESOURCE_GROUP \
+      --name $AKS_CLUSTER \
+      --query oidcIssuerProfile.issuerUrl \
+      -o tsv)
 ```
 
 | Portfolio | Identity | Service mesh (Istio) | Observability | Governance (OPA) | On-cluster AI (Kaito) |
@@ -205,7 +210,8 @@ export OIDC_BROWSER_AUTH_ENDPOINT=http://localhost:8080/realms/master/protocol/o
 #### 2.2.4 Install Radius
 
 ```bash
-rad install kubernetes --set rp.publicEndpointOverride=localhost:8081
+rad install kubernetes 
+# Add --set rp.publicEndpointOverride=localhost:<port> if you have a port conflict
 
 rad workspace create kubernetes trading --context "$(kubectl config current-context)" --force
 rad workspace switch trading

@@ -56,7 +56,6 @@ kubectl apply -f tutorials/common/assets/gpu/gpu_bootstrap.yaml
 
 ```bash
 ./tutorials/common/assets/gpu/validate_gpu.sh
-# Press Ctrl+C to exit once `nvidia-smi` output is visible.
 ```
 
 ## 5. Label the node with GPU facts
