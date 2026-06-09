@@ -1,4 +1,4 @@
-# Challenge 05 - <Title of Challenge> - Coach's Guide 
+# Challenge 05 - Port the App Across Environments - Coach's Guide
 
 [< Previous Solution](./Solution-04.md) - **[Home](./README.md)** - [Next Solution >](./Solution-06.md)
 

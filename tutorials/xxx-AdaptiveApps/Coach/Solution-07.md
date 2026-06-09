@@ -1,4 +1,4 @@
-# Challenge 07 - <Title of Challenge> - Coach's Guide 
+# Challenge 07 - Secure Service Communication - Configure Service-to-Service Communication - Coach's Guide
 
 [< Previous Solution](./Solution-06.md) - **[Home](./README.md)** - [Next Solution >](./Solution-08.md)
 

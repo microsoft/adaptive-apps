@@ -1,99 +1,64 @@
-# Challenge 02 - <Title of Challenge>
+# Challenge 02 - Deploy and Explore Radius
 
 [< Previous Challenge](./Challenge-01.md) - **[Home](../README.md)** - [Next Challenge >](./Challenge-03.md)
 
-***This is a template for a single challenge. The italicized text provides hints & examples of what should or should NOT go in each section.  You should remove all italicized & sample text and replace with your content.***
+## Pre-requisites
 
-## Pre-requisites (Optional)
-
-*Your hack's "Challenge 0" should cover pre-requisites for the entire hack, and thus this section is optional and may be omitted.  If you wish to spell out specific previous challenges that must be completed before starting this challenge, you may do so here.*
+- Completion of [Challenge 01](./Challenge-01.md): a healthy Kubernetes cluster is available and `kubectl get nodes` shows all nodes `Ready`.
+- ACR, Key Vault, and Storage account are provisioned and role assignments are in place.
 
 ## Introduction
 
-*This section should provide an overview of the technologies or tasks that will be needed to complete the this challenge.  This includes the technical context for the challenge, as well as any new "lessons" the attendees should learn before completing the challenge.*
+[Radius](https://radapp.io) is an open-source, cloud-native application platform that lets developers describe their entire application — containers, databases, message brokers, identities, and the cloud resources they depend on — as a single, portable model. Platform engineers use Radius to define reusable *environments* and *recipes* that automatically provision the right infrastructure, apply organizational policy, and keep developers focused on their code rather than the cloud plumbing underneath.
 
-*Optionally, the coach or event host is encouraged to present a mini-lesson (with a PPT or video) to set up the context & introduction to each challenge. A summary of the content of that mini-lesson is a good candidate for this Introduction section*
-
-*For example:*
-
-When setting up an IoT device, it is important to understand how 'thingamajigs' work. Thingamajigs are a key part of every IoT device and ensure they are able to communicate properly with edge servers. Thingamajigs require IP addresses to be assigned to them by a server and thus must have unique MAC addresses. In this challenge, you will get hands on with a thingamajig and learn how one is configured.
+In this challenge you install the **Radius control plane** onto the cluster you prepared in Challenge 1, configure the `rad` CLI on every team member's workstation to point at that control plane, and then explore the Radius application model before moving on to building abstractions.
 
 ## Description
 
-*This section should clearly state the goals of the challenge and any high-level instructions you want the students to follow. You may provide a list of specifications required to meet the goals. If this is more than 2-3 paragraphs, it is likely you are not doing it right.*
+Your team has been asked to get a working Radius installation ready and to understand its core concepts before authoring any recipes or deploying any applications.
 
-***NOTE:** Do NOT use ordered lists as that is an indicator of 'step-by-step' instructions. Instead, use bullet lists to list out goals and/or specifications.*
+As a team, deploy and explore Radius so that the following are true:
 
-***NOTE:** You may use Markdown sub-headers to organize key sections of your challenge description.*
+- The `rad` CLI is installed on each team member's workstation and `rad version` reports a valid CLI version.
+- The Radius control plane is installed into the cluster (in its own namespace) and all of its pods are `Running` / `Ready`.
+- A Radius **workspace** is configured on each workstation so that the `rad` CLI targets the shared control plane.
+- A default Radius **environment** exists in the control plane, is listed as the active environment for your workspace, and has the Azure cloud provider registered against the subscription and resource group from Challenge 1.
+- Your team can explain, in its own words, what the Radius control plane is, which components are running, and how the `rad` CLI, workspace, environments, and the application model relate to each other.
+- Your team has opened the Radius **dashboard** and can navigate it to inspect the environment and resource groups.
 
-*Optionally, you may provide resource files such as a sample application, code snippets, or templates as learning aids for the students. These files are stored in the hack's `Student/Resources` folder. It is the coach's responsibility to package these resources into a Resources.zip file and provide it to the students at the start of the hack.*
-
-***NOTE:** Do NOT provide direct links to files or folders in the What The Hack repository from the student guide. Instead, you should refer to the Resource.zip file provided by the coach.*
-
-***NOTE:** As an exception, you may provide a GitHub 'raw' link to an individual file such as a PDF or Office document, so long as it does not open the contents of the file in the What The Hack repo on the GitHub website.*
-
-***NOTE:** Any direct links to the What The Hack repo will be flagged for review during the review process by the WTH V-Team, including exception cases.*
-
-*Sample challenge text for the IoT Hack Of The Century:*
-
-In this challenge, you will properly configure the thingamajig for your IoT device so that it can communicate with the mother ship.
-
-You can find a sample `thingamajig.config` file in the `/ChallengeXX` folder of the Resources.zip file provided by your coach. This is a good starting reference, but you will need to discover how to set exact settings.
-
-Please configure the thingamajig with the following specifications:
-- Use dynamic IP addresses
-- Only trust the following whitelisted servers: "mothership", "IoTQueenBee" 
-- Deny access to "IoTProxyShip"
-
-You can view an architectural diagram of an IoT thingamajig here: [Thingamajig.PDF](/Student/Resources/Architecture.PDF?raw=true).
+> **NOTE:** Do not author recipes or deploy applications yet — that is Challenge 3 and onwards. The goal here is a verified Radius installation and a shared understanding of the application model.
 
 ## Success Criteria
 
-*Success criteria goes here. The success criteria should be a list of checks so a student knows they have completed the challenge successfully. These should be things that can be demonstrated to a coach.* 
-
-*The success criteria should not be a list of instructions.*
-
-*Success criteria should always start with language like: "Validate XXX..." or "Verify YYY..." or "Show ZZZ..." or "Demonstrate you understand VVV..."*
-
-*Sample success criteria for the IoT sample challenge:*
-
 To complete this challenge successfully, you should be able to:
-- Verify that the IoT device boots properly after its thingamajig is configured.
-- Verify that the thingamajig can connect to the mothership.
-- Demonstrate that the thingamajic will not connect to the IoTProxyShip
+
+- Run `rad version` on each workstation and see a valid CLI version and a matching control plane version.
+- Show that `kubectl get pods -n radius-system` returns all Radius pods as `Running` / `Ready`.
+- Show that `rad workspace list` displays a workspace pointing at your cluster, marked as current.
+- Show that `rad env list` returns at least one environment, marked as the default.
+- Open the Radius dashboard and point out the environment and any registered cloud providers.
+- Describe the role of each major Radius component (UCP, applications-rp, controller, dashboard) and why it matters.
 
 ## Learning Resources
 
-_List of relevant links and online articles that should give the attendees the knowledge needed to complete the challenge._
-
-*Think of this list as giving the students a head start on some easy Internet searches. However, try not to include documentation links that are the literal step-by-step answer of the challenge's scenario.*
-
-***Note:** Use descriptive text for each link instead of just URLs.*
-
-*Sample IoT resource links:*
-
-- [What is a Thingamajig?](https://www.bing.com/search?q=what+is+a+thingamajig)
-- [10 Tips for Never Forgetting Your Thingamajic](https://www.youtube.com/watch?v=dQw4w9WgXcQ)
-- [IoT & Thingamajigs: Together Forever](https://www.youtube.com/watch?v=yPYZpwSpKmA)
+- [What is Radius?](https://docs.radapp.io/concepts/) — overview of Radius concepts, including the control plane, environments, and recipes.
+- [Install the rad CLI](https://docs.radapp.io/installation/) — how to obtain and verify the Radius command-line tool on Windows, macOS, and Linux.
+- [Install Radius on a Kubernetes cluster](https://docs.radapp.io/guides/operations/kubernetes/install/) — supported cluster types, required permissions, and installation options.
+- [Radius workspaces](https://docs.radapp.io/guides/operations/workspaces/overview/) — what a workspace is and how it connects the `rad` CLI to a control plane.
+- [Radius environments overview](https://docs.radapp.io/guides/deploy-apps/environments/overview/) — how environments relate to the control plane and why they matter for later challenges.
+- [Radius dashboard](https://docs.radapp.io/guides/tooling/dashboard/) — how to open and use the built-in Radius UI.
 
 ## Tips
 
-*This section is optional and may be omitted.*
-
-*Add tips and hints here to give students food for thought. Sample IoT tips:*
-
-- IoTDevices can fail from a broken heart if they are not together with their thingamajig. Your device will display a broken heart emoji on its screen if this happens.
-- An IoTDevice can have one or more thingamajigs attached which allow them to connect to multiple networks.
+- The account that runs `rad install kubernetes` needs `cluster-admin` permissions on the cluster. Use `az aks get-credentials --admin` on AKS to get admin credentials if needed.
+- Only **one** team member needs to run `rad install kubernetes` — it installs into the shared cluster. Every other team member only needs to configure their local workspace.
+- If `rad install kubernetes` seems to hang, check `kubectl get pods -n radius-system` — image pulls on a fresh cluster can take a few minutes before everything becomes `Ready`.
+- Run `rad init --full` as an interactive alternative to the individual `rad workspace create` / `rad group create` / `rad env create` commands if you prefer a guided setup.
 
 ## Advanced Challenges (Optional)
 
-*If you want, you may provide additional goals to this challenge for folks who are eager.*
+Finished early? Try one or more of the following:
 
-*This section is optional and may be omitted.*
-
-*Sample IoT advanced challenges:*
-
-Too comfortable?  Eager to do more?  Try these additional challenges!
-
-- Observe what happens if your IoTDevice is separated from its thingamajig.
-- Configure your IoTDevice to connect to BOTH the mothership and IoTQueenBee at the same time.
+- Explore the Radius dashboard (`rad dashboard`) and use it to inspect the workspace and environment visually.
+- Write a short runbook for your team explaining how to **upgrade** or **uninstall** Radius cleanly, including what happens to existing environments and applications.
+- Investigate the Radius CRDs installed in the cluster (`kubectl get crds | grep radapp.io`) and describe what each one represents.

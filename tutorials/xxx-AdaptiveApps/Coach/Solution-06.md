@@ -1,4 +1,4 @@
-# Challenge 06 - <Title of Challenge> - Coach's Guide 
+# Challenge 06 - Adapt Identity Services - Configure User Authentication - Coach's Guide
 
 [< Previous Solution](./Solution-05.md) - **[Home](./README.md)** - [Next Solution >](./Solution-07.md)
 

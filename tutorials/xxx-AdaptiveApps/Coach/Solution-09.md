@@ -1,4 +1,4 @@
-# Challenge 09 - <Title of Challenge> - Coach's Guide 
+# Challenge 09 - Extend the Application Model with Custom Radius Resources - Coach's Guide
 
 [< Previous Solution](./Solution-08.md) - **[Home](./README.md)** - [Next Solution >](./Solution-10.md)
 

@@ -1,8 +1,7 @@
-# Challenge 03 - <Title of Challenge>
+# Challenge 03 - Build the Platform Abstractions
 
 [< Previous Challenge](./Challenge-02.md) - **[Home](../README.md)** - [Next Challenge >](./Challenge-04.md)
 
-***Coach is ready - have to create Student Challenge***
 ***This is a template for a single challenge. The italicized text provides hints & examples of what should or should NOT go in each section.  You should remove all italicized & sample text and replace with your content.***
 
 ## Pre-requisites (Optional)

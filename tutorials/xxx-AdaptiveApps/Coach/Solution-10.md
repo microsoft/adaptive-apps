@@ -1,20 +1,11 @@
-# Challenge 10 - <Title of Challenge> - Coach's Guide 
+# Challenge 10 - Modernize a Brownfield Application - Coach's Guide
 
 [< Previous Solution](./Solution-09.md) - **[Home](./README.md)**
 
 ## Notes & Guidance
 
-This is the only section you need to include.
+*Add coach guidance here.*
 
-Use general non-bulleted text for the beginning of a solution area for this challenge
+## Solution Guide
 
-- Then move into bullets
-  - And sub-bullets and even
-    - sub-sub-bullets
-
-Break things apart with more than one bullet list
-
-- Like this
-- One
-- Right
-- Here
+*Add solution steps here.*

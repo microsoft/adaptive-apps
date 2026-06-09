@@ -1,4 +1,4 @@
-# Challenge 07 - <Title of Challenge>
+# Challenge 07 - Secure Service Communication - Configure Service-to-Service Communication
 
 [< Previous Challenge](./Challenge-06.md) - **[Home](../README.md)** - [Next Challenge >](./Challenge-08.md)
 

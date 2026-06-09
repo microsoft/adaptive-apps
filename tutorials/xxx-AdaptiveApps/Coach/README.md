@@ -11,31 +11,31 @@ This hack includes an optional [lecture presentation](Lectures.pptx) that featur
 ## Coach's Guides
 
 - Challenge 00: **[Prerequisites - Ready, Set, GO!](./Solution-00.md)**
-	 - Prepare your workstation to work with Azure.
-- Challenge 01: **[Title of Challenge](./Solution-01.md)**
-	 - Description of challenge
-- Challenge 02: **[Title of Challenge](./Solution-02.md)**
-	 - Description of challenge
-- Challenge 03: **[Title of Challenge](./Solution-03.md)**
-	 - Description of challenge
-- Challenge 04: **[Title of Challenge](./Solution-04.md)**
-	 - Description of challenge
-- Challenge 05: **[Title of Challenge](./Solution-05.md)**
-	 - Description of challenge
-- Challenge 06: **[Title of Challenge](./Solution-06.md)**
-	 - Description of challenge
-- Challenge 07: **[Title of Challenge](./Solution-07.md)**
-	 - Description of challenge
-- Challenge 08: **[Title of Challenge](./Solution-08.md)**
-	 - Description of challenge
-- Challenge 09: **[Title of Challenge](./Solution-09.md)**
-	 - Description of challenge
-- Challenge 10: **[Title of Challenge](./Solution-10.md)**
-	 - Description of challenge
-
-## Coach Prerequisites
-
-This hack has pre-reqs that a coach is responsible for understanding and/or setting up BEFORE hosting an event. Please review the [What The Hack Hosting Guide](https://aka.ms/wthhost) for information on how to host a hack event.
+  - Prepare your workstation to work with Azure.
+- Challenge 01: **[Prepare the Platforms](./Solution-01.md)**
+	 - Set up and validate one or more target environments (AKS, Arc-enabled Kubernetes, Azure Local, or local Kubernetes).
+- Challenge 02: **[Deploy and Explore Radius](./Solution-02.md)**
+	 - Install Radius, create environments, and explore the Radius application model and portal.
+- Challenge 03: **[Build the Platform Abstractions](./Solution-03.md)**
+	 - Create or import Radius resource types and recipes to define reusable platform capabilities.
+- Challenge 04: **[Build the Platform Abstractions with Recipes](./Solution-04.md)**
+	 - Build the Platform Abstractions with Recipes.
+- Challenge 05: **[Port the App Across Environments](./Solution-05.md)**
+	 - Deploy the same application to a second environment with minimal configuration changes.
+- Challenge 06: **[Adapt Identity Services - Configure User Authentication](./Solution-06.md)**
+	 - Configure authentication using different identity providers such as Entra ID, Keycloak, or Active Directory.
+- Challenge 07: **[Secure Service Communication - Configure Service-to-Service Communication](./Solution-07.md)**
+	 - Implement workload identities and mTLS to secure service-to-service communication.
+- Challenge 08: **[Adapt AI Services](./Solution-08.md)**
+	 - Switch between cloud-hosted and local AI models while keeping the application unchanged.
+- Challenge 09: **[Extend the Application Model with Custom Radius Resources](./Solution-09.md)**
+	 - Create a custom Radius resource type and recipe to add a new reusable platform capability.
+- Challenge 10: **[Modernize a Brownfield Application](./Solution-10.md)**
+	 - Convert an existing application into an Adaptive App and deploy it consistently across environments.
+- Challenge 21 *(optional)*: **[Define a PostgreSQL Resource Type and Author Recipes for Azure and Azure Local](./Solution-21.md)**
+	 - Optional Module — deep-dive extension for use during a Micro Hack.
+- Challenge 22 *(optional)*: **[Deploy a Portable .NET 10 Web App on Azure and Azure Local with Radius](./Solution-22.md)**
+	 - Optional Module — deep-dive extension for use during a Micro Hack.
 
 The guide covers the common preparation steps a coach needs to do before any What The Hack event, including how to properly configure Microsoft Teams.
 
