@@ -108,6 +108,12 @@ To support the Radius application model, capability vendors are expected to impl
 Follow our [Getting Started tutorial](./tutorials/getting-started/README.md) to
 deploy an Adaptive App portfolio on local Kubernetes, AKS, Azure Local, or Azure Arc.
 
+### Additional tutorials
+
+* [Generate Radius artifacts with the `ada` CLI](./tutorials/cli/README.md) — turn a `docker-compose.yml` into an `app.bicep`, comparing the `compose`, `llm`, and `skill` strategies and the critic loop.
+* [Governance](./tutorials/governance/README.md) — author `AuthorizationPolicy` (native and OPA-delegated) for the `ent`/`ent-ai` portfolios.
+* [Service mesh](./tutorials/service-mesh/README.md) — enroll the app namespace in Istio and verify mesh traffic.
+
 ## Topics
 
 * [Agent Guardrails](./docs/agents/guard-rail.md)
