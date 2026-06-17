@@ -23,7 +23,7 @@ Adaptive Apps redefine how applications are built and operated by enabling them 
 Adaptive Apps is comprised of four layers: application model, programming model, application platform and AI-powered tooling. Rather than redefining these concepts from the ground up, Adaptive Apps leverage proven open-source and cloud-native technologies, such as [Radius](https://docs.radapp.io/), [Dapr](https://dapr.io/), and Azure Arc, and orchestrate them into an end-to-end solution.
 
 <p align="center">
-    <img src="./docs/images/portable-apps-architecture.png" width="75%" />
+    <img src="./docs/images/adaptive-apps-architecture.png" width="75%" />
 </p>
 
 ### **Platform-agnostic application model**
@@ -64,32 +64,27 @@ A horiztonal comparison of portfolios is available [here](./docs/portfolios/over
 
 ### **Defined portfolios**
 
-As a starting point, we define six portfolios with clear inheritance:
+As a starting point, we define six portfolios, as summarized in the following table:
 
-* [`min`](./docs/portfolios/min.md)
+| Portfolio | Identity | Service mesh (Istio) | Observability | Governance (OPA) | On-cluster AI (Kaito) |
+| --- | :-: | :-: | :-: | :-: | :-: |
+| [`min`](./docs/portfolios/min.md) | ✓ | ✗ | ✗ | ✗ | ✗ |
+| [`core`](./docs/portfolios/core.md) | ✓ | ✓ | ✓ | ✗ | ✗ |
+| [`ent`](./docs/portfolios/ent.md) | ✓ | ✓ | ✓ | ✓ (off by default) | ✗ |
+| [`min-ai`](./docs/portfolios/min-ai.md) | ✓ | ✗ | ✗ | ✗ | ✓ |
+| [`core-ai`](./docs/portfolios/core-ai.md) | ✓ | ✓ | ✓ | ✗ | ✓ |
+| [`ent-ai`](./docs/portfolios/ent-ai.md) | ✓ | ✓ | ✓ | ✓ (off by default) | ✓ |
 
-    Baseline capabilities for adaptive application hosting, including authentication, service hosting, and observability. Ideal for PoC, MVP, hackathon, demos and experiments. [read more...](./docs/portfolios/min.md)
-
-* [`core`](./docs/portfolios/core.md)
-
-    Builds on `min` and provides operational readiness, including service mesh, data sync, basic policy reinforcement, and secret management. Ideal for operating standard production workloads. [read more...](./docs/portfolios/core.md)
-
-* [`ent`](./docs/portfolios/ent.md)
-
-    Builds on `core` and represents the large-scale enterprise developments, including advanced policy reinforcement, optional sidecar enablement, advanced certificate management, advanced monitoring and backup/restore.
-
-* [`min-ai`](./docs/portfolios/min-ai.md)
-
-    Builds on `min` and adds local AI model management for continued offline AI inferences. [read more...](./docs/portfolios/min-ai.md)
-
-* [`core-ai`](./docs/portfolios/core-ai.md)
-
-    Builds on `core` and adds local AI model management for continued offline AI inferences. [read more...](./docs/portfolios/core-ai.md)
-
-*  [`ent-ai`](./docs/portfolios/ent-ai.md)
-
-    Builds on `ent` and adds local AI model management for continued offline AI inferences. [read more...](./docs/portfolios/ent-ai.md)   
-
+* **`min`** — baseline hosting (identity + service hosting). Ideal for PoC,
+  MVP, hackathon, demos and experiments.
+* **`core`** — builds on `min` with operational readiness: service mesh, data
+  sync, observability, basic policy enforcement, secret management. Ideal for
+  standard production workloads.
+* **`ent`** — builds on `core` for large-scale enterprise: advanced policy
+  enforcement, advanced certificate management, advanced monitoring,
+  backup/restore.
+* **`*-ai`** — layer on-cluster AI model management onto the base portfolio
+  for offline / local inference.
 
 ### **Capability portfolio deployment**
 
@@ -110,16 +105,13 @@ To support the Radius application model, capability vendors are expected to impl
 
 ## Getting Started
 
-Follow our getting-started tutorials to deploy a Adaptive App across cloud and edge environments.
-* [Min Portfolio - getting started](./tutorials/min-getting-started/README.md)
-* [Min-AI Portfolio -getting started](./tutorials/min-ai-getting-started/README.md)
-* [Core Portfolio - getting started](./tutorials/core-getting-started/README.md)
-* [Core-AI Portfolio - getting started](./tutorials/core-ai-getting-started/README.md)
-* [Ent Portfolio - getting started](./tutorials/ent-getting-started/README.md)
-* [Ent-AI Portfolio - getting started](./tutorials/ent-ai-getting-started/README.md)
+Follow our [Getting Started tutorial](./tutorials/getting-started/README.md) to
+deploy an Adaptive App portfolio on local Kubernetes, AKS, Azure Local, or Azure Arc.
 
 ## Topics
 
+* [Agent Guardrails](./docs/agents/guard-rail.md)
 * [Authentication](./docs/authentication/README.md)
 * [Data Sync](./docs/data-sync/README.md)
 * [Policies](./docs/policies/README.md)
+

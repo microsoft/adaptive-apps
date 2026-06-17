@@ -1,0 +1,182 @@
+{{- if .Values.features.observability.enabled }}
+---
+# OTEL Collector ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  namespace: {{ .Release.Namespace }}
+data:
+  collector-config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          http:
+            endpoint: 0.0.0.0:4318
+    processors:
+      batch:
+    exporters:
+      zipkin:
+        endpoint: http://zipkin:9411/api/v2/spans
+      prometheusremotewrite:
+        endpoint: http://prometheus:9090/api/v1/write
+        tls:
+          insecure: true
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [zipkin]
+        metrics:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [prometheusremotewrite]
+---
+# Zipkin Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zipkin
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zipkin
+  template:
+    metadata:
+      labels:
+        app: zipkin
+    spec:
+      containers:
+      - name: zipkin
+        image: openzipkin/zipkin:3.5.1
+        ports:
+        - containerPort: 9411
+          name: http
+---
+# Zipkin Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: zipkin
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    app: zipkin
+  ports:
+  - port: 9411
+    targetPort: 9411
+    name: http
+  type: ClusterIP
+---
+# Prometheus Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      containers:
+      - name: prometheus
+        image: prom/prometheus:v2.54.1
+        args:
+          - --config.file=/etc/prometheus/prometheus.yml
+          - --web.enable-remote-write-receiver
+        ports:
+        - containerPort: 9090
+          name: http
+        volumeMounts:
+        - name: prometheus-config
+          mountPath: /etc/prometheus
+      volumes:
+      - name: prometheus-config
+        configMap:
+          name: prometheus-config
+---
+# Prometheus ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: {{ .Release.Namespace }}
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+    scrape_configs:
+      - job_name: 'prometheus'
+        static_configs:
+          - targets: ['localhost:9090']
+---
+# Prometheus Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    app: prometheus
+  ports:
+  - port: 9090
+    targetPort: 9090
+    name: http
+  type: ClusterIP
+---
+# OTEL Collector Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: otel-collector
+  template:
+    metadata:
+      labels:
+        app: otel-collector
+    spec:
+      containers:
+      - name: otel-collector
+        image: otel/opentelemetry-collector-contrib:0.111.0
+        command: ["/otelcol-contrib", "--config=/etc/otel-collector-config/collector-config.yaml"]
+        ports:
+        - containerPort: 4318
+          name: otlp-http
+        volumeMounts:
+        - name: otel-config
+          mountPath: /etc/otel-collector-config
+      volumes:
+      - name: otel-config
+        configMap:
+          name: otel-collector-config
+---
+# OTEL Collector Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    app: otel-collector
+  ports:
+  - port: 4318
+    targetPort: 4318
+    name: otlp-http
+  type: ClusterIP
+{{- end }}

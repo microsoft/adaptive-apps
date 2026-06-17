@@ -1,0 +1,18 @@
+# Reproduces the legacy `core` portfolio chart.
+# Adds Istio (install + STRICT mTLS) and the OTel/Prometheus/Zipkin
+# observability stack on top of min.
+features:
+  identity:
+    enabled: true
+  istio:
+    install: true
+    mtls: true
+  observability:
+    enabled: true
+  governance:
+    opa: false
+    istioExtAuthz: false
+  ai:
+    enabled: false
+  agentGuardrails:
+    enabled: false

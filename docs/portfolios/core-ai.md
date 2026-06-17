@@ -9,4 +9,4 @@ The Core-AI Portfolio combines the [Min-AI Portfolio](./min-ai.md) and the [Core
 
 ## Additional Guidance
 
-* [Getting started with the Core-AI portfolio](../../tutorials/core-ai-getting-started/README.md)
+* [Getting started with the Core-AI portfolio](../../tutorials/getting-started/README.md) (set `PORTFOLIO=core-ai`)

@@ -1,0 +1,201 @@
+name: Release CLI
+
+# Cross-build the `ada` CLI for the supported targets, bundle each binary
+# with the `radius/` artifact tree (recipes, resource types, env bicep,
+# bicepconfig), and attach the archives to a GitHub Release.
+#
+# Triggers:
+#   * push of a tag matching `cli-v*` — publishes the release.
+#   * manual `workflow_dispatch` with an explicit tag — useful for dry
+#     runs against a feature branch.
+
+on:
+  push:
+    tags:
+      - 'cli-v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to publish (e.g. cli-v0.1.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-latest
+            archive: tar.gz
+          - target: aarch64-unknown-linux-gnu
+            runner: ubuntu-latest
+            archive: tar.gz
+            # Cross-compile to arm64 from x64 linux. Avoids spinning up an
+            # arm64 runner just for this binary.
+            cross: true
+          - target: x86_64-apple-darwin
+            runner: macos-13
+            archive: tar.gz
+          - target: aarch64-apple-darwin
+            runner: macos-14
+            archive: tar.gz
+          - target: x86_64-pc-windows-msvc
+            runner: windows-latest
+            archive: zip
+            ext: .exe
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve tag
+        id: tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == 'workflow_dispatch' ]]; then
+            tag='${{ inputs.tag }}'
+          else
+            tag='${{ github.ref_name }}'
+          fi
+          if [[ ! "$tag" =~ ^cli-v ]]; then
+            echo "::error::tag '$tag' must start with cli-v" >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#cli-v}" >> "$GITHUB_OUTPUT"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross-compile linker (linux arm64)
+        if: matrix.cross == true
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+          mkdir -p ~/.cargo
+          cat >> ~/.cargo/config.toml <<'EOF'
+          [target.aarch64-unknown-linux-gnu]
+          linker = "aarch64-linux-gnu-gcc"
+          EOF
+
+      - name: Build
+        working-directory: cli
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Stage release tree
+        id: stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          version='${{ steps.tag.outputs.version }}'
+          target='${{ matrix.target }}'
+          stage="dist/ada-${version}-${target}"
+          ext='${{ matrix.ext }}'
+          mkdir -p "${stage}/bin" "${stage}/radius"
+          cp "cli/target/${target}/release/ada${ext}" "${stage}/bin/ada${ext}"
+          # Bundle the Radius asset tree as-is so install scripts can
+          # drop it under $ADA_HOME/radius without any rewriting.
+          cp -R radius/. "${stage}/radius/"
+          cp cli/README.md "${stage}/README.md" || true
+          cp LICENSE "${stage}/LICENSE" || true
+          echo "stage=${stage}" >> "$GITHUB_OUTPUT"
+          echo "name=ada-${version}-${target}" >> "$GITHUB_OUTPUT"
+
+      - name: Pack tar.gz
+        if: matrix.archive == 'tar.gz'
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd dist && tar -czf "${{ steps.stage.outputs.name }}.tar.gz" "${{ steps.stage.outputs.name }}")
+          (cd dist && shasum -a 256 "${{ steps.stage.outputs.name }}.tar.gz" > "${{ steps.stage.outputs.name }}.tar.gz.sha256")
+
+      - name: Pack zip
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: |
+          $name = '${{ steps.stage.outputs.name }}'
+          Push-Location dist
+          Compress-Archive -Path $name -DestinationPath "$name.zip" -Force
+          $hash = Get-FileHash -Algorithm SHA256 "$name.zip"
+          "$($hash.Hash.ToLower())  $name.zip" | Out-File -Encoding ascii "$name.zip.sha256"
+          Pop-Location
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.stage.outputs.name }}
+          path: |
+            dist/${{ steps.stage.outputs.name }}.tar.gz
+            dist/${{ steps.stage.outputs.name }}.tar.gz.sha256
+            dist/${{ steps.stage.outputs.name }}.zip
+            dist/${{ steps.stage.outputs.name }}.zip.sha256
+          if-no-files-found: ignore
+
+  release:
+    name: publish release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve tag
+        id: tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == 'workflow_dispatch' ]]; then
+            tag='${{ inputs.tag }}'
+          else
+            tag='${{ github.ref_name }}'
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#cli-v}" >> "$GITHUB_OUTPUT"
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List staged assets
+        run: ls -lah dist
+
+      - name: Publish GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          allowUpdates: true
+          artifactErrorsFailBuild: true
+          tag: ${{ steps.tag.outputs.tag }}
+          name: ada ${{ steps.tag.outputs.version }}
+          artifacts: 'dist/*.tar.gz,dist/*.tar.gz.sha256,dist/*.zip,dist/*.zip.sha256'
+          body: |
+            Adaptive Apps CLI **${{ steps.tag.outputs.version }}**.
+
+            Each archive contains the `ada` binary plus the full Radius asset
+            tree (`recipes/`, `resource-types/`, `*.bicep`, `bicepconfig.json`,
+            `types.tgz`). Use the one-line installers to drop it under
+            `~/.adaptive`:
+
+            ```bash
+            # macOS / Linux
+            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/cli/install.sh | bash
+            ```
+
+            ```powershell
+            # Windows PowerShell
+            iwr -useb https://raw.githubusercontent.com/${{ github.repository }}/main/cli/install.ps1 | iex
+            ```
+
+            Override the install root with `ADA_HOME=/custom/path` (or
+            `-AdaHome` on Windows). Pin a version with
+            `ADA_VERSION=${{ steps.tag.outputs.tag }}`.

@@ -13,6 +13,6 @@ service mesh.
 
 ## Additional Guidance
 
-* [`ent` chart README](../../charts/portfolios/ent/README.md) — install, configuration, and a sample `AuthorizationPolicy` that delegates decisions to OPA.
-* [Getting started with the Ent portfolio](../../tutorials/ent-getting-started/README.md)
+* [`adaptive-apps` chart](../../charts/adaptive-apps/) — install with `-f charts/adaptive-apps/profiles/ent.yaml`. See the [governance tutorial](../../tutorials/governance/README.md) for a sample `AuthorizationPolicy` that delegates decisions to OPA.
+* [Getting started with the Ent portfolio](../../tutorials/getting-started/README.md) (set `PORTFOLIO=ent`)
 * [Policies overview](../policies/README.md) — rationale for OPA as the default policy engine.

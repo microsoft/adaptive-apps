@@ -101,7 +101,12 @@ resource tradingEnv 'Applications.Core/environments@2023-10-01-preview' = {
           templateKind: 'bicep'
           templatePath: '${recipeRegistry}/governance-opa:latest'
         }
-      }
-    }
+      }      // ── Agent guardrails — AGT in-pod sidecar ─────────────────────
+      'Radius.Resources/agentGuardrails': {
+        default: {
+          templateKind: 'bicep'
+          templatePath: '${recipeRegistry}/agent-guardrails-agt:latest'
+        }
+      }    }
   }
 }

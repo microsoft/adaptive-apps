@@ -1,9 +1,0 @@
-{{- /*
-  NOTE: Radius manages app namespaces, so we don't create them here.
-  The istio-injection label should be applied via namespace labels in the
-  Radius environment configuration or manually after namespace creation.
-  
-  To enable Istio sidecar injection on app namespaces, label them with:
-    kubectl label namespace <app-namespace> istio-injection=enabled
-*/}}
-

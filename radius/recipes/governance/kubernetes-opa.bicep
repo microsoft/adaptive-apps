@@ -16,8 +16,8 @@
 //
 // MIGRATION NOTE
 //   This recipe is the portable equivalent of:
-//     - charts/portfolios/ent/templates/opa.yaml                       (PDP workload)
-//     - charts/portfolios/ent/templates/post-install-istio-extauthz.yaml (mesh wiring)
+//     - charts/adaptive-apps/templates/governance/opa.yaml                       (PDP workload)
+//     - charts/adaptive-apps/templates/governance/post-install-istio-extauthz.yaml (mesh wiring)
 //   When migrating, set `ent.opa.enabled=false` and `ent.istioExtAuthz.enabled=false`
 //   in the Helm values, deploy this recipe with `istioIntegration=true`, and
 //   AuthorizationPolicy resources can continue to use the same provider name
@@ -67,8 +67,16 @@ param istioNamespace string = 'istio-system'
 @description('Name of the ConfigMap holding the Istio MeshConfig.')
 param istioConfigMap string = 'istio'
 
-@description('Name registered for the extensionProvider. AuthorizationPolicy resources reference this name via `provider.name`.')
-param istioProviderName string = 'opa-ext-authz-grpc'
+@description('''
+Name registered for the extensionProvider in the Istio MeshConfig.
+AuthorizationPolicy resources reference this name via `provider.name`.
+When empty (the default), a per-app name is derived from the resource:
+`opa-ext-authz-grpc-<resourceName>`. This guarantees that multiple apps
+with `enableGovernance=true` in the same cluster register distinct
+entries and do not clobber each other's provider configuration.
+Override only when you intentionally want apps to share a single PDP.
+''')
+param istioProviderName string = ''
 
 @description('Image used by the post-install Istio-patching Job. Must include `kubectl`, `jq`, and `apk`/`yq`.')
 param istioPatchImage string = 'dtzar/helm-kubectl:3.17'
@@ -77,6 +85,13 @@ var resourceBaseName = toLower(replace(context.resource.name, '_', '-'))
 var opaName = '${resourceBaseName}-opa'
 var namespace = context.runtime.kubernetes.namespace
 var applicationName = context.application == null ? '' : context.application.name
+
+// Derive a per-app Istio extensionProvider name when the caller did not
+// override it. Per-app names prevent two apps with `enableGovernance=true`
+// from clobbering each other's MeshConfig.extensionProviders entry.
+var effectiveIstioProviderName = istioProviderName == ''
+  ? 'opa-ext-authz-grpc-${resourceBaseName}'
+  : istioProviderName
 
 var commonLabels = {
   app: 'opa'
@@ -87,7 +102,7 @@ var commonLabels = {
 }
 
 // Default-allow policy applied when the caller does not supply one. Mirrors
-// the default in charts/portfolios/ent/templates/opa.yaml.
+// the default in charts/adaptive-apps/templates/governance/opa.yaml.
 var defaultPolicyRego = '''package envoy.authz
 
 import rego.v1
@@ -310,7 +325,7 @@ var decisionServiceDns = '${opaService.metadata.name}.${namespace}.svc.cluster.l
 
 // ------------------------------------------------------------------
 // Optional Istio integration — patch MeshConfig.extensionProviders.
-// Mirrors charts/portfolios/ent/templates/post-install-istio-extauthz.yaml.
+// Mirrors charts/adaptive-apps/templates/governance/post-install-istio-extauthz.yaml.
 // All four resources are guarded by `istioIntegration` and only
 // referenced in `output.resources` when present (avoids conditional
 // dependsOn pitfalls).
@@ -467,7 +482,7 @@ resource istioPatchJob 'batch/Job@v1' = if (istioIntegration) {
               }
               {
                 name: 'PROVIDER_NAME'
-                value: istioProviderName
+                value: effectiveIstioProviderName
               }
               {
                 name: 'OPA_SERVICE'
@@ -520,6 +535,6 @@ output result object = {
     decisionEndpoint: '${decisionServiceDns}:${grpcPort}'
     decisionPath: decisionPath
     managementEndpoint: 'http://${decisionServiceDns}:${httpPort}'
-    istioProviderName: istioIntegration ? istioProviderName : ''
+    istioProviderName: istioIntegration ? effectiveIstioProviderName : ''
   }
 }

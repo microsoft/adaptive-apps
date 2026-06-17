@@ -1,6 +1,0 @@
-dependencies:
-- name: min
-  repository: file://../min
-  version: 0.1.0
-digest: sha256:fb45d8a1f233aea64aec1379e6923dfd905f8cbdf1e8fcf6328eb6dc6977a030
-generated: "2026-05-20T13:49:51.637514085-07:00"

@@ -1,0 +1,25 @@
+# Reproduces the legacy `ent-ai` portfolio chart.
+# Full stack: identity + mesh + observability + governance (off by default)
+# + ai marker. AI workloads are deployed via Radius (Kaito).
+#
+# This is the only portfolio where agentGuardrails defaults to ON: the
+# enterprise + AI intersection is where in-pod agent governance (prompt-
+# injection scanning, governed tool execution via the AGT sidecar) is
+# recommended by default. The Helm flag itself is a marker only — the
+# sidecar is materialized per-app by Radius when `enableAgentGuardrails`
+# is true on the application Bicep deployment.
+features:
+  identity:
+    enabled: true
+  istio:
+    install: true
+    mtls: true
+  observability:
+    enabled: true
+  governance:
+    opa: false
+    istioExtAuthz: false
+  ai:
+    enabled: true
+  agentGuardrails:
+    enabled: true

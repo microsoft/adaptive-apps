@@ -1,0 +1,17 @@
+# Reproduces the legacy `core-ai` portfolio chart.
+# core + ai marker. AI workloads are deployed via Radius (Kaito).
+features:
+  identity:
+    enabled: true
+  istio:
+    install: true
+    mtls: true
+  observability:
+    enabled: true
+  governance:
+    opa: false
+    istioExtAuthz: false
+  ai:
+    enabled: true
+  agentGuardrails:
+    enabled: false  # optional; opt in per-app with --parameters enableAgentGuardrails=true
