@@ -8,7 +8,12 @@ param(
 
     [string]$AcrName,
     [string]$KeyVaultName,
-    [string]$StorageAccountName
+    [string]$StorageAccountName,
+
+    [switch]$ConfigureAcrPullSecret,
+    [string]$Namespace = 'default',
+    [string]$PullSecretName = 'acr-pull-secret',
+    [string]$DeploymentName = 'acr-pull-check'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -21,6 +26,18 @@ function Invoke-Az {
 
     if ($LASTEXITCODE -ne 0) {
         throw "az $($CliArgs -join ' ') failed.`n$output"
+    }
+
+    return $output
+}
+
+function Invoke-Kubectl {
+    param([string[]]$CliArgs)
+    $raw = (& kubectl @CliArgs 2>&1) -join "`n"
+    $output = $raw.Trim()
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "kubectl $($CliArgs -join ' ') failed.`n$output"
     }
 
     return $output
@@ -228,6 +245,51 @@ catch {
 Ensure-RoleAssignment -PrincipalId $clusterPrincipalId -Scope $acrId -RoleName 'AcrPull'
 Ensure-RoleAssignment -PrincipalId $clusterPrincipalId -Scope $keyVaultId -RoleName 'Key Vault Secrets User'
 Ensure-RoleAssignment -PrincipalId $clusterPrincipalId -Scope $storageId -RoleName 'Storage Blob Data Contributor'
+
+if ($ConfigureAcrPullSecret) {
+    Write-Host ''
+    Write-Host "Configuring ACR image pull secret '$PullSecretName' in namespace '$Namespace'..."
+
+    Invoke-Az -CliArgs @('acr', 'update', '--name', $AcrName, '--admin-enabled', 'true') | Out-Null
+
+    $acrUser = Invoke-Az -CliArgs @('acr', 'credential', 'show', '--name', $AcrName, '--query', 'username', '-o', 'tsv')
+    $acrPass = Invoke-Az -CliArgs @('acr', 'credential', 'show', '--name', $AcrName, '--query', 'passwords[0].value', '-o', 'tsv')
+
+    if ([string]::IsNullOrWhiteSpace($acrUser) -or [string]::IsNullOrWhiteSpace($acrPass)) {
+        throw 'Failed to resolve ACR admin credentials for pull secret creation.'
+    }
+
+    Invoke-Kubectl -CliArgs @('delete', 'secret', $PullSecretName, '-n', $Namespace, '--ignore-not-found=true') | Out-Null
+    Invoke-Kubectl -CliArgs @(
+        'create', 'secret', 'docker-registry', $PullSecretName,
+        '-n', $Namespace,
+        "--docker-server=$AcrName.azurecr.io",
+        "--docker-username=$acrUser",
+        "--docker-password=$acrPass"
+    ) | Out-Null
+
+    try {
+        Invoke-Kubectl -CliArgs @('get', 'deployment', $DeploymentName, '-n', $Namespace) | Out-Null
+        $patchObject = @{
+            spec = @{
+                template = @{
+                    spec = @{
+                        imagePullSecrets = @(
+                            @{ name = $PullSecretName }
+                        )
+                    }
+                }
+            }
+        }
+        $patch = $patchObject | ConvertTo-Json -Compress -Depth 10
+        Invoke-Kubectl -CliArgs @('patch', 'deployment', $DeploymentName, '-n', $Namespace, '--type=merge', '-p', $patch) | Out-Null
+        Invoke-Kubectl -CliArgs @('rollout', 'restart', "deployment/$DeploymentName", '-n', $Namespace) | Out-Null
+        Write-Host "Patched and restarted deployment '$DeploymentName'."
+    }
+    catch {
+        Write-Host "Deployment '$DeploymentName' not found in namespace '$Namespace'. Secret created; patch skipped." -ForegroundColor Yellow
+    }
+}
 
 Write-Host ''
 Write-Host 'Completed. Resources and role assignments are in place.' -ForegroundColor Green

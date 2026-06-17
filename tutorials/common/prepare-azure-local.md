@@ -71,6 +71,25 @@ If you want one command that creates missing Challenge 01 resources and role ass
 .\tutorials\common\prepare-azure-local.ps1 -ResourceGroup jan-localbox-2604-adless-rg -ClusterName localbox-aks
 ```
 
+If you also want it to create `acr-pull-secret` and patch/restart the test deployment (`acr-pull-check` in `default` namespace):
+
+```powershell
+.\tutorials\common\prepare-azure-local.ps1 -ResourceGroup jan-localbox-2604-adless-rg -ClusterName localbox-aks -ConfigureAcrPullSecret
+```
+
+After it runs, verify the test deployment reaches `Running`:
+
+```bash
+kubectl get pods -l app=acr-pull-check
+```
+
+Expected result (example):
+
+```text
+NAME                              READY   STATUS    RESTARTS   AGE
+acr-pull-check-75cf98776f-5rxkz   1/1     Running   0          39s
+```
+
 This script automatically uses the same subscription and location as the target cluster.
 
 Example output from a successful run:
@@ -212,6 +231,62 @@ EOF
 
 kubectl get pods -l app=acr-pull-check
 ```
+
+If the pod shows `ImagePullBackOff`, run these checks in order:
+
+```bash
+# 1) Inspect pull error details (auth vs not found)
+kubectl describe pod -l app=acr-pull-check
+
+# 2) Confirm the image tag exists in ACR
+az acr repository show-tags --name $ACR_NAME --repository workshop/nginx -o table
+
+# 3) Confirm AcrPull assignment exists for the cluster principal
+az role assignment list \
+	--assignee-object-id $CLUSTER_PRINCIPAL_ID \
+	--scope $ACR_ID \
+	--query "[?roleDefinitionName=='AcrPull'].{role:roleDefinitionName,scope:scope}" -o table
+```
+
+Common outcomes:
+
+- `manifest unknown` or `not found`: the repo/tag path in your Deployment does not match the imported image. Re-import and redeploy.
+- `unauthorized`: `AcrPull` is missing or still propagating. Wait 2 to 5 minutes and restart the pod.
+- `unauthorized` with `AcrPull` already present: on some Azure Local / AKS Arc setups, node runtime may still not use that identity for ACR token exchange. Use an `imagePullSecret` for the validation deployment.
+
+Managed identity note:
+
+- Managed identity is still the preferred model for Azure API access from workloads.
+- Image pull happens at node runtime before the container starts, so workload identity does not help with this specific pull path.
+- On AKS Arc / Azure Local, if node-level ACR auth does not succeed even with `AcrPull`, use `imagePullSecret` for image pulls.
+
+After fixing the issue, restart the test pod:
+
+```bash
+kubectl delete pod -l app=acr-pull-check
+kubectl get pods -l app=acr-pull-check -w
+```
+
+If you need the `imagePullSecret` fallback:
+
+```bash
+# Create a pull secret from ACR admin credentials (for validation use)
+az acr update --name $ACR_NAME --admin-enabled true
+export ACR_USER=$(az acr credential show --name $ACR_NAME --query username -o tsv)
+export ACR_PASS=$(az acr credential show --name $ACR_NAME --query passwords[0].value -o tsv)
+
+kubectl create secret docker-registry acr-pull-secret \
+	--docker-server=${ACR_NAME}.azurecr.io \
+	--docker-username=$ACR_USER \
+	--docker-password=$ACR_PASS
+
+# Patch the test deployment to use the secret
+kubectl patch deployment acr-pull-check --type='merge' -p '{"spec":{"template":{"spec":{"imagePullSecrets":[{"name":"acr-pull-secret"}]}}}}'
+kubectl rollout restart deployment acr-pull-check
+kubectl get pods -l app=acr-pull-check -w
+```
+
+After the test, rotate or disable ACR admin credentials if your policy requires it.
 
 ## 7. Known pitfalls
 
