@@ -15,7 +15,7 @@
 
 ## Solution Guide
 
-This challenge focuses on provisioning the target platforms. Walk teams through the stages below in order; do not let them start Challenge 2 until at least AKS cluster and all supporting resources are healthy and avialbale. Optionally teams can deploy additional environments. 
+This challenge focuses on provisioning the target platforms. Walk teams through the stages below in order; do not let them start Challenge 2 until at least AKS cluster and all supporting resources are healthy and available. Optionally teams can deploy additional environments.
 
 #### Prepare the Environment(s)
 
@@ -28,3 +28,5 @@ Pick **one or mutiple** environments and follow the linked guide. Each leaves yo
 | Azure Kubernetes Service (AKS) | [`common/prepare-aks.md`](../common/prepare-aks.md) |
 | Azure Arc-enabled cluster | [`common/prepare-arc.md`](../common/prepare-arc.md) |
 | Azure Local | [`common/prepare-azure-local.md`](../common/prepare-azure-local.md) |
+
+For Azure Local workshop steps and command flow, use [`common/prepare-azure-local.md`](../common/prepare-azure-local.md) as the source of truth.
