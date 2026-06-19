@@ -220,3 +220,6 @@ radius/types.tgz
 **/*.crt
 **/*.key
 **/wi-helper-private.sh
+
+# MacOS
+.DS_Store

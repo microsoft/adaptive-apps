@@ -2,98 +2,77 @@
 
 [< Previous Challenge](./Challenge-04.md) - **[Home](../README.md)** - [Next Challenge >](./Challenge-06.md)
 
-***This is a template for a single challenge. The italicized text provides hints & examples of what should or should NOT go in each section.  You should remove all italicized & sample text and replace with your content.***
+## Pre-requisites
 
-## Pre-requisites (Optional)
-
-*Your hack's "Challenge 0" should cover pre-requisites for the entire hack, and thus this section is optional and may be omitted.  If you wish to spell out specific previous challenges that must be completed before starting this challenge, you may do so here.*
+- Completion of [Challenge 01](./Challenge-01.md): at least one healthy Kubernetes environment is available. A second environment is strongly recommended for this challenge.
+- Completion of [Challenge 02](./Challenge-02.md): Radius is installed, and your workstation has a workspace, environment, and resource group configured.
+- Completion of [Challenge 03](./Challenge-03.md): the portable `Radius.Resources/*` resource types have been registered.
+- Completion of [Challenge 04](./Challenge-04.md): recipes are registered for at least one environment.
+- Access to the repository's Radius assets, including `radius/app.bicep`, `radius/local-env.bicep`, and `radius/aks-env.bicep`.
 
 ## Introduction
 
-*This section should provide an overview of the technologies or tasks that will be needed to complete the this challenge.  This includes the technical context for the challenge, as well as any new "lessons" the attendees should learn before completing the challenge.*
+In the previous challenges you built the platform foundation for portability. Resource types define the application-facing contract, and recipes tell each environment how to satisfy that contract.
 
-*Optionally, the coach or event host is encouraged to present a mini-lesson (with a PPT or video) to set up the context & introduction to each challenge. A summary of the content of that mini-lesson is a good candidate for this Introduction section*
+In this challenge you prove that the contract works by deploying the same application model to more than one environment. The application should ask for capabilities such as a PostgreSQL database, an MQTT broker, workload identity, and optionally an AI model. The environment should decide whether those capabilities are backed by in-cluster services, Azure services, or another implementation.
 
-*For example:*
-
-When setting up an IoT device, it is important to understand how 'thingamajigs' work. Thingamajigs are a key part of every IoT device and ensure they are able to communicate properly with edge servers. Thingamajigs require IP addresses to be assigned to them by a server and thus must have unique MAC addresses. In this challenge, you will get hands on with a thingamajig and learn how one is configured.
+The goal is not simply to run a deployment command twice. The goal is to show that the application definition stays portable while the platform-specific behavior moves into the environment and recipe layer.
 
 ## Description
 
-*This section should clearly state the goals of the challenge and any high-level instructions you want the students to follow. You may provide a list of specifications required to meet the goals. If this is more than 2-3 paragraphs, it is likely you are not doing it right.*
+Your team has been asked to port the Adaptive Apps trading application from one environment to another with minimal configuration changes.
 
-***NOTE:** Do NOT use ordered lists as that is an indicator of 'step-by-step' instructions. Instead, use bullet lists to list out goals and/or specifications.*
+Use the Radius application model in `radius/app.bicep` and deploy it to an environment that already has recipes registered from Challenge 4. Then deploy the same application model to a second environment. Do not copy or fork the application Bicep file just to change environment-specific settings.
 
-***NOTE:** You may use Markdown sub-headers to organize key sections of your challenge description.*
+As a team, complete the challenge so that the following are true:
 
-*Optionally, you may provide resource files such as a sample application, code snippets, or templates as learning aids for the students. These files are stored in the hack's `Student/Resources` folder. It is the coach's responsibility to package these resources into a Resources.zip file and provide it to the students at the start of the hack.*
+- You can identify the first and second Radius workspaces, environments, and resource groups that you are targeting.
+- You can show that the relevant `Radius.Resources/*` recipes are registered in each environment.
+- You can deploy `radius/app.bicep` to the first environment and verify that the application resources are created.
+- You can deploy the same `radius/app.bicep` file to a second environment by changing only deployment target and parameter values.
+- You can compare the two environments and explain which backing implementations changed.
+- You can explain why the application model did not need to hard-code database hostnames, MQTT endpoints, identity details, or AI endpoints.
 
-***NOTE:** Do NOT provide direct links to files or folders in the What The Hack repository from the student guide. Instead, you should refer to the Resource.zip file provided by the coach.*
+If your second environment is AKS/Azure-backed, expect some capabilities to behave differently:
 
-***NOTE:** As an exception, you may provide a GitHub 'raw' link to an individual file such as a PDF or Office document, so long as it does not open the contents of the file in the What The Hack repo on the GitHub website.*
-
-***NOTE:** Any direct links to the What The Hack repo will be flagged for review during the review process by the WTH V-Team, including exception cases.*
-
-*Sample challenge text for the IoT Hack Of The Century:*
-
-In this challenge, you will properly configure the thingamajig for your IoT device so that it can communicate with the mother ship.
-
-You can find a sample `thingamajig.config` file in the `/ChallengeXX` folder of the Resources.zip file provided by your coach. This is a good starting reference, but you will need to discover how to set exact settings.
-
-Please configure the thingamajig with the following specifications:
-- Use dynamic IP addresses
-- Only trust the following whitelisted servers: "mothership", "IoTQueenBee" 
-- Deny access to "IoTProxyShip"
-
-You can view an architectural diagram of an IoT thingamajig here: [Thingamajig.PDF](/Student/Resources/Architecture.PDF?raw=true).
+- The current repository keeps PostgreSQL on the Kubernetes recipe in both local and AKS environment files.
+- The AKS/Azure environment can switch MQTT to Azure Event Grid MQTT, workload identity to Azure workload identity values, and AI to Azure OpenAI.
+- The Azure Event Grid MQTT recipe provisions the namespace endpoint. Full publish/subscribe behavior also requires authenticated clients plus topic-space and permission-binding setup.
 
 ## Success Criteria
 
-*Success criteria goes here. The success criteria should be a list of checks so a student knows they have completed the challenge successfully. These should be things that can be demonstrated to a coach.* 
-
-*The success criteria should not be a list of instructions.*
-
-*Success criteria should always start with language like: "Validate XXX..." or "Verify YYY..." or "Show ZZZ..." or "Demonstrate you understand VVV..."*
-
-*Sample success criteria for the IoT sample challenge:*
-
 To complete this challenge successfully, you should be able to:
-- Verify that the IoT device boots properly after its thingamajig is configured.
-- Verify that the thingamajig can connect to the mothership.
-- Demonstrate that the thingamajic will not connect to the IoTProxyShip
+
+- Show the same `radius/app.bicep` file being used for both deployments.
+- Show `rad recipe list` output for both environments and identify which recipes are the same and which are different.
+- Show the Radius application graph or resource list for the application in both environments.
+- Verify that the application frontend is reachable in both environments.
+- Demonstrate that changing workspaces, environments, resource groups, and parameters is enough to move the app model across environments.
+- Explain which concerns belong in the application definition and which belong in environment or recipe definitions.
 
 ## Learning Resources
 
-_List of relevant links and online articles that should give the attendees the knowledge needed to complete the challenge._
-
-*Think of this list as giving the students a head start on some easy Internet searches. However, try not to include documentation links that are the literal step-by-step answer of the challenge's scenario.*
-
-***Note:** Use descriptive text for each link instead of just URLs.*
-
-*Sample IoT resource links:*
-
-- [What is a Thingamajig?](https://www.bing.com/search?q=what+is+a+thingamajig)
-- [10 Tips for Never Forgetting Your Thingamajic](https://www.youtube.com/watch?v=dQw4w9WgXcQ)
-- [IoT & Thingamajigs: Together Forever](https://www.youtube.com/watch?v=yPYZpwSpKmA)
+- [Radius applications](https://docs.radapp.io/guides/deploy-apps/) - how Radius models applications, containers, connections, and environments.
+- [Radius environments overview](https://docs.radapp.io/guides/deploy-apps/environments/overview/) - how environments provide deployment context and recipe configuration.
+- [Radius recipes overview](https://docs.radapp.io/guides/recipes/overview/) - how recipes turn portable resource types into concrete infrastructure.
+- [Radius workspaces](https://docs.radapp.io/guides/operations/workspaces/overview/) - how the `rad` CLI targets a specific Radius control plane.
+- [Azure Event Grid MQTT broker support](https://learn.microsoft.com/azure/event-grid/mqtt-overview) - background on Azure Event Grid MQTT namespaces, clients, topic spaces, and permissions.
+- [AKS workload identity](https://learn.microsoft.com/azure/aks/workload-identity-overview) - background on Kubernetes service account federation to Microsoft Entra workload identities.
 
 ## Tips
 
-*This section is optional and may be omitted.*
-
-*Add tips and hints here to give students food for thought. Sample IoT tips:*
-
-- IoTDevices can fail from a broken heart if they are not together with their thingamajig. Your device will display a broken heart emoji on its screen if this happens.
-- An IoTDevice can have one or more thingamajigs attached which allow them to connect to multiple networks.
+- Keep `radius/app.bicep` unchanged unless your coach explicitly asks you to investigate the application model. Portability is the thing you are proving.
+- Use consistent names when switching workspaces and environments. It is easy to deploy to the wrong Radius control plane if your `kubectl` context and `rad workspace` are not aligned.
+- If your team used the sample artifact path, you may see names such as `adaptive` for the Radius group and `trading` for the environment/namespace. If your team used the domain names from Challenge 2, substitute your own group and environment names consistently.
+- Recipe output is the bridge between the platform and the application. When something cannot connect, inspect the registered recipe and the resource outputs before changing the application code.
+- If you enable AI through the recipe-backed path, the application still uses the same `aiProvider=local` pattern. The environment decides whether that recipe produces a local/Kaito endpoint or Azure OpenAI.
+- If your Azure MQTT-backed deployment is reachable but publish/subscribe does not work, check Event Grid MQTT topic spaces, permission bindings, and workload identity configuration.
 
 ## Advanced Challenges (Optional)
 
-*If you want, you may provide additional goals to this challenge for folks who are eager.*
+Finished early? Try one or more of the following:
 
-*This section is optional and may be omitted.*
-
-*Sample IoT advanced challenges:*
-
-Too comfortable?  Eager to do more?  Try these additional challenges!
-
-- Observe what happens if your IoTDevice is separated from its thingamajig.
-- Configure your IoTDevice to connect to BOTH the mothership and IoTQueenBee at the same time.
+- Deploy the same application to a third environment and document exactly which values changed.
+- Replace one recipe in a non-production environment with a different implementation and show that `radius/app.bicep` does not change.
+- Enable the optional AI path in both environments and compare the local/Kaito and Azure OpenAI-backed deployments.
+- Create a short portability runbook that tells another team how to move the application between environments without editing application Bicep.

@@ -24,9 +24,9 @@ Pick **one or mutiple** environments and follow the linked guide. Each leaves yo
 
 | Environment | Guide |
 | --- | --- |
-| Local k3s (via k3d) | [`common/prepare-k3s.md`](../common/prepare-k3s.md) |
-| Azure Kubernetes Service (AKS) | [`common/prepare-aks.md`](../common/prepare-aks.md) |
-| Azure Arc-enabled cluster | [`common/prepare-arc.md`](../common/prepare-arc.md) |
-| Azure Local | [`common/prepare-azure-local.md`](../common/prepare-azure-local.md) |
+| Local k3s (via k3d) | [`common/prepare-k3s.md`](../../common/prepare-k3s.md) |
+| Azure Kubernetes Service (AKS) | [`common/prepare-aks.md`](../../common/prepare-aks.md) |
+| Azure Arc-enabled cluster | [`common/prepare-arc.md`](../../common/prepare-arc.md) |
+| Azure Local | [`common/prepare-azure-local.md`](../../common/prepare-azure-local.md) |
 
-For Azure Local workshop steps and command flow, use [`common/prepare-azure-local.md`](../common/prepare-azure-local.md) as the source of truth.
+For Azure Local workshop steps and command flow, use [`common/prepare-azure-local.md`](../../common/prepare-azure-local.md) as the source of truth.

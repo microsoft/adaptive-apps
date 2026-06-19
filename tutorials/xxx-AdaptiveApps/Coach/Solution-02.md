@@ -194,9 +194,9 @@ rad group create rg-hr
 Create the environment:
 
 ```bash
-rad env create env-azure-prod --group rg-finance --namespace prod
-rad env create env-azure-prod --group rg-hr --namespace prod
+rad env create env-azure-prod --group rg-finance --kubernetes-namespace prod
 rad env switch env-azure-prod
+rad group switch rg-finance
 ```
 
 
@@ -205,14 +205,23 @@ Register the Azure cloud provider:
 
 ```bash
 rad env update env-azure-prod \
-    --azure-subscription-id <subscription-id> \
-    --azure-resource-group <azure-resource-group>
+    --azure-subscription-id "$AZURE_SUBSCRIPTION" \
+    --azure-resource-group "$RESOURCE_GROUP"
 ```
 
 
 **Step 2 — Azure Local production workspace, environment, and resource groups**
 
-Switch kubectl context to the Azure Local AKS cluster, then:
+Switch kubectl context to the Azure Local AKS cluster, then verify you are not still on the Azure prod cluster context:
+
+```bash
+kubectl config get-contexts
+kubectl config current-context
+```
+
+If this context is the same one used for `ws-azure-prod`, switch to the Azure Local / Arc context first. Otherwise `ws-local-prod` will point to the same Radius control plane and environment creation can fail with a namespace conflict.
+
+Then create and switch the local workspace:
 
 ```bash
 rad workspace create kubernetes ws-local-prod \
@@ -220,27 +229,24 @@ rad workspace create kubernetes ws-local-prod \
 rad workspace switch ws-local-prod
 ```
 
-Create the environment (no Azure cloud provider — recipes run in-cluster):
-
-```bash
-rad env create env-local-prod --namespace prod
-rad env switch env-local-prod
-```
-
-Create the same domain resource groups:
+Create the same domain resource groups, then create the environment (no Azure cloud provider — recipes run in-cluster):
 
 ```bash
 rad group create rg-finance
 rad group create rg-hr
+rad group switch rg-finance
+rad env create env-local-prod --group rg-finance --kubernetes-namespace prod
+rad env switch env-local-prod
 ```
 
-Register the Azure cloud provider on the environment for Azure recipes used in later challenges:
+If you intentionally run both environments on a single shared control plane, use a different namespace for the second environment (for example `prod-local`):
 
 ```bash
-rad env update env-<platform>-<stage> \
-    --azure-subscription-id <subscription-id> \
-    --azure-resource-group <resource-group>
+rad env create env-local-prod --group rg-finance --kubernetes-namespace prod-local
+rad env switch env-local-prod
 ```
+
+Do not register the Azure cloud provider on `env-local-prod` in this challenge. Keep it in-cluster only so dashboard validation remains consistent (`env-azure-prod` has Azure provider, `env-local-prod` does not).
 
 Verify everything is wired up correctly:
 
@@ -253,22 +259,25 @@ rad group list
 Have teams open the **Radius dashboard** and explore the environment, resource groups, and empty application list:
 
 ```bash
-rad dashboard
+kubectl port-forward svc/dashboard -n radius-system 7007:80
 ```
 
+Then open `http://localhost:7007` in a browser.
+
 > **AKS only — register the Azure credential.** The `wi-helper.sh` you ran
-> in [`prepare-aks.md`](../common/prepare-aks.md) created an Entra app named
-> `$AKS_CLUSTER-radius-app` and federated it to the Radius service
+> from [`tutorials/getting-started/assets/wi-helper.sh`](../../getting-started/assets/wi-helper.sh) during
+> [`prepare-aks.md`](../../common/prepare-aks.md) created an Entra app named
+> `${AKS_CLUSTER}-radius-app` and federated it to the Radius service
 > accounts. Now bind it to the Radius control plane (`ada bootstrap
 > --with-radius --platform aks` does this for you):
 >
 > ```bash
 > export APPLICATION_CLIENT_ID=$(az ad app list \
->   --display-name "$AKS_CLUSTER-radius-app" --query '[].appId' -o tsv)
+>   --query "[?displayName=='${AKS_CLUSTER}-radius-app'].appId | [0]" -o tsv)
 > export TENANT_ID=$(az account show --query tenantId -o tsv)
 >
 > rad credential register azure wi \
->   --client-id $APPLICATION_CLIENT_ID --tenant-id $TENANT_ID
+>   --client-id "$APPLICATION_CLIENT_ID" --tenant-id "$TENANT_ID"
 >
 > # Verify (may take 30+ seconds to refresh):
 > rad credential show azure
@@ -287,13 +296,6 @@ The Radius dashboard is a built-in web UI that ships with every Radius control p
 The dashboard runs as a pod in the `radius-system` namespace and is not exposed externally by default. Connect from your workstation with:
 
 ```bash
-rad dashboard
-```
-
-This automatically sets up a `kubectl port-forward` to the dashboard pod and opens `http://localhost:7007` in your default browser. If the browser does not open automatically:
-
-```bash
-# Manual port-forward (alternative if rad dashboard does not work)
 kubectl port-forward svc/dashboard -n radius-system 7007:80
 ```
 
@@ -337,7 +339,7 @@ The dashboard is scoped to the control plane of the **current workspace**. To ex
 
 ```bash
 rad workspace switch ws-local-prod
-rad dashboard
+kubectl port-forward svc/dashboard -n radius-system 7007:80
 ```
 
 Verify that `env-local-prod`, `rg-finance`, and `rg-hr` are now visible and that `env-azure-prod` is no longer listed — it lives on a different control plane.
@@ -380,15 +382,16 @@ rad workspace create kubernetes ws-azure-prod \
     --context "$(kubectl config current-context)" --force
 rad workspace switch ws-azure-prod
 
-rad env create env-azure-prod --namespace prod
+rad group create rg-finance
+rad group create rg-hr
+rad group switch rg-finance
+
+rad env create env-azure-prod --group rg-finance --kubernetes-namespace prod
 rad env switch env-azure-prod
 
 rad env update env-azure-prod \
     --azure-subscription-id "$sub_id" \
     --azure-resource-group "$azure_rg"
-
-rad group create rg-finance
-rad group create rg-hr
 
 echo "Verifying Azure prod..."
 rad workspace list
@@ -397,20 +400,45 @@ rad group list
 
 # ---------------------------------------------------------------------------
 # Stage 2b — Azure Local production: workspace, environment, resource groups
-> **AKS only — register the Azure credential.** The `wi-helper.sh` you ran
-> in [`prepare-aks.md`](../common/prepare-aks.md) created an Entra app named
-> `$AKS_CLUSTER-radius-app` and federated it to the Radius service
-> accounts. Now bind it to the Radius control plane (`ada bootstrap
-> --with-radius --platform aks` does this for you):
->
-> ```bash
-> export APPLICATION_CLIENT_ID=$(az ad app list \
->   --display-name "$AKS_CLUSTER-radius-app" --query '[].appId' -o tsv)
-> export TENANT_ID=$(az account show --query tenantId -o tsv)
->
-> rad credential register azure wi \
->   --client-id $APPLICATION_CLIENT_ID --tenant-id $TENANT_ID
->
-> # Verify (may take 30+ seconds to refresh):
-> rad credential show azure
-> ```
+# Assumes kubectl now points at the Azure Local / Arc-enabled Kubernetes cluster.
+# If you intentionally reuse the same AKS control plane, use a distinct namespace
+# such as prod-local to avoid colliding with env-azure-prod.
+# ---------------------------------------------------------------------------
+
+echo "--- Azure Local production ---"
+kubectl config current-context
+
+rad workspace create kubernetes ws-local-prod \
+    --context "$(kubectl config current-context)" --force
+rad workspace switch ws-local-prod
+
+rad group create rg-finance
+rad group create rg-hr
+rad group switch rg-finance
+
+rad env create env-local-prod --group rg-finance --kubernetes-namespace prod-local
+rad env switch env-local-prod
+
+echo "Verifying Azure Local prod..."
+rad workspace list
+rad env list
+rad group list
+
+# ---------------------------------------------------------------------------
+# AKS only — register the Azure credential with the Radius control plane.
+# The helper from tutorials/getting-started/assets/wi-helper.sh creates an
+# Entra app named ${AKS_CLUSTER}-radius-app and federates the Radius service
+# accounts. Bind that app to Radius after the control plane is installed.
+# ---------------------------------------------------------------------------
+
+export APPLICATION_CLIENT_ID=$(az ad app list \
+  --query "[?displayName=='${AKS_CLUSTER}-radius-app'].appId | [0]" -o tsv)
+export TENANT_ID=$(az account show --query tenantId -o tsv)
+
+rad workspace switch ws-azure-prod
+rad credential register azure wi \
+  --client-id "$APPLICATION_CLIENT_ID" --tenant-id "$TENANT_ID"
+
+# Verify (may take 30+ seconds to refresh):
+rad credential show azure
+```

@@ -29,7 +29,13 @@ brew install helm
 
 **Radius CLI:**
 ```bash
-brew install radius-project/tap/rad
+curl -fsSL https://raw.githubusercontent.com/radius-project/radius/main/deploy/install.sh | /bin/bash
+```
+
+If `rad` is not found after install, add the installer path and reload your shell:
+```bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
 ```
 
 **VS Code:**

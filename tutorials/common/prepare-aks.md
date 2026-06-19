@@ -69,5 +69,5 @@ export RADIUS_GROUP=trading
     >**NOTE:** See https://docs.radapp.io/guides/operations/providers/azure-provider/howto-azure-provider-wi/ for more information
 
     ```bash
-    ./wi-helper.sh $AKS_CLUSTER $RESOURCE_GROUP $AZURE_SUBSCRIPTION $AKS_OIDC_ISSUER
+    cd 
     ```

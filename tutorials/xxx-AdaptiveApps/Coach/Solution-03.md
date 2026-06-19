@@ -53,8 +53,12 @@ This step teaches teams to define a resource type schema by hand, so they unders
 
 ```bash
 rad workspace switch ws-azure-prod
-rad dashboard
+kubectl port-forward svc/dashboard -n radius-system 7007:80
 ```
+
+Then open `http://localhost:7007` in a browser.
+
+> If your team used the sample AKS preparation values from [`prepare-aks.md`](../../common/prepare-aks.md), switch to the workspace created there instead (for example `rad workspace switch aks-trading`) before opening the dashboard.
 
 In the dashboard, navigate to **Resource Types** (left nav). The list will be empty — no custom types have been registered yet.
 
@@ -151,8 +155,10 @@ This registers the following types under the `Radius.Resources` namespace:
 #### Explore in the dashboard
 
 ```bash
-rad dashboard
+kubectl port-forward svc/dashboard -n radius-system 7007:80
 ```
+
+Then open `http://localhost:7007` in a browser.
 
 In **Resource Types**, verify all five types appear alongside `Radius.Resources/sqlDatabases` from Stage 1.
 
@@ -194,4 +200,3 @@ Radius.Resources/workloadIdentities
 ```
 
 No recipes are registered yet — that is Challenge 4. The dashboard should show each type with its schema but with an empty recipe list.
-

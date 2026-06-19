@@ -100,8 +100,12 @@ This step teaches teams to write a recipe by hand, so they understand the `conte
 
 ```bash
 rad workspace switch ws-azure-prod
-rad dashboard
+kubectl port-forward svc/dashboard -n radius-system 7007:80
 ```
+
+Then open `http://localhost:7007` in a browser.
+
+> If your team used the sample AKS preparation values from [`prepare-aks.md`](../../common/prepare-aks.md), use that workspace and environment instead (for example `aks-trading` and `trading`).
 
 Navigate to **Environments** → `env-azure-prod` → **Recipes**. The list is empty — no recipes have been registered yet.
 
@@ -192,14 +196,21 @@ output result object = {
 
 #### Publish and register the recipe
 
-Publish the recipe Bicep to the team's ACR (OCI registry):
+Publish the recipe Bicep to the team's ACR (OCI registry). Challenge 01 does not create an ACR automatically; use an existing registry or create one before this step. ACR names must be globally unique and contain only lowercase letters and numbers:
 
 ```bash
-az acr login -n <acr-name>
+export ACR_NAME=<globally-unique-acr-name>
+
+az acr create \
+    --name "$ACR_NAME" \
+    --resource-group "$RESOURCE_GROUP" \
+    --sku Basic
+
+az acr login -n "$ACR_NAME"
 
 rad bicep publish \
     --file recipes/azure/sql-server.bicep \
-    --target br:<acr-name>.azurecr.io/recipes/sql-server:1.0.0
+    --target br:${ACR_NAME}.azurecr.io/recipes/sql-server:1.0.0
 ```
 
 Register the recipe against `env-azure-prod` for the `sqlDatabases` type:
@@ -209,7 +220,7 @@ rad recipe register default \
     --environment env-azure-prod \
     --resource-type Radius.Resources/sqlDatabases \
     --template-kind bicep \
-    --template-path <acr-name>.azurecr.io/recipes/sql-server:1.0.0
+    --template-path ${ACR_NAME}.azurecr.io/recipes/sql-server:1.0.0
 ```
 
 Verify in the dashboard: navigate to **Environments** → `env-azure-prod` → **Recipes** — the `Radius.Resources/sqlDatabases` entry should now appear with the template path.
@@ -233,10 +244,12 @@ rad recipe list --environment env-azure-prod
 
 The repository ships two environment Bicep files that define environments *and* register all recipes in a single deployment. This is the recommended pattern for a platform team: environment config and recipe registration are infrastructure-as-code, not manual CLI steps.
 
+> **Naming note:** Stage 2 uses the repository sample environment name `trading`. The AKS prep guide also uses `RADIUS_GROUP=trading` and `RADIUS_WORKSPACE=aks-trading`. If teams used the teaching names from Challenge 2 (`rg-finance` / `rg-hr`, `env-azure-prod` / `env-local-prod`), either create/switch to the `trading` group/environment for the sample app or adjust the command parameters to match their existing names.
+
 #### Local / Azure Local environment
 
 ```bash
-rad deploy radius/local-env.bicep --group adaptive --environment trading
+rad deploy radius/local-env.bicep --group trading --environment trading
 ```
 
 This command deploys `local-env.bicep`, which creates the `trading` environment and registers the following recipes against `Radius.Resources/*`:
@@ -249,12 +262,13 @@ This command deploys `local-env.bicep`, which creates the `trading` environment 
 | `Radius.Resources/workloadIdentities` | `workload-identity-local:latest` | Kubernetes service account (no-op) |
 | `Radius.Resources/aiModels` | `ai-agent-kaito:latest` | Kaito in-cluster LLM (Kubernetes GPU) |
 | `Radius.Resources/governance` | `governance-opa:latest` | Open Policy Agent (Kubernetes) |
+| `Radius.Resources/agentGuardrails` | `agent-guardrails-agt:latest` | Agent Governance Toolkit sidecar support |
 
 #### AKS / Azure environment
 
 ```bash
 rad deploy radius/aks-env.bicep \
-    --group adaptive \
+    --group trading \
     --environment trading \
     --parameters azureSubscriptionId=<subscription-id> \
     --parameters azureResourceGroup=<resource-group>
@@ -269,14 +283,17 @@ This registers a parallel set of Azure-backed recipes against the same resource 
 | `Radius.Resources/workloadIdentities` | `workload-identity-azure:latest` | AKS workload identity + federated credential |
 | `Radius.Resources/aiModels` | `ai-agent-azure-openai:latest` | Azure OpenAI account + deployment (AVM) |
 | `Radius.Resources/governance` | `governance-opa:latest` | Open Policy Agent (Kubernetes) |
+| `Radius.Resources/agentGuardrails` | `agent-guardrails-agt:latest` | Agent Governance Toolkit sidecar support |
 
 Note that `Radius.Resources/idProviders` has no Azure recipe — Keycloak runs in-cluster in both environments. This is intentional: the portable-app pattern delegates IdP selection to the environment, and teams will replace the Keycloak recipe with a Microsoft Entra ID recipe in Challenge 6.
 
 #### Verify in the dashboard
 
 ```bash
-rad dashboard
+kubectl port-forward svc/dashboard -n radius-system 7007:80
 ```
+
+Then open `http://localhost:7007` in a browser.
 
 Navigate to **Environments** → select the environment → **Recipes**. All registered recipe entries should appear. Click into any recipe to see the template path and kind.
 
@@ -291,5 +308,4 @@ rad recipe list --environment trading
 - *"Both environments register a recipe for `Radius.Resources/postgreSqlDatabases`. What is different between them?"* (The template path points to a different Bicep file. The local recipe deploys a container; the AKS recipe calls AVM to provision a managed Azure service. The resource type schema — and therefore the application Bicep — is identical.)
 - *"Why is `rad deploy` used to register recipes instead of `rad recipe register`?"* (Using Bicep for environment + recipe registration is infrastructure-as-code. It is repeatable, reviewable, and version-controlled. `rad recipe register` is a CLI shortcut suitable for one-off experiments, not production.)
 - *"The `governance-opa:latest` recipe is the same in both environments. When would you want different governance recipes per environment?"* (When prod uses a stricter OPA policy bundle than non-prod, or when prod routes policy decisions to an external PDP rather than running OPA in-cluster.)
-- *"What is the `--group adaptive` flag?"* (It scopes the deployment to the `adaptive` Radius resource group — equivalent to `rad group switch adaptive` before running `rad deploy`.)
-
+- *"What is the `--group trading` flag?"* (It scopes the deployment to the `trading` Radius resource group — equivalent to `rad group switch trading` before running `rad deploy`.)
