@@ -94,13 +94,17 @@ Because each environment already encodes the platform *and* the stage in its nam
 With this layout, switching targets from the command line is explicit and readable:
 
 ```bash
-# Deploy to Azure prod
+# Create and deploy to Azure prod
+rad workspace create kubernetes ws-azure-prod \
+    --context "$(kubectl config current-context)" --force
 rad workspace switch ws-azure-prod
 rad env switch env-azure-prod
 rad group switch rg-finance
 rad deploy ./app.bicep
 
 # Deploy the same app to Azure Local nonprod — zero changes to app.bicep
+rad workspace create kubernetes ws-local-nonprod \
+    --context "$(kubectl config current-context)" --force
 rad workspace switch ws-local-nonprod
 rad env switch env-local-nonprod
 rad group switch rg-finance
