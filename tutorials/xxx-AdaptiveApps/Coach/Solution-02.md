@@ -32,65 +32,7 @@ Before installing Radius, your team must choose between two architectural models
 
 **Architecture Diagram:**
 
-```mermaid
-graph TB
-    subgraph Governance["🔒 Governance & Source Control"]
-        Git["Git Repository<br/>(Recipes, App Templates,<br/>Environment Configs)"]
-        CI["CI/CD Pipeline<br/>(Build & Publish)"]
-        Git --> CI
-    end
-
-    subgraph Azure["☁️ Azure Site"]
-        AzureK8s["Kubernetes Cluster<br/>(AKS)"]
-        AzureCP["Radius Control Plane"]
-        AzureEnv["env-azure-prod<br/>rg-finance, rg-hr"]
-        AzureApps["Applications"]
-        AzureK8s --> AzureCP
-        AzureCP --> AzureEnv
-        AzureEnv --> AzureApps
-    end
-
-    subgraph AzureLocal["🏢 Azure Local (Connected)"]
-        ALK8s["Kubernetes Cluster<br/>(Arc-enabled)"]
-        ALCP["Radius Control Plane"]
-        ALEnv["env-local-prod<br/>rg-finance, rg-hr"]
-        ALApps["Applications"]
-        ALK8s --> ALCP
-        ALCP --> ALEnv
-        ALEnv --> ALApps
-    end
-
-    subgraph Disconnected["🔌 Azure Local (Disconnected)"]
-        DCK8s["Kubernetes Cluster<br/>(Standalone)"]
-        DCCP["Radius Control Plane"]
-        DCEnv["env-local-disconnected<br/>rg-finance, rg-hr"]
-        DCApps["Applications"]
-        DCK8s --> DCCP
-        DCCP --> DCEnv
-        DCEnv --> DCApps
-    end
-
-    subgraph Sync["📊 Optional"]
-        DataSync["Delayed Data Sync<br/>(Eventual Consistency)"]
-    end
-
-    CI -->|Deploy Artifacts| AzureK8s
-    CI -->|Deploy Artifacts| ALK8s
-    CI -->|Mirror & Deploy| DCK8s
-    AzureApps -.->|Optional| DataSync
-    ALApps -.->|Optional| DataSync
-    DCApps -.->|Optional| DataSync
-
-    classDef siteStyle fill:#f0f7ff,stroke:#0066cc,stroke-width:2px
-    classDef cpStyle fill:#fff0f0,stroke:#cc0000,stroke-width:2px
-    classDef govStyle fill:#f0fff0,stroke:#00aa00,stroke-width:2px
-    classDef syncStyle fill:#fffaf0,stroke:#ff9900,stroke-width:1px
-    
-    class Azure,AzureLocal,Disconnected siteStyle
-    class AzureCP,ALCP,DCCP cpStyle
-    class Governance govStyle
-    class Sync syncStyle
-```
+![Federated Radius Platform - Multi-Site Architecture](../DisconnectedRadiusModel.png)
 
 **Key characteristics:**
 - Sites: Independent Kubernetes clusters, each with its own Radius control plane
@@ -115,52 +57,7 @@ graph TB
 
 **Architecture Diagram:**
 
-```mermaid
-graph TB
-    subgraph Central["🎛️ Central Management (Single Point of Control)"]
-        CentralK8s["Management Kubernetes Cluster"]
-        CentralCP["Radius Control Plane<br/>(Single Instance)"]
-        CentralRecipes["Shared Recipes & Policies"]
-        CentralCP --> CentralRecipes
-        CentralK8s --> CentralCP
-    end
-
-    subgraph Azure["☁️ Azure Execution Environment"]
-        AzureK8s["Kubernetes Cluster<br/>(AKS)"]
-        AzureEnv["env-azure-prod<br/>rg-finance, rg-hr"]
-        AzureApps["Applications"]
-        AzureK8s --> AzureEnv
-        AzureEnv --> AzureApps
-    end
-
-    subgraph AzureLocal["🏢 Azure Local Execution Environment"]
-        ALK8s["Kubernetes Cluster<br/>(Arc / On-Prem)"]
-        ALEnv["env-local-prod<br/>rg-finance, rg-hr"]
-        ALApps["Applications"]
-        ALK8s --> ALEnv
-        ALEnv --> ALApps
-    end
-
-    subgraph Connectivity["🌐 Network Dependency"]
-        Link1["Reliable Network"]
-        Link2["Reliable Network"]
-    end
-
-    CentralCP -->|Orchestrate & Control| Link1
-    Link1 -->|Workload Instructions| AzureK8s
-    CentralCP -->|Orchestrate & Control| Link2
-    Link2 -->|Workload Instructions| ALK8s
-    CentralCP -.->|Policy & Governance| AzureApps
-    CentralCP -.->|Policy & Governance| ALApps
-
-    classDef centralStyle fill:#fff0f0,stroke:#cc0000,stroke-width:3px
-    classDef execStyle fill:#f0f7ff,stroke:#0066cc,stroke-width:2px
-    classDef connStyle fill:#f0f0f0,stroke:#666,stroke-width:2px,stroke-dasharray: 5 5
-    
-    class Central centralStyle
-    class Azure,AzureLocal execStyle
-    class Connectivity connStyle
-```
+![Centralized Radius Model - Single Control Plane](../CentralizedRadiusModel.png)
 
 **Key characteristics:**
 - Sites: Multiple execution environments connected to one central control plane
@@ -385,3 +282,47 @@ Then retry the port-forward:
 ```bash
 kubectl port-forward svc/dashboard -n radius-system 7007:80
 ```
+
+### Working with multiple AKS clusters
+
+If you have multiple AKS clusters with separate Radius control planes, each team member needs to manage separate workspaces to avoid mixing up deployments between clusters.
+
+**Setup (one time per cluster):**
+
+```bash
+# Switch kubectl to Azure AKS cluster
+kubectl config use-context <azure-aks-context>
+
+# Create and switch to Azure workspace
+rad workspace create ws-azure-prod
+rad workspace switch ws-azure-prod
+
+# Switch kubectl to Local AKS cluster
+kubectl config use-context <local-aks-context>
+
+# Create and switch to Local workspace
+rad workspace create ws-local-prod
+rad workspace switch ws-local-prod
+```
+
+**Daily usage — always verify before running commands:**
+
+```bash
+# Check active workspace and kubectl context
+rad workspace list
+kubectl config current-context
+
+# Target Azure control plane
+rad workspace switch ws-azure-prod
+rad env list
+rad group list
+rad deployment create ...
+
+# Target Local control plane
+rad workspace switch ws-local-prod
+rad env list
+rad group list
+rad deployment create ...
+```
+
+**Key principle:** Every `rad` command targets the currently active workspace. Always verify your active workspace and kubectl context before operating to prevent accidental deployments to the wrong cluster.
