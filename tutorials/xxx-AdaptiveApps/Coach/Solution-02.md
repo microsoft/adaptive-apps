@@ -4,449 +4,277 @@
 
 ## Notes & Guidance
 
-- This challenge follows directly from Challenge 1 — teams must have a healthy Kubernetes cluster and all supporting Azure resources (ACR, Key Vault) in place before starting.
-- The single most important outcome: every team member can run `rad` commands against a shared Radius control plane, and the team understands the relationship between the `rad` CLI, workspaces, environments, and the Radius control plane components running in the cluster.
-- The Radius control plane installs CRDs and cluster-scoped resources, so the user running `rad install kubernetes` must have `cluster-admin` on the AKS cluster. Using the AKS cluster admin credentials (`az aks get-credentials --admin`) is the simplest way to unblock teams.
-- Only one team member needs to run `rad install kubernetes` against the shared AKS cluster. Each team member *does* need to set up their own local workspace — that is per-workstation, not per-cluster.
+- The goal of this challenge is to install and configure Radius for your chosen deployment model.
+- Before starting, teams must understand the two control-plane architectures (see "Control Plane Deployment Options" section below) and decide which model fits their operational needs.
+- For most teams, the **Federated Model** (one control plane per site) provides better resilience for multi-site or disconnected scenarios.
+- The **Centralized Model** (one shared control plane) is simpler operationally but requires reliable connectivity between all sites.
+- Only one team member needs to run `rad install kubernetes` against a shared cluster. Each team member then sets up their own local workspace — that is per-workstation, not per-cluster.
 - Typical blockers to watch for:
-  - Mismatched `kubectl` context — teams sometimes install Radius into a leftover local cluster. Have them run `kubectl config current-context` before `rad install kubernetes`.
-  - AKS node image pulls can take 5–10 minutes before all Radius pods are `Ready`. Tell teams to wait rather than re-running the installer.
-  - `rad` CLI version mismatch with the control plane chart — always install the latest CLI **and** let `rad install kubernetes` pick the matching chart. Do not pin a chart version unless you have a reason to.
+  - Mismatched `kubectl` context — teams sometimes install Radius into the wrong cluster. Have them run `kubectl config current-context` before `rad install kubernetes`.
+  - Radius pod startup on first install can take 5–10 minutes. Tell teams to wait rather than re-running the installer.
+  - `rad` CLI version mismatch with the control plane — always install the latest CLI and let `rad install kubernetes` pick the matching chart.
 - The **Explore** part matters: teams should open the Radius dashboard, inspect the environment, and be able to describe what each control plane component does. Do not let teams skip this step and jump straight to recipes.
-- Expected time to complete for a team: **30–45 minutes**. Coach should wait ~15 minutes of apparent inactivity before stepping in.
+- Expected time to complete for a team: **30–45 minutes** per environment. Coach should wait ~15 minutes of apparent inactivity before stepping in.
 
 ## Solution Guide
 
-### Stage 1 — Install the Radius control plane
+### Control Plane Deployment Options
 
-On each workstation, install the `rad` CLI and verify the version:
+Before installing Radius, your team must choose between two architectural models. Both are valid; the choice depends on your resilience and operational requirements.
 
-```bash
-wget -q "https://raw.githubusercontent.com/radius-project/radius/main/deploy/install.sh" -O - | /bin/bash
-rad version
+#### Model 1: Federated Control Planes (Recommended for Multi-Site / Disconnected)
+
+**Overview:**
+- One independent Radius control plane **per site** (Azure, Azure Local, Azure Local Disconnected, etc.).
+- Each site operates autonomously. Network outages between sites do **not** block local operations.
+- Shared configuration comes from Git-based synchronization, not from live runtime coupling.
+- Best for edge, disconnected, or high-availability scenarios.
+
+**Reference diagram:** DisconnectedRadiusModel
+
+**Key characteristics:**
+- Sites: Independent Kubernetes clusters, each with its own Radius control plane
+- Config source: Central Git repo + CI/CD promotion pipeline
+- Deployment: Each site applies artifacts independently
+- Failure behavior: Site outage is isolated; others unaffected
+- Data sync: Eventual consistency, handled separately (see [docs/data-sync/README.md](../../docs/data-sync/README.md))
+
+**When to choose this model:**
+- You need to operate during cloud/WAN disconnection
+- You want each site to be resilient and autonomous
+- You accept eventual consistency for config and data
+- You have teams managing different sites independently
+
+#### Model 2: Centralized Control Plane (Recommended for Always-Connected)
+
+**Overview:**
+- One shared Radius control plane hosted in a management cluster.
+- All environments (Azure, Azure Local, etc.) are managed centrally from that control plane.
+- Requires reliable network connectivity between all sites and the central control plane.
+- Best for tightly coordinated, always-on deployments.
+
+**Reference diagram:** CentralizedRadiusModel
+
+**Key characteristics:**
+- Sites: Multiple execution environments connected to one central control plane
+- Config source: Direct API updates to the central control plane
+- Deployment: Orchestrated from the center
+- Failure behavior: Central control plane outage impacts all sites
+- Policy: Centrally enforced across all environments
+
+**When to choose this model:**
+- All your environments are reliably connected
+- You want centralized governance and policy
+- You prefer operational simplicity over site autonomy
+- You can accept a single control-plane dependency
+
+#### Decision Framework
+
+| Scenario | Recommended Model |
+|----------|-------------------|
+| Azure only, single region | **Centralized** (simpler) |
+| Azure + Arc in one datacenter | **Centralized** (simpler) or **Federated** (more resilient) |
+| Azure + Azure Local (connected) | **Federated** (better isolation) or **Centralized** (simpler) |
+| Azure + Azure Local (intermittent connectivity) | **Federated** (only viable option) |
+| Azure + Azure Local (disconnected/air-gapped) | **Federated** (only viable option) |
+| Multiple sites across WAN | **Federated** (resilience) or **Centralized** (if connectivity is guaranteed) |
+
+---
+
+### This Challenge: Following the Federated Model
+
+This challenge assumes you have **chosen the Federated Model** (one control plane per site). If your team wants the Centralized Model, contact the coach for guidance on step-by-step adaptation.
+
+In the Federated Model:
+1. Each site installs its own Radius control plane on its own cluster.
+2. Each site creates its own workspaces, environments, and resource groups using the same naming conventions.
+3. Configuration is synchronized via Git and CI/CD, not via live Radius APIs.
+4. Data sync between sites is handled separately (see [docs/data-sync/README.md](../../docs/data-sync/README.md)).
+
+---
+
+### Understanding the Radius Hierarchy
+
+Before installing Radius, coaches should ensure the team understands the three-level hierarchy that Radius uses to organize workloads.
+
+#### Radius Control Plane (one per site/cluster)
+
+A **Radius control plane** is deployed once per Kubernetes cluster. It provides:
+- API servers (`applications-rp`, `controller`)
+- Bicep deployment engine (`bicep-de`)
+- Unified Control Plane (`UCP`) for multi-tenancy and policy
+- Dashboard for visualization
+- CRDs for portable application models
+
+Each cluster has its own control plane. In the Federated Model, Azure, Azure Local, and Azure Local Disconnected each have separate control planes.
+
+#### Environments (organize by platform + stage)
+
+A **Radius environment** is a named configuration that tells Radius *how* to deploy applications. Each environment encodes:
+- The **Kubernetes namespace** where application workloads run
+- An optional **cloud provider registration** (Azure subscription + resource group) for provisioning cloud-managed resources
+- **Recipe registrations** that map portable resource types to platform-specific implementations
+
+The same application (e.g., `app.bicep`) deployed to `env-azure-prod` and `env-local-prod` produces different infrastructure because each environment has different recipes and cloud provider settings.
+
+**Recommended naming:** `env-<platform>-<stage>` (e.g., `env-azure-prod`, `env-local-disconnected-prod`)
+
+#### Resource Groups (organize by domain/team)
+
+A **Radius resource group** is a logical container for applications and other Radius resources within an environment, organized by domain or team. It is **not** an Azure resource group and has no Azure billing implications.
+
+**Key points:**
+- Create resource groups once and reuse them across environments (`rg-finance` exists in both `env-azure-prod` and `env-local-prod`)
+- Every Radius application must live in a resource group
+- Switching with `rad group switch` changes the scope for all subsequent `rad` commands on that workstation
+
+**Recommended naming:** `rg-<domain>` (e.g., `rg-finance`, `rg-hr`, `rg-sales`)
+
+#### The Complete Hierarchy
+
 ```
-
-With the AKS cluster as the current `kubectl` context, install the Radius control plane:
-
-```bash
-rad install kubernetes --set rp.publicEndpointOverride=localhost:8081
-```
-
-This deploys the Radius control plane (applications-rp, controller, bicep-de, UCP, dashboard, etc.) into the `radius-system` namespace. Verify all pods are healthy:
-
-```bash
-kubectl get pods -n radius-system
-kubectl get crds | grep radapp.io
-```
-
-Only one team member needs to run `rad install kubernetes` against the shared AKS cluster; everyone else reuses that install.
-
-### Stage 2 — Post-install configuration (workspace + environment) and exploration
-
-#### Understanding the Radius hierarchy
-
-Before creating anything, coaches should land the full three-level hierarchy with the team. The relationship is:
-
-```
-Radius control plane (one per cluster)
+Radius control plane (one per site)
 │
-├── Environment: env-azure-prod       ← platform + stage
-├── Environment: env-azure-nonprod
-├── Environment: env-local-prod
-└── Environment: env-local-nonprod
-```
-
-Within **each** environment, resource groups organise workloads by domain or team — and applications live inside those groups:
-
-```
-env-azure-prod
+├── Environment: env-azure-prod
+│   ├── Resource Group: rg-finance
+│   │   ├── Application: app-finance-api
+│   │   └── Application: app-finance-web
+│   └── Resource Group: rg-hr
+│       ├── Application: app-hr-api
+│       └── Application: app-hr-web
 │
-├── Resource Group: rg-finance
-│   ├── Application: app-finance-api
-│   └── Application: app-finance-web
-│
-├── Resource Group: rg-hr
-│   ├── Application: app-hr-api
-│   └── Application: app-hr-web
-│
-└── Resource Group: rg-sales
-    ├── Application: app-crm-api
-    └── Application: app-crm-web
+└── Environment: env-local-prod
+    ├── Resource Group: rg-finance
+    │   ├── Application: app-finance-api
+    │   └── Application: app-finance-web
+    └── Resource Group: rg-hr
+        ├── Application: app-hr-api
+        └── Application: app-hr-web
 ```
-
-This means resource groups are **domain/team scopes inside an environment**, not environment scopes themselves.
 
 #### Understanding Workspaces
 
-A Radius **workspace** is a local, per-workstation configuration entry that tells the `rad` CLI which Kubernetes cluster (and therefore which Radius control plane) to target. It lives in `~/.rad/config.yaml` — not in the cluster. One workspace = one cluster = one control plane. All environments on that cluster are reachable once the workspace is active; you switch between them with `rad env switch`.
+A Radius **workspace** is a local, per-workstation CLI configuration that tells the `rad` CLI which Kubernetes cluster (and therefore which Radius control plane) to target. It lives in `~/.rad/config.yaml` — not in the cluster.
 
-Because each environment already encodes the platform *and* the stage in its name, the recommended pattern is **one workspace per cluster**, named to match:
+**Key points:**
+- **One workspace = one cluster = one control plane**
+- All environments on that cluster are reachable once the workspace is active; you switch between them with `rad env switch`
+- Workspace names should match the cluster and site they represent
 
-| Workspace | Kubernetes cluster | Environments hosted |
+**Recommended naming:** `ws-<platform>-<stage>` (e.g., `ws-azure-prod`, `ws-local-prod`)
+
+---
+
+### Installation: Choose Your Environment
+
+Pick **one or more** target environments and follow the corresponding guide. Each guide includes Radius control plane installation, environment creation, resource group setup, and validation:
+
+| Environment | Guide | Notes |
 |---|---|---|
-| `ws-azure-prod` | AKS cluster — Azure prod | `env-azure-prod` |
-| `ws-azure-nonprod` | AKS cluster — Azure nonprod | `env-azure-nonprod` |
-| `ws-local-prod` | AKS cluster — Azure Local prod | `env-local-prod` |
-| `ws-local-nonprod` | AKS cluster — Azure Local nonprod | `env-local-nonprod` |
+| Local k3s (via k3d) | [common/prepareRadius-k3s.md](../common/prepareRadius-k3s.md) | Lightweight, ideal for dev/testing |
+| Azure Kubernetes Service (AKS) | [common/prepareRadius-aks.md](../common/prepareRadius-aks.md) | Production-grade; integrates with ACR and Key Vault |
+| Azure Arc-enabled cluster | [common/prepareRadius-arc.md](../common/prepareRadius-arc.md) | On-premises, edge, or multi-cloud |
+| Azure Local | [common/prepareRadius-azure-local.md](../common/prepareRadius-azure-local.md) | Fully disconnected or intermittently connected |
 
-> **Coaching tip:** If teams ask "why not one workspace per environment?", point out that each workspace requires its own Kubernetes cluster and Radius control plane install. Clusters are expensive; environments are a single `rad env create` command.
+For each environment you choose, follow the corresponding guide **in full**. The guide includes:
+1. Radius control plane installation
+2. Workspace and environment setup
+3. Resource group creation
+4. Validation checks
+5. Optional dashboard exploration
 
-With this layout, switching targets from the command line is explicit and readable:
+---
 
-```bash
-# Create and deploy to Azure prod
-rad workspace create kubernetes ws-azure-prod \
-    --context "$(kubectl config current-context)" --force
-rad workspace switch ws-azure-prod
-rad env switch env-azure-prod
-rad group switch rg-finance
-rad deploy ./app.bicep
+### Multi-Site Deployment (Federated Model)
 
-# Deploy the same app to Azure Local nonprod — zero changes to app.bicep
-rad workspace create kubernetes ws-local-nonprod \
-    --context "$(kubectl config current-context)" --force
-rad workspace switch ws-local-nonprod
-rad env switch env-local-nonprod
-rad group switch rg-finance
-rad deploy ./app.bicep
-```
+If you are deploying to multiple sites (e.g., Azure + Azure Local + Azure Local Disconnected), follow the guides sequentially:
 
-#### Recommended naming convention
+1. Follow [common/prepareRadius-aks.md](../common/prepareRadius-aks.md) to set up Azure
+2. Switch kubectl context to Azure Local cluster
+3. Follow [common/prepareRadius-azure-local.md](../common/prepareRadius-azure-local.md) to set up Azure Local
+4. Repeat for additional sites as needed
 
-| Object | Pattern | Examples |
-|---|---|---|
-| Workspace | `ws-<platform>-<stage>` | `ws-azure-prod`, `ws-local-nonprod` |
-| Environment | `env-<platform>-<stage>` | `env-azure-prod`, `env-local-nonprod` |
-| Resource group | `rg-<domain>` | `rg-finance`, `rg-hr`, `rg-sales` |
-| Application | `app-<domain>-<component>` | `app-finance-api`, `app-hr-web` |
+Each site will have:
+- Its own Radius control plane
+- Its own workspaces, environments, and resource groups
+- The same **naming conventions** across all sites (so teams can reason about them consistently)
 
-Keeping the prefix consistent (`ws-`, `env-`, `rg-`, `app-`) makes `rad list` output immediately scannable and avoids confusion between Radius objects and Azure resource groups.
+After installation, your Git repository should contain:
+- Shared recipes (in `radius/recipes/`)
+- Shared application templates (e.g., `app.bicep`)
+- Environment bootstrap scripts or manifests (one per site's environment config)
 
-#### Understanding Resource Groups
+Then, use CI/CD to deploy these artifacts to each site independently.
 
-A Radius **resource group** is a logical container inside the UCP that groups applications and other Radius resources by domain or team *within* an environment. It is **not** an Azure resource group and has no Azure billing or policy implications.
+---
 
-Key points to coach:
+### Coaching Tips
 
-- Resource groups are **domain/team scopes**, not environment scopes. Create them once and reuse them across environments (`rg-finance` exists in `env-azure-prod` *and* in `env-local-nonprod`).
-- Every Radius application must live in a resource group. You must create one (and switch to it) before deploying an app.
-- Switching with `rad group switch` changes the scope for all subsequent `rad` commands on that workstation.
+- **Emphasize naming consistency:** Use the `ws-`, `env-`, `rg-`, `app-` prefixes across all sites. This makes `rad list` output scannable and reduces confusion.
+- **Validate after each environment:** Have teams run `rad workspace list`, `rad env list`, and `rad group list` after setup to confirm everything is wired correctly.
+- **Explore the dashboard:** Teams should open the Radius dashboard (see each environment guide) and be able to explain what each control-plane component does. Do not let them skip this step.
+- **Explain the decoupling:** In the Federated Model, emphasize that each site's control plane is independent. A network outage or cluster failure at one site does **not** affect others. Configuration is kept in sync via Git, not live APIs.
 
-> **Coaching tip:** Radius resource groups and Azure resource groups serve analogous *organisational* purposes but at different scopes. Radius groups organise the Radius application model; Azure groups organise Azure infrastructure. A single Radius environment can target many different Azure resource groups via recipe parameters.
+---
 
-#### Understanding Environments
+### Next Steps
 
-A Radius **environment** is a named configuration that tells Radius *how* to deploy applications on a specific target platform. It carries:
+1. All environments installed and validated? ✓
+2. Radius dashboard explored and understood? ✓
+3. Ready to author recipes and deploy applications?
 
-- The **Kubernetes namespace** where application workloads are placed.
-- An optional **cloud provider registration** (Azure subscription + resource group) that recipes use when provisioning managed cloud resources.
-- The **recipe registrations** that map portable resource types (e.g. `Radius.Resources/postgreSQL`) to their platform-specific implementations.
+Proceed to Challenge 03 — Recipe authoring and customization.
 
-Environments are the bridge between the portable application model and the concrete infrastructure beneath it. The same `app.bicep` deployed to `env-azure-prod` and `env-local-nonprod` produces completely different infrastructure — the environment selects which recipes run.
+---
 
-The full picture, combining all naming layers:
+## Appendix: Troubleshooting
 
-| Workspace | Environment | Kubernetes namespace | Cloud provider |
-|---|---|---|---|
-| `ws-azure-prod` | `env-azure-prod` | `prod` | Azure subscription / prod RG |
-| `ws-azure-nonprod` | `env-azure-nonprod` | `nonprod` | Azure subscription / nonprod RG |
-| `ws-local-prod` | `env-local-prod` | `prod` | *(none — in-cluster recipes only)* |
-| `ws-local-nonprod` | `env-local-nonprod` | `nonprod` | *(none — in-cluster recipes only)* |
-
-> **Coaching tip:** The environment name and Kubernetes namespace do not have to match, but aligning them (as above) makes it immediately clear where a workload landed.
-
-#### Action
-
-The target structure to build for this challenge (Azure production and Azure Local production, three domain teams each):
-
-```
-ws-azure-prod  (AKS — Azure)
-└── env-azure-prod
-    ├── rg-finance
-    │   ├── app-finance-api
-    │   └── app-finance-web
-    └── rg-hr
-        ├── app-hr-api
-        └── app-hr-web
-
-ws-local-prod  (AKS — Azure Local)
-└── env-local-prod
-    ├── rg-finance
-    │   ├── app-finance-api
-    │   └── app-finance-web
-    └── rg-hr
-        ├── app-hr-api
-        └── app-hr-web
-```
-
-**Step 1 — Azure production workspace, environment, and resource groups**
-
-On each workstation, create the workspace pointing at the Azure AKS cluster:
+### Control plane pods not starting
 
 ```bash
-rad workspace create kubernetes ws-azure-prod \
-    --context "$(kubectl config current-context)" --force
-rad workspace switch ws-azure-prod
-```
-Create the domain resource groups:
-
-```bash
-rad group create rg-finance
-rad group create rg-hr
-```
-
-Create the environment:
-
-```bash
-rad env create env-azure-prod --group rg-finance --namespace prod
-rad env switch env-azure-prod
-rad group switch rg-finance
-```
-
-
-
-Register the Azure cloud provider:
-
-```bash
-rad env update env-azure-prod \
-    --azure-subscription-id "$AZURE_SUBSCRIPTION" \
-    --azure-resource-group "$RESOURCE_GROUP"
-```
-
-
-**Step 2 — Azure Local production workspace, environment, and resource groups**
-
-⚠️ **Critical:** If you are running both environments on the **same Kubernetes cluster** (same control plane), you must use **different Kubernetes namespaces** for each environment. If you are on a **different cluster**, proceed to Step 2a below.
-
-**Step 2a — If on a different cluster:**
-
-Switch kubectl context to the Azure Local AKS cluster, then verify you are not still on the Azure prod cluster context:
-
-```bash
-kubectl config get-contexts
-kubectl config current-context
-```
-
-If this context is the same one used for `ws-azure-prod`, switch to the Azure Local / Arc context first. Otherwise `ws-local-prod` will point to the same Radius control plane and environment creation will fail with a namespace conflict.
-
-Then create and switch the local workspace:
-
-```bash
-rad workspace create kubernetes ws-local-prod \
-    --context "$(kubectl config current-context)" --force
-rad workspace switch ws-local-prod
-```
-
-Create the same domain resource groups, then create the environment. Use namespace `prod-local` to avoid conflicts if on the same control plane (or `prod` if on a different cluster):
-
-```bash
-rad group create rg-finance
-rad group create rg-hr
-rad group switch rg-finance
-rad env create env-local-prod --group rg-finance --namespace prod-local
-rad env switch env-local-prod
-```
-
-Do not register the Azure cloud provider on `env-local-prod` in this challenge. Keep it in-cluster only so dashboard validation remains consistent (`env-azure-prod` has Azure provider, `env-local-prod` does not).
-
-Verify everything is wired up correctly:
-
-```bash
-rad workspace switch ws-azure-prod
-rad env switch env-azure-prod
-rad workspace list
-rad env list
-rad group list
-```
-
-You should see:
-- `ws-azure-prod` workspace showing `env-azure-prod` as its active environment
-- Both `env-azure-prod` and `env-local-prod` listed with status `Succeeded`
-- `rg-finance` and `rg-hr` listed as resource groups
-
-Have teams open the **Radius dashboard** and explore the environment, resource groups, and empty application list:
-
-```bash
-kubectl port-forward svc/dashboard -n radius-system 7007:80
-```
-
-Then open `http://localhost:7007` in a browser.
-
-> **AKS only — register the Azure credential.** The `wi-helper.sh` you ran
-> from [`tutorials/getting-started/assets/wi-helper.sh`](../../getting-started/assets/wi-helper.sh) during
-> [`prepare-aks.md`](../../common/prepare-aks.md) created an Entra app named
-> `${AKS_CLUSTER}-radius-app` and federated it to the Radius service
-> accounts. Now bind it to the Radius control plane (`ada bootstrap
-> --with-radius --platform aks` does this for you):
->
-> ```bash
-> export APPLICATION_CLIENT_ID=$(az ad app list \
->   --query "[?displayName=='${AKS_CLUSTER}-radius-app'].appId | [0]" -o tsv)
-> export TENANT_ID=$(az account show --query tenantId -o tsv)
->
-> rad credential register azure wi \
->   --client-id "$APPLICATION_CLIENT_ID" --tenant-id "$TENANT_ID"
->
-> # Verify (may take 30+ seconds to refresh):
-> rad credential show azure
-> ```
-
-
-Ask them to identify which components were installed and what each one does. Stop here — recipe authoring, environment customization, and app deployment are the next challenges.
-
-
-### Stage 3 — Exploring the Radius Dashboard
-
-The Radius dashboard is a built-in web UI that ships with every Radius control plane install. It gives a visual overview of environments, resource groups, applications, and deployed resources — without needing to run `rad` CLI commands. Teams should explore it before moving to recipe authoring so they can see the structure they just created.
-
-#### Connect via port-forward
-
-The dashboard runs as a pod in the `radius-system` namespace and is not exposed externally by default. Connect from your workstation with:
-
-```bash
-kubectl port-forward svc/dashboard -n radius-system 7007:80
-```
-
-Then open **http://localhost:7007** in your browser.
-
-#### What to explore
-
-Once connected, have teams work through each section:
-
-**Environments**
-
-- Navigate to **Environments** and verify that `env-azure-prod` and `env-local-prod` are listed.
-- Click into each environment and confirm:
-  - The correct Kubernetes namespace (`prod`) is shown.
-  - The Azure cloud provider is registered on `env-azure-prod` and absent on `env-local-prod`.
-  - The recipe list is empty — recipes will be added in Challenge 3.
-
-**Resource groups**
-
-- Navigate to **Resource Groups** and confirm `rg-finance` and `rg-hr` appear under each environment.
-- Note that there are no applications yet — that is expected at this stage.
-
-**Applications**
-
-- The **Applications** section should be empty. Point out that this is where deployed apps will appear in later challenges, each linked back to the environment and resource group it was deployed into.
-
-**Connections and recipes**
-
-- Both sections will be empty. Use this as a coaching moment to preview what teams will populate in Challenge 3 (recipes) and Challenge 4 (applications with connections).
-
-#### Coaching questions to ask during exploration
-
-- *"What is the difference between an environment and a resource group in what you can see here?"*
-- *"Why does `env-local-prod` have no cloud provider registered?"*
-- *"Where would you look in the dashboard to confirm a deployment succeeded?"*
-- *"If a recipe fails, what information do you think would appear here?"*
-
-#### Switching workspace context in the dashboard
-
-The dashboard is scoped to the control plane of the **current workspace**. To explore the Azure Local structure, switch workspace and relaunch:
-
-```bash
-rad workspace switch ws-local-prod
-kubectl port-forward svc/dashboard -n radius-system 7007:80
-```
-
-Verify that `env-local-prod`, `rg-finance`, and `rg-hr` are now visible and that `env-azure-prod` is no longer listed — it lives on a different control plane.
-## Sample deployment script
-
-The script below performs stage 1 (Radius control plane install) and stage 2 (workspaces, environments, resource groups) for both the Azure production and Azure Local production clusters. It assumes Challenge 1 is complete. Hand it to teams only if they are stuck.
-
-```bash
-# ---------------------------------------------------------------------------
-# Stage 1 — Install the Radius control plane
-# Run this once, on the cluster that should host the control plane.
-# ---------------------------------------------------------------------------
-
-# Install the rad CLI (Linux / macOS / WSL). On Windows use the PowerShell
-# install script from https://docs.radapp.io/installation/ instead.
-if ! command -v rad >/dev/null 2>&1; then
-    echo "Installing rad CLI..."
-    wget -q "https://raw.githubusercontent.com/radius-project/radius/main/deploy/install.sh" -O - | /bin/bash
-fi
-rad version
-
-echo "Installing Radius control plane into AKS..."
-rad install kubernetes
-
-echo "Waiting for Radius pods to become Ready..."
-kubectl wait --for=condition=Ready pods --all -n radius-system --timeout=10m
 kubectl get pods -n radius-system
+kubectl describe pod <pod-name> -n radius-system
+kubectl logs <pod-name> -n radius-system
+```
 
-# ---------------------------------------------------------------------------
-# Stage 2a — Azure production: workspace, environment, resource groups
-# Assumes the current kubectl context points at the Azure prod AKS cluster.
-# ---------------------------------------------------------------------------
+Common issues: resource constraints, image pull failures, incorrect cluster configuration.
 
-# Variables — update to match your Challenge 1 values
-azure_rg=radiushack-rg
-sub_id=$(az account show --query id -o tsv)
+### Workspace or environment commands failing
 
-echo "--- Azure production ---"
-rad workspace create kubernetes ws-azure-prod \
-    --context "$(kubectl config current-context)" --force
-rad workspace switch ws-azure-prod
+Ensure you are using the correct `kubectl` context:
 
-rad group create rg-finance
-rad group create rg-hr
-rad group switch rg-finance
-
-rad env create env-azure-prod --group rg-finance --namespace prod
-rad env switch env-azure-prod
-
-rad env update env-azure-prod \
-    --azure-subscription-id "$sub_id" \
-    --azure-resource-group "$azure_rg"
-
-echo "Verifying Azure prod..."
-rad workspace list
-rad env list
-rad group list
-
-# ---------------------------------------------------------------------------
-# Stage 2b — Azure Local production: workspace, environment, resource groups
-# Assumes kubectl now points at the Azure Local / Arc-enabled Kubernetes cluster.
-# If you intentionally reuse the same AKS control plane, use a distinct namespace
-# such as prod-local to avoid colliding with env-azure-prod.
-# ---------------------------------------------------------------------------
-
-echo "--- Azure Local production ---"
+```bash
 kubectl config current-context
+kubectl config get-contexts
+```
 
-rad workspace create kubernetes ws-local-prod \
-    --context "$(kubectl config current-context)" --force
-rad workspace switch ws-local-prod
+Switch contexts as needed:
 
-rad group create rg-finance
-rad group create rg-hr
-rad group switch rg-finance
+```bash
+kubectl config use-context <context-name>
+```
 
-rad env create env-local-prod --group rg-finance --namespace prod-local
-rad env switch env-local-prod
+### Environment or resource group not visible after creation
 
-echo "Verifying Azure Local prod..."
-rad workspace list
-rad env list
+Ensure you have switched to the correct workspace and environment:
+
+```bash
+rad workspace switch <workspace-name>
+rad env switch <environment-name>
+rad group switch <group-name>
 rad group list
+```
 
-# ---------------------------------------------------------------------------
-# AKS only — register the Azure credential with the Radius control plane.
-# The helper from tutorials/getting-started/assets/wi-helper.sh creates an
-# Entra app named ${AKS_CLUSTER}-radius-app and federates the Radius service
-# accounts. Bind that app to Radius after the control plane is installed.
-# ---------------------------------------------------------------------------
+### Dashboard not accessible
 
-export APPLICATION_CLIENT_ID=$(az ad app list \
-  --query "[?displayName=='${AKS_CLUSTER}-radius-app'].appId | [0]" -o tsv)
-export TENANT_ID=$(az account show --query tenantId -o tsv)
+If `kubectl port-forward` fails, verify the dashboard pod is running:
 
-rad workspace switch ws-azure-prod
-rad credential register azure wi \
-  --client-id "$APPLICATION_CLIENT_ID" --tenant-id "$TENANT_ID"
+```bash
+kubectl get pods -n radius-system | grep dashboard
+```
 
-# Verify (may take 30+ seconds to refresh):
-rad credential show azure
+Then retry the port-forward:
+
+```bash
+kubectl port-forward svc/dashboard -n radius-system 7007:80
 ```
