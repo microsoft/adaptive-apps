@@ -132,7 +132,7 @@ A **Radius resource group** is a logical container for applications and other Ra
 - Every Radius application must live in a resource group
 - Switching with `rad group switch` changes the scope for all subsequent `rad` commands on that workstation
 
-**Recommended naming:** `rg-<domain>` (e.g., `rg-finance`, `rg-hr`, `rg-sales`)
+**Recommended naming:** `rg-<domain>` (e.g., `rg-finance`, `rg-trading`, `rg-sales`)
 
 #### The Complete Hierarchy
 
@@ -143,17 +143,17 @@ Radius control plane (one per site)
 │   ├── Resource Group: rg-finance
 │   │   ├── Application: app-finance-api
 │   │   └── Application: app-finance-web
-│   └── Resource Group: rg-hr
-│       ├── Application: app-hr-api
-│       └── Application: app-hr-web
+│   └── Resource Group: rg-trading
+│       ├── Application: app-trading-api
+│       └── Application: app-trading-web
 │
 └── Environment: env-local-prod
     ├── Resource Group: rg-finance
     │   ├── Application: app-finance-api
     │   └── Application: app-finance-web
-    └── Resource Group: rg-hr
-        ├── Application: app-hr-api
-        └── Application: app-hr-web
+    └── Resource Group: rg-trading
+        ├── Application: app-trading-api
+        └── Application: app-trading-web
 ```
 
 #### Understanding Workspaces

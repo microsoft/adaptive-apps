@@ -15,7 +15,7 @@ This challenge is where the portability promise becomes visible. In Challenges 3
 - This challenge should continue from the objects created in the earlier challenges:
   - Challenge 2 created the Radius workspaces, environments, and resource groups.
   - Challenge 3 registered the portable `Radius.Resources/*` resource type contracts.
-  - Challenge 4 registered recipes for the sample `trading` environment.
+  - Challenge 4 registered recipes for the sample `env-local` and `env-azure` environments.
 - The strongest demo is local/Azure Local first, then AKS/Azure second. The app model remains the same, but Postgres, MQTT, workload identity, and AI can all land on different implementations.
 - If teams only have one cluster available, they can still practice the pattern by creating a second Radius environment and deploying to a different Radius group. Coach them that this demonstrates the control-plane model, but a real production/non-production split should use separate clusters or at least separate namespaces and cloud scopes.
 - Do not let teams solve the challenge by copying `app.bicep` and hard-coding environment-specific values into it. That defeats the purpose of Radius portability.
@@ -51,39 +51,39 @@ The environment decides which recipe fulfils each capability. Not every capabili
 
 ### Naming handoff from earlier challenges
 
-Challenge 2 introduces domain-oriented names such as `ws-azure-prod`, `ws-local-prod`, `env-azure-prod`, and `rg-finance`. Challenge 4's prebuilt environment files use the repository sample names `adaptive` for the Radius group and `trading` for the application environment/namespace. Do not let naming distract from the portability lesson.
+Challenge 2 introduces domain-oriented names such as `ws-azure-prod`, `ws-local-prod`, `env-azure-prod`, and `rg-finance`. Challenge 4's prebuilt environment files use the repository sample names `rg-trading` for the Radius group and `env-local` / `env-azure` for the application environments/namespaces. Do not let naming distract from the portability lesson.
 
 Use this guide with either naming style:
 
 | Earlier challenge object | If teams followed the sample artifact path | If teams used domain names from Challenge 2 |
 |---|---|---|
-| First workspace | `trading` or `ws-local-prod` | `ws-local-prod`, `ws-local-nonprod`, etc. |
-| Second workspace | `aks-trading` or `ws-azure-prod` | `ws-azure-prod`, `ws-azure-nonprod`, etc. |
-| Radius group | `adaptive` | `rg-finance`, `rg-hr`, etc. |
-| Environment name | `trading` | `env-azure-prod`, `env-local-prod`, etc. |
+| First workspace | `ws-local-prod` | `ws-local-prod`, `ws-local-nonprod`, etc. |
+| Second workspace | `ws-azure-prod` | `ws-azure-prod`, `ws-azure-nonprod`, etc. |
+| Radius group | `rg-trading` | `rg-finance`, `rg-trading`, etc. |
+| Environment name | `env-local-prod` / `env-azure-prod` | `env-azure-prod`, `env-local-prod`, etc. |
 | Application file | `radius/app.bicep` | `radius/app.bicep` |
 
-For the command examples below, the guide uses Challenge 4's sample names (`adaptive` group and `trading` environment) because those match the prebuilt `radius/local-env.bicep` and `radius/aks-env.bicep` flow. If a team used Challenge 2's business names, substitute their group and environment names consistently.
+For the command examples below, the guide uses Challenge 4's sample names (`rg-trading` group and `env-local` / `env-azure` environments) because those match the prebuilt `radius/local-env.bicep` and `radius/aks-env.bicep` flow. If a team used Challenge 2's business names, substitute their group and environment names consistently.
 
 ## Solution Guide
 
 ### Stage 1 - Confirm the first environment is ready
 
-Start from an environment completed in Challenge 4. Do not recreate the control plane, resource types, or recipes here; Challenge 5 is about reusing them. The examples below use the Challenge 4 sample group `adaptive` and environment `trading`.
+Start from an environment completed in Challenge 4. Do not recreate the control plane, resource types, or recipes here; Challenge 5 is about reusing them. The examples below use the Challenge 4 sample group `rg-trading` and environment `env-local-prod`.
 
 ```bash
 rad workspace switch <first-workspace>
-rad group switch adaptive
+rad group switch rg-trading
 
-rad environment show trading
-rad recipe list --environment trading
+rad environment show env-local-prod
+rad recipe list --environment env-local-prod
 ```
 
 The recipe list should include the portable resource types registered by the environment. The application uses a subset directly, and optional features such as AI, governance, and guardrails activate additional types based on deployment parameters.
 
 | Resource type | Local / Azure Local recipe outcome |
 |---|---|
-| `Radius.Resources/postgreSqlDatabases` | PostgreSQL container with the trading schema |
+| `Radius.Resources/postgreSqlDatabases` | PostgreSQL container with the trading application schema |
 | `Radius.Resources/mqttBrokers` | Eclipse Mosquitto container |
 | `Radius.Resources/idProviders` | Keycloak OIDC provider |
 | `Radius.Resources/workloadIdentities` | Local Kubernetes service account / no-op identity |
@@ -99,8 +99,8 @@ Use the same application Bicep the team will later deploy elsewhere:
 
 ```bash
 rad deploy radius/app.bicep \
-    --group adaptive \
-    --environment trading \
+    --group rg-trading \
+    --environment env-local-prod \
     --parameters imageRegistry=ghcr.io/microsoft/adaptive-apps \
     --parameters imageTag=latest \
     --parameters authUsername=admin \
@@ -111,8 +111,8 @@ If the team is validating AI portability, enable the recipe-backed AI resource:
 
 ```bash
 rad deploy radius/app.bicep \
-    --group adaptive \
-    --environment trading \
+    --group rg-trading \
+    --environment env-local-prod \
     --parameters imageRegistry=ghcr.io/microsoft/adaptive-apps \
     --parameters imageTag=latest \
     --parameters authUsername=admin \
@@ -142,7 +142,7 @@ Open `http://localhost:3000` and sign in with the `authUsername` and `authPasswo
 
 #### What to discuss
 
-- *"Which command named the environment?"* (`--environment trading`; the app model did not hard-code the target.)
+- *"Which command named the environment?"* (`--environment env-local-prod`; the app model did not hard-code the target.)
 - *"Where did the database host, MQTT host, and optional AI endpoint come from?"* (Recipe outputs projected through Radius connections and explicit secret wiring.)
 - *"What would you expect to change when the same app goes to Azure?"* (The recipes and provider scope, not the app resource declarations.)
 
@@ -159,11 +159,11 @@ rad workspace switch <second-workspace>
 rad group list
 ```
 
-If `adaptive` is not listed, create it. Then switch to it:
+If `rg-trading` is not listed, create it. Then switch to it:
 
 ```bash
-rad group create adaptive
-rad group switch adaptive
+rad group create rg-trading
+rad group switch rg-trading
 ```
 
 Register Azure credentials with the Radius control plane if the team has not already done so. If the team followed the AKS preparation guide and used workload identity for Radius, prefer the `rad credential register azure wi ...` pattern from Challenge 2. If they are using a client secret for the hack environment, this form also works:
@@ -179,10 +179,10 @@ Deploy the Azure-backed environment definition:
 
 ```bash
 rad deploy radius/aks-env.bicep \
-    --group adaptive \
-    --environment trading \
-    --parameters namespace=trading \
-    --parameters environmentName=trading \
+    --group rg-trading \
+    --environment env-azure-prod \
+    --parameters namespace=env-azure-prod \
+    --parameters environmentName=env-azure-prod \
     --parameters azureSubscriptionId=<subscription-id> \
     --parameters azureResourceGroup=<resource-group>
 ```
@@ -190,8 +190,8 @@ rad deploy radius/aks-env.bicep \
 Verify the recipe mapping:
 
 ```bash
-rad environment show trading
-rad recipe list --environment trading
+rad environment show env-azure-prod
+rad recipe list --environment env-azure-prod
 ```
 
 The same resource types should now point to Azure-backed recipes where appropriate:
@@ -223,8 +223,8 @@ For the AKS/Azure example, pass the managed identity values created for the back
 
 ```bash
 rad deploy radius/app.bicep \
-    --group adaptive \
-    --environment trading \
+    --group rg-trading \
+    --environment env-azure-prod \
     --parameters imageRegistry=ghcr.io/microsoft/adaptive-apps \
     --parameters imageTag=latest \
     --parameters authUsername=admin \
@@ -238,8 +238,8 @@ For a second environment that still uses the Kubernetes MQTT recipe, the workloa
 
 ```bash
 rad deploy radius/app.bicep \
-    --group adaptive \
-    --environment trading \
+    --group rg-trading \
+    --environment env-azure-prod \
     --parameters imageRegistry=ghcr.io/microsoft/adaptive-apps \
     --parameters imageTag=latest \
     --parameters authUsername=admin \
@@ -250,8 +250,8 @@ For AI-enabled Azure deployments, keep `aiProvider=local`. In this application m
 
 ```bash
 rad deploy radius/app.bicep \
-    --group adaptive \
-    --environment trading \
+    --group rg-trading \
+    --environment env-azure-prod \
     --parameters imageRegistry=ghcr.io/microsoft/adaptive-apps \
     --parameters imageTag=latest \
     --parameters authUsername=admin \
@@ -268,7 +268,7 @@ Validate the second deployment:
 ```bash
 rad app graph -a adaptive-apps
 rad resource list -a adaptive-apps
-kubectl get pods -n trading
+kubectl get pods -n env-azure-prod
 ```
 
 If the deployment is on AKS, also verify the Azure resources were created in the configured Azure resource group:
@@ -300,7 +300,7 @@ In the first workspace:
 rad workspace switch <first-workspace>
 rad app graph -a adaptive-apps
 rad resource list -a adaptive-apps
-rad recipe list --environment trading
+rad recipe list --environment env-local-prod
 ```
 
 In the second workspace:
@@ -309,7 +309,7 @@ In the second workspace:
 rad workspace switch <second-workspace>
 rad app graph -a adaptive-apps
 rad resource list -a adaptive-apps
-rad recipe list --environment trading
+rad recipe list --environment env-azure-prod
 ```
 
 The app graph should look familiar because the Radius application resources are the same. The recipe outputs and backing infrastructure should differ because the environments are different.
@@ -319,7 +319,7 @@ The app graph should look familiar because the Radius application resources are 
 | Area | First environment | Second environment |
 |---|---|---|
 | `radius/app.bicep` | Same file | Same file |
-| Kubernetes namespace | Usually `trading` | Usually `trading` on the second cluster |
+| Kubernetes namespace | Usually `env-local-prod` | Usually `env-azure-prod` on the second cluster |
 | Database backend | Containerized PostgreSQL | Containerized PostgreSQL in the current repo; can be swapped by changing the environment recipe |
 | MQTT backend | Mosquitto | Azure Event Grid MQTT endpoint; full messaging also needs topic-space and permission setup |
 | Workload identity | Local/no-op service account outputs | Pre-provisioned Azure workload identity outputs |
@@ -347,7 +347,7 @@ At the end of this challenge, teams should be able to demonstrate:
 
 **Recipes are missing in the second environment**
 
-Run `rad recipe list --environment trading` in the second workspace. If the list is empty or only partially populated, redeploy the correct environment Bicep (`radius/local-env.bicep` or `radius/aks-env.bicep`) before deploying the app.
+Run `rad recipe list --environment env-azure-prod` in the second workspace. If the list is empty or only partially populated, redeploy the correct environment Bicep (`radius/local-env.bicep` or `radius/aks-env.bicep`) before deploying the app.
 
 **The app deployed to the wrong cluster**
 
@@ -363,7 +363,7 @@ Confirm AKS workload identity is enabled, the backend and frontend managed ident
 
 **The second deployment overwrote the first**
 
-If both deployments target the same Radius control plane and group, the fixed application name `adaptive-apps` represents the same Radius application resource. Use separate workspaces/control planes for the cleanest environment split, or separate Radius groups if the team is simulating multiple environments on one control plane.
+If both deployments target the same Radius control plane and group, the fixed application name `adaptive-apps` represents the same Radius application resource. Use separate workspaces/control planes for the cleanest environment split, or separate Radius groups within `rg-trading` if the team is simulating multiple environments on one control plane.
 
 **AI works locally but fails in Azure**
 

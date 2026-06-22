@@ -142,11 +142,9 @@ var serverName = 'sql-${take(seed, 10)}'
 
 // The Azure provider scope on the environment gives us subscription + RG.
 // Format: /subscriptions/<sub>/resourceGroups/<rg>
-var azureScope = context.environment.providers.azure.scope
 var location   = resourceGroup().location
 
 // ── Admin password — generated deterministically from resource ID ────────────
-@secure()
 var adminPassword = '${uniqueString(context.resource.id)}Aa1!'
 
 // ── AVM: SQL Server ─────────────────────────────────────────────────────────
@@ -160,9 +158,10 @@ module sqlServer 'br/public:avm/res/sql/server:0.12.0' = {
     administratorLoginPassword: adminPassword
     databases: [
       {
-        name:    databaseName
-        skuName: '${sku.name}_${sku.capacity}'
-        tier:    sku.tier
+        name: databaseName
+        sku: {
+          name: '${sku.name}_${sku.capacity}'
+        }
       }
     ]
     // Security defaults provided by AVM:
@@ -213,22 +212,110 @@ rad bicep publish \
     --target br:${ACR_NAME}.azurecr.io/recipes/sql-server:1.0.0
 ```
 
-Register the recipe against `env-azure-prod` for the `sqlDatabases` type:
+#### Troubleshooting publish command formatting
+
+If teams see:
+
+```text
+Error: required flag(s) "file", "target" not set
+bash: --file: command not found
+bash: --target: command not found
+```
+
+the shell parsed each line as a separate command. Use one line, or use shell-appropriate line continuation.
+
+**Bash (one line):**
+
+```bash
+rad bicep publish --file recipes/azure/sql-server.bicep --target "br:${ACR_NAME}.azurecr.io/recipes/sql-server:1.0.0"
+```
+
+**Bash (multiline):**
+
+```bash
+rad bicep publish \
+  --file recipes/azure/sql-server.bicep \
+  --target "br:${ACR_NAME}.azurecr.io/recipes/sql-server:1.0.0"
+```
+
+**PowerShell (multiline):**
+
+```powershell
+$env:ACR_NAME="<acr-name>"
+rad bicep publish `
+  --file recipes/azure/sql-server.bicep `
+  --target "br:$($env:ACR_NAME).azurecr.io/recipes/sql-server:1.0.0"
+```
+
+Also ensure `ACR_NAME` is set in the same shell session before running the command.
+
+#### Troubleshooting ACR 401 when Docker is not installed
+
+If teams see:
+
+```text
+Unauthorized: Please login to "<acr-name>.azurecr.io"
+GET "https://<acr-name>.azurecr.io/oauth2/token...": 401 unauthorized
+```
+
+the registry auth was not available to the OCI client used by `rad bicep publish`.
+
+`az acr login -n "$ACR_NAME" --expose-token` returns a token, but does not always persist login in a way that `rad` can reuse.
+
+Use one of these approaches:
+
+**Option A (Docker installed):**
+
+```bash
+az acr login -n "$ACR_NAME"
+```
+
+**Option B (Docker-free): write OCI auth config from an exposed token**
+
+```bash
+TOKEN=$(az acr login -n "$ACR_NAME" --expose-token -o tsv --query accessToken)
+mkdir -p ~/.docker
+AUTH=$(printf '00000000-0000-0000-0000-000000000000:%s' "$TOKEN" | base64 | tr -d '\n')
+cat > ~/.docker/config.json <<EOF
+{
+  "auths": {
+    "${ACR_NAME}.azurecr.io": {
+      "auth": "${AUTH}"
+    }
+  }
+}
+EOF
+```
+
+Then rerun publish and register commands.
+
+Also verify RBAC: the signed-in identity needs at least `AcrPush` on the target registry.
+
+Register the recipe against `{environment-name}` for the `sqlDatabases` type.
+
+If you are not sure which environment to target, list available workspaces and environments first:
+
+```bash
+rad workspace list
+rad env list
+```
+
+Then run:
 
 ```bash
 rad recipe register default \
-    --environment env-azure-prod \
+    --environment {environment-name} \
     --resource-type Radius.Resources/sqlDatabases \
     --template-kind bicep \
     --template-path ${ACR_NAME}.azurecr.io/recipes/sql-server:1.0.0
 ```
 
-Verify in the dashboard: navigate to **Environments** → `env-azure-prod` → **Recipes** — the `Radius.Resources/sqlDatabases` entry should now appear with the template path.
+Verify in the dashboard: navigate to **Environments** → `{environment-name}` → **Recipes** — the `Radius.Resources/sqlDatabases` entry should now appear with the template path.
 
 Verify via CLI:
 
 ```bash
-rad recipe list --environment env-azure-prod
+rad recipe list --environment {environment-name}
 ```
 
 #### What to discuss
@@ -244,7 +331,7 @@ rad recipe list --environment env-azure-prod
 
 The repository ships two environment Bicep files that define environments *and* register all recipes in a single deployment. This is the recommended pattern for a platform team: environment config and recipe registration are infrastructure-as-code, not manual CLI steps.
 
-> **Naming note:** Stage 2 uses the repository sample environment name `trading`. The AKS prep guide also uses `RADIUS_GROUP=trading` and `RADIUS_WORKSPACE=aks-trading`. If teams used the teaching names from Challenge 2 (`rg-finance` / `rg-hr`, `env-azure-prod` / `env-local-prod`), either create/switch to the `trading` group/environment for the sample app or adjust the command parameters to match their existing names.
+> **Naming note:** Stage 2 uses the repository sample environment name `trading`. The AKS prep guide also uses `RADIUS_GROUP=trading` and `RADIUS_WORKSPACE=aks-trading`. If teams used the teaching names from Challenge 2 (`rg-finance` / `rg-trading`, `env-azure-prod` / `env-local-prod`), either create/switch to the `trading` group/environment for the sample app or adjust the command parameters to match their existing names.
 
 #### Local / Azure Local environment
 
