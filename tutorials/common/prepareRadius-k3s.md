@@ -45,15 +45,14 @@ rad workspace switch ws-local-prod
 ### 2.2 Create resource groups
 
 ```bash
-rad group create rg-finance
-rad group create rg-hr
-rad group switch rg-finance
+rad group create rg-trading
+rad group switch rg-trading
 ```
 
 ### 2.3 Create environment
 
 ```bash
-rad env create env-local-prod --group rg-finance --namespace prod
+rad env create env-local-prod --group rg-trading --namespace prod
 rad env switch env-local-prod
 ```
 
@@ -70,7 +69,7 @@ rad group list
 Expected output:
 - `ws-local-prod` workspace active
 - `env-local-prod` environment listed with status `Succeeded`
-- `rg-finance` and `rg-hr` resource groups listed
+- `rg-trading` resource group listed
 
 ## Stage 4 — Optional: Explore the dashboard
 
@@ -80,7 +79,7 @@ kubectl port-forward svc/dashboard -n radius-system 7007:80
 
 Then open **http://localhost:7007** in a browser and verify:
 - Environments tab shows `env-local-prod`
-- Resource groups tab shows `rg-finance` and `rg-hr`
+- Resource groups tab shows `rg-trading`
 - Applications tab is empty (expected at this stage)
 
 ## Notes
@@ -89,7 +88,7 @@ Then open **http://localhost:7007** in a browser and verify:
 - All workloads deploy into the `prod` Kubernetes namespace by default. Change by modifying `--namespace prod` above.
 - If you need multiple environments on the same k3s cluster (e.g., prod and nonprod), use different namespaces:
   ```bash
-  rad env create env-local-nonprod --group rg-finance --namespace nonprod
+  rad env create env-local-nonprod --group rg-trading --namespace nonprod
   ```
 
 ## Next steps

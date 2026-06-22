@@ -58,9 +58,8 @@ rad workspace switch ws-local-disconnected-prod
 ### 2.2 Create resource groups
 
 ```bash
-rad group create rg-finance
-rad group create rg-hr
-rad group switch rg-finance
+rad group create rg-trading
+rad group switch rg-trading
 ```
 
 ### 2.3 Create environment
@@ -68,14 +67,14 @@ rad group switch rg-finance
 For connected Azure Local (with optional Azure backend):
 
 ```bash
-rad env create env-local-prod --group rg-finance --namespace prod
+rad env create env-local-prod --group rg-trading --namespace prod
 rad env switch env-local-prod
 ```
 
 For disconnected Azure Local (in-cluster recipes only):
 
 ```bash
-rad env create env-local-disconnected-prod --group rg-finance --namespace prod-disconnected
+rad env create env-local-disconnected-prod --group rg-trading --namespace prod-disconnected
 rad env switch env-local-disconnected-prod
 ```
 
@@ -105,7 +104,7 @@ rad group list
 Expected output:
 - Workspace active (`ws-local-prod` or `ws-local-disconnected-prod`)
 - Environment listed with status `Succeeded`
-- `rg-finance` and `rg-hr` resource groups listed
+- `rg-trading` resource group listed
 
 ## Stage 4 — Optional: Explore the dashboard
 
@@ -115,7 +114,7 @@ kubectl port-forward svc/dashboard -n radius-system 7007:80
 
 Then open **http://localhost:7007** in a browser and verify:
 - Environments tab shows your environment
-- Resource groups tab shows `rg-finance` and `rg-hr`
+- Resource groups tab shows `rg-trading`
 - Applications tab is empty (expected at this stage)
 - Cloud provider registration status (if configured)
 

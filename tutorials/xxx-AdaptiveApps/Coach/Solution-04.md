@@ -336,7 +336,7 @@ The repository ships two environment Bicep files that define environments *and* 
 #### Local / Azure Local environment
 
 ```bash
-rad deploy radius/local-env.bicep --group trading --environment trading
+rad deploy radius/local-env.bicep --group rg-trading --environment env-local-prod
 ```
 
 This command deploys `local-env.bicep`, which creates the `trading` environment and registers the following recipes against `Radius.Resources/*`:
@@ -355,7 +355,7 @@ This command deploys `local-env.bicep`, which creates the `trading` environment 
 
 ```bash
 rad deploy radius/aks-env.bicep \
-    --group trading \
+    --group rg-trading \
     --environment trading \
     --parameters azureSubscriptionId=<subscription-id> \
     --parameters azureResourceGroup=<resource-group>

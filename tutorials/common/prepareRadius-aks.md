@@ -48,15 +48,14 @@ rad workspace switch ws-azure-prod
 ### 2.2 Create resource groups
 
 ```bash
-rad group create rg-finance
-rad group create rg-hr
-rad group switch rg-finance
+rad group create rg-trading
+rad group switch rg-trading
 ```
 
 ### 2.3 Create environment
 
 ```bash
-rad env create env-azure-prod --group rg-finance --namespace prod
+rad env create env-azure-prod --group rg-trading --namespace prod
 rad env switch env-azure-prod
 ```
 
@@ -84,7 +83,7 @@ rad group list
 Expected output:
 - `ws-azure-prod` workspace active
 - `env-azure-prod` environment listed with status `Succeeded`
-- `rg-finance` and `rg-hr` resource groups listed
+- `rg-trading` resource group listed
 - `env-azure-prod` should show Azure cloud provider registered
 
 ## Stage 4 — Register Azure credentials (optional but recommended)
@@ -112,7 +111,7 @@ kubectl port-forward svc/dashboard -n radius-system 7007:80
 
 Then open **http://localhost:7007** in a browser and verify:
 - Environments tab shows `env-azure-prod` with Azure cloud provider
-- Resource groups tab shows `rg-finance` and `rg-hr`
+- Resource groups tab shows `rg-trading`
 - Applications tab is empty (expected at this stage)
 
 ## Notes
