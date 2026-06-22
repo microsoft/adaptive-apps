@@ -252,10 +252,17 @@ Do not register the Azure cloud provider on `env-local-prod` in this challenge. 
 Verify everything is wired up correctly:
 
 ```bash
+rad workspace switch ws-azure-prod
+rad env switch env-azure-prod
 rad workspace list
 rad env list
 rad group list
 ```
+
+You should see:
+- `ws-azure-prod` workspace showing `env-azure-prod` as its active environment
+- Both `env-azure-prod` and `env-local-prod` listed with status `Succeeded`
+- `rg-finance` and `rg-hr` listed as resource groups
 
 Have teams open the **Radius dashboard** and explore the environment, resource groups, and empty application list:
 
