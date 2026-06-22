@@ -198,7 +198,7 @@ rad group create rg-hr
 Create the environment:
 
 ```bash
-rad env create env-azure-prod --group rg-finance --kubernetes-namespace prod
+rad env create env-azure-prod --group rg-finance --namespace prod
 rad env switch env-azure-prod
 rad group switch rg-finance
 ```
@@ -216,6 +216,10 @@ rad env update env-azure-prod \
 
 **Step 2 — Azure Local production workspace, environment, and resource groups**
 
+⚠️ **Critical:** If you are running both environments on the **same Kubernetes cluster** (same control plane), you must use **different Kubernetes namespaces** for each environment. If you are on a **different cluster**, proceed to Step 2a below.
+
+**Step 2a — If on a different cluster:**
+
 Switch kubectl context to the Azure Local AKS cluster, then verify you are not still on the Azure prod cluster context:
 
 ```bash
@@ -223,7 +227,7 @@ kubectl config get-contexts
 kubectl config current-context
 ```
 
-If this context is the same one used for `ws-azure-prod`, switch to the Azure Local / Arc context first. Otherwise `ws-local-prod` will point to the same Radius control plane and environment creation can fail with a namespace conflict.
+If this context is the same one used for `ws-azure-prod`, switch to the Azure Local / Arc context first. Otherwise `ws-local-prod` will point to the same Radius control plane and environment creation will fail with a namespace conflict.
 
 Then create and switch the local workspace:
 
@@ -233,20 +237,13 @@ rad workspace create kubernetes ws-local-prod \
 rad workspace switch ws-local-prod
 ```
 
-Create the same domain resource groups, then create the environment (no Azure cloud provider — recipes run in-cluster):
+Create the same domain resource groups, then create the environment. Use namespace `prod-local` to avoid conflicts if on the same control plane (or `prod` if on a different cluster):
 
 ```bash
 rad group create rg-finance
 rad group create rg-hr
 rad group switch rg-finance
-rad env create env-local-prod --group rg-finance --kubernetes-namespace prod
-rad env switch env-local-prod
-```
-
-If you intentionally run both environments on a single shared control plane, use a different namespace for the second environment (for example `prod-local`):
-
-```bash
-rad env create env-local-prod --group rg-finance --kubernetes-namespace prod-local
+rad env create env-local-prod --group rg-finance --namespace prod-local
 rad env switch env-local-prod
 ```
 
@@ -390,7 +387,7 @@ rad group create rg-finance
 rad group create rg-hr
 rad group switch rg-finance
 
-rad env create env-azure-prod --group rg-finance --kubernetes-namespace prod
+rad env create env-azure-prod --group rg-finance --namespace prod
 rad env switch env-azure-prod
 
 rad env update env-azure-prod \
@@ -420,7 +417,7 @@ rad group create rg-finance
 rad group create rg-hr
 rad group switch rg-finance
 
-rad env create env-local-prod --group rg-finance --kubernetes-namespace prod-local
+rad env create env-local-prod --group rg-finance --namespace prod-local
 rad env switch env-local-prod
 
 echo "Verifying Azure Local prod..."
