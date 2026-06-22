@@ -30,7 +30,67 @@ Before installing Radius, your team must choose between two architectural models
 - Shared configuration comes from Git-based synchronization, not from live runtime coupling.
 - Best for edge, disconnected, or high-availability scenarios.
 
-**Reference diagram:** DisconnectedRadiusModel
+**Architecture Diagram:**
+
+```mermaid
+graph TB
+    subgraph Governance["🔒 Governance & Source Control"]
+        Git["Git Repository<br/>(Recipes, App Templates,<br/>Environment Configs)"]
+        CI["CI/CD Pipeline<br/>(Build & Publish)"]
+        Git --> CI
+    end
+
+    subgraph Azure["☁️ Azure Site"]
+        AzureK8s["Kubernetes Cluster<br/>(AKS)"]
+        AzureCP["Radius Control Plane"]
+        AzureEnv["env-azure-prod<br/>rg-finance, rg-hr"]
+        AzureApps["Applications"]
+        AzureK8s --> AzureCP
+        AzureCP --> AzureEnv
+        AzureEnv --> AzureApps
+    end
+
+    subgraph AzureLocal["🏢 Azure Local (Connected)"]
+        ALK8s["Kubernetes Cluster<br/>(Arc-enabled)"]
+        ALCP["Radius Control Plane"]
+        ALEnv["env-local-prod<br/>rg-finance, rg-hr"]
+        ALApps["Applications"]
+        ALK8s --> ALCP
+        ALCP --> ALEnv
+        ALEnv --> ALApps
+    end
+
+    subgraph Disconnected["🔌 Azure Local (Disconnected)"]
+        DCK8s["Kubernetes Cluster<br/>(Standalone)"]
+        DCCP["Radius Control Plane"]
+        DCEnv["env-local-disconnected<br/>rg-finance, rg-hr"]
+        DCApps["Applications"]
+        DCK8s --> DCCP
+        DCCP --> DCEnv
+        DCEnv --> DCApps
+    end
+
+    subgraph Sync["📊 Optional"]
+        DataSync["Delayed Data Sync<br/>(Eventual Consistency)"]
+    end
+
+    CI -->|Deploy Artifacts| AzureK8s
+    CI -->|Deploy Artifacts| ALK8s
+    CI -->|Mirror & Deploy| DCK8s
+    AzureApps -.->|Optional| DataSync
+    ALApps -.->|Optional| DataSync
+    DCApps -.->|Optional| DataSync
+
+    classDef siteStyle fill:#f0f7ff,stroke:#0066cc,stroke-width:2px
+    classDef cpStyle fill:#fff0f0,stroke:#cc0000,stroke-width:2px
+    classDef govStyle fill:#f0fff0,stroke:#00aa00,stroke-width:2px
+    classDef syncStyle fill:#fffaf0,stroke:#ff9900,stroke-width:1px
+    
+    class Azure,AzureLocal,Disconnected siteStyle
+    class AzureCP,ALCP,DCCP cpStyle
+    class Governance govStyle
+    class Sync syncStyle
+```
 
 **Key characteristics:**
 - Sites: Independent Kubernetes clusters, each with its own Radius control plane
@@ -53,7 +113,54 @@ Before installing Radius, your team must choose between two architectural models
 - Requires reliable network connectivity between all sites and the central control plane.
 - Best for tightly coordinated, always-on deployments.
 
-**Reference diagram:** CentralizedRadiusModel
+**Architecture Diagram:**
+
+```mermaid
+graph TB
+    subgraph Central["🎛️ Central Management (Single Point of Control)"]
+        CentralK8s["Management Kubernetes Cluster"]
+        CentralCP["Radius Control Plane<br/>(Single Instance)"]
+        CentralRecipes["Shared Recipes & Policies"]
+        CentralCP --> CentralRecipes
+        CentralK8s --> CentralCP
+    end
+
+    subgraph Azure["☁️ Azure Execution Environment"]
+        AzureK8s["Kubernetes Cluster<br/>(AKS)"]
+        AzureEnv["env-azure-prod<br/>rg-finance, rg-hr"]
+        AzureApps["Applications"]
+        AzureK8s --> AzureEnv
+        AzureEnv --> AzureApps
+    end
+
+    subgraph AzureLocal["🏢 Azure Local Execution Environment"]
+        ALK8s["Kubernetes Cluster<br/>(Arc / On-Prem)"]
+        ALEnv["env-local-prod<br/>rg-finance, rg-hr"]
+        ALApps["Applications"]
+        ALK8s --> ALEnv
+        ALEnv --> ALApps
+    end
+
+    subgraph Connectivity["🌐 Network Dependency"]
+        Link1["Reliable Network"]
+        Link2["Reliable Network"]
+    end
+
+    CentralCP -->|Orchestrate & Control| Link1
+    Link1 -->|Workload Instructions| AzureK8s
+    CentralCP -->|Orchestrate & Control| Link2
+    Link2 -->|Workload Instructions| ALK8s
+    CentralCP -.->|Policy & Governance| AzureApps
+    CentralCP -.->|Policy & Governance| ALApps
+
+    classDef centralStyle fill:#fff0f0,stroke:#cc0000,stroke-width:3px
+    classDef execStyle fill:#f0f7ff,stroke:#0066cc,stroke-width:2px
+    classDef connStyle fill:#f0f0f0,stroke:#666,stroke-width:2px,stroke-dasharray: 5 5
+    
+    class Central centralStyle
+    class Azure,AzureLocal execStyle
+    class Connectivity connStyle
+```
 
 **Key characteristics:**
 - Sites: Multiple execution environments connected to one central control plane
