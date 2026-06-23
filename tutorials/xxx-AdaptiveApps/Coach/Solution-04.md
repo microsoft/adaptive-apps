@@ -339,7 +339,7 @@ The repository ships two environment Bicep files that define environments *and* 
 rad deploy radius/local-env.bicep --group rg-trading --environment env-local-prod
 ```
 
-This command deploys `local-env.bicep`, which creates the `trading` environment and registers the following recipes against `Radius.Resources/*`:
+This command deploys `local-env.bicep`, which creates the `env-local-prod` environment and registers the following recipes against `Radius.Resources/*`:
 
 | Resource type | Recipe | Backend |
 |---|---|---|

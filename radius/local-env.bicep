@@ -19,7 +19,10 @@ extension kubernetes with {
 // ---------------------------------------------------------------------------
 
 @description('Kubernetes namespace Radius will deploy resources into.')
-param namespace string = 'trading'
+param namespace string = 'env-local-prod'
+
+@description('Name of the Radius environment to create/update. Defaults to the namespace so it aligns with the environment the `ada bootstrap` CLI pre-creates via `rad environment create`.')
+param environmentName string = namespace
 
 @description('Pre-create the app namespace with the `istio-injection=enabled` label so workloads deployed by Radius receive an Istio sidecar (and inherit the mesh-wide STRICT mTLS policy from the `core` portfolio). Set to false on clusters without Istio.')
 param enableIstioInjection bool = true
@@ -48,8 +51,8 @@ resource appNamespace 'core/Namespace@v1' = {
 // Environment
 // ---------------------------------------------------------------------------
 
-resource tradingEnv 'Applications.Core/environments@2023-10-01-preview' = {
-  name: 'trading'
+resource localEnv 'Applications.Core/environments@2023-10-01-preview' = {
+  name: environmentName
   dependsOn: [
     appNamespace
   ]

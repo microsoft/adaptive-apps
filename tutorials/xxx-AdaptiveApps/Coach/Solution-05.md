@@ -15,7 +15,7 @@ This challenge is where the portability promise becomes visible. In Challenges 3
 - This challenge should continue from the objects created in the earlier challenges:
   - Challenge 2 created the Radius workspaces, environments, and resource groups.
   - Challenge 3 registered the portable `Radius.Resources/*` resource type contracts.
-  - Challenge 4 registered recipes for the sample `env-local` and `env-azure` environments.
+  - Challenge 4 registered recipes for the sample `env-local-prod` and `env-azure-prod` environments.
 - The strongest demo is local/Azure Local first, then AKS/Azure second. The app model remains the same, but Postgres, MQTT, workload identity, and AI can all land on different implementations.
 - If teams only have one cluster available, they can still practice the pattern by creating a second Radius environment and deploying to a different Radius group. Coach them that this demonstrates the control-plane model, but a real production/non-production split should use separate clusters or at least separate namespaces and cloud scopes.
 - Do not let teams solve the challenge by copying `app.bicep` and hard-coding environment-specific values into it. That defeats the purpose of Radius portability.
@@ -51,7 +51,7 @@ The environment decides which recipe fulfils each capability. Not every capabili
 
 ### Naming handoff from earlier challenges
 
-Challenge 2 introduces domain-oriented names such as `ws-azure-prod`, `ws-local-prod`, `env-azure-prod`, and `rg-finance`. Challenge 4's prebuilt environment files use the repository sample names `rg-trading` for the Radius group and `env-local` / `env-azure` for the application environments/namespaces. Do not let naming distract from the portability lesson.
+Challenge 2 introduces domain-oriented names such as `ws-azure-prod`, `ws-local-prod`, `env-azure-prod`, and `rg-finance`. Challenge 4's prebuilt environment files use the repository sample names `rg-trading` for the Radius group and `env-local-prod` / `env-azure-prod` for the application environments/namespaces. Do not let naming distract from the portability lesson.
 
 Use this guide with either naming style:
 
@@ -63,7 +63,7 @@ Use this guide with either naming style:
 | Environment name | `env-local-prod` / `env-azure-prod` | `env-azure-prod`, `env-local-prod`, etc. |
 | Application file | `radius/app.bicep` | `radius/app.bicep` |
 
-For the command examples below, the guide uses Challenge 4's sample names (`rg-trading` group and `env-local` / `env-azure` environments) because those match the prebuilt `radius/local-env.bicep` and `radius/aks-env.bicep` flow. If a team used Challenge 2's business names, substitute their group and environment names consistently.
+For the command examples below, the guide uses Challenge 4's sample names (`rg-trading` group and `env-local-prod` / `env-azure-prod` environments) because those match the prebuilt `radius/local-env.bicep` and `radius/aks-env.bicep` flow. If a team used Challenge 2's business names, substitute their group and environment names consistently.
 
 ## Solution Guide
 
@@ -126,7 +126,7 @@ Validate the app model and backing resources:
 ```bash
 rad app graph -a adaptive-apps
 rad resource list -a adaptive-apps
-kubectl get pods -n trading
+kubectl get pods -n env-local-prod
 ```
 
 Expose the frontend and verify the app works:

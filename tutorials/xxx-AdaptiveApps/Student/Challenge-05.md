@@ -63,7 +63,7 @@ To complete this challenge successfully, you should be able to:
 
 - Keep `radius/app.bicep` unchanged unless your coach explicitly asks you to investigate the application model. Portability is the thing you are proving.
 - Use consistent names when switching workspaces and environments. It is easy to deploy to the wrong Radius control plane if your `kubectl` context and `rad workspace` are not aligned.
-- If your team used the sample artifact path, you may see names such as `adaptive` for the Radius group and `trading` for the environment/namespace. If your team used the domain names from Challenge 2, substitute your own group and environment names consistently.
+- If your team used the sample artifact path, the Radius group is `rg-trading` and the environments are `env-local-prod` and `env-azure-prod`. If your team used different domain names from Challenge 2, substitute your own group and environment names consistently.
 - Recipe output is the bridge between the platform and the application. When something cannot connect, inspect the registered recipe and the resource outputs before changing the application code.
 - If you enable AI through the recipe-backed path, the application still uses the same `aiProvider=local` pattern. The environment decides whether that recipe produces a local/Kaito endpoint or Azure OpenAI.
 - If your Azure MQTT-backed deployment is reachable but publish/subscribe does not work, check Event Grid MQTT topic spaces, permission bindings, and workload identity configuration.
