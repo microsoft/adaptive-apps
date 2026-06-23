@@ -225,7 +225,9 @@ Open `http://localhost:3000` and sign in with the `authUsername` and `authPasswo
 
 ### Stage 3 - Confirm or prepare the second environment
 
-The second environment should already have a Kubernetes cluster and Radius control plane from Challenge 1 and Challenge 2. The Azure-backed example below uses the AKS workspace from Challenge 2 and the repository's `radius/aks-env.bicep` from Challenge 4.
+The second environment should already have a Kubernetes cluster and Radius control plane from Challenge 1 and Challenge 2, and Challenge 4 already deploys `radius/aks-env.bicep` to register the Azure-backed recipes. In most cases this stage is a *confirmation* step, not a fresh build — the team usually only redeploys `aks-env.bicep` if the environment or recipes are missing, or to reconcile the environment name.
+
+> **Naming note:** Challenge 4's sample deploys `aks-env.bicep` with `--environment trading` (the repository sample name), while the teaching standard from Challenge 2 is `env-azure-prod`. If the team followed Challenge 4's commands literally, their second environment may be named `trading` (workspace `aks-trading`). Either substitute that name wherever `env-azure-prod` appears below, or redeploy `aks-env.bicep` with `environmentName=env-azure-prod` to standardise on the teaching name. The goal of this challenge does not depend on the name — only on deploying the *same app* to whatever the second environment is called.
 
 Switch to the second workspace and verify the group exists:
 
@@ -250,7 +252,7 @@ rad credential register azure \
     --tenant-id <tenant>
 ```
 
-Deploy the Azure-backed environment definition:
+Deploy the Azure-backed environment definition **only if Challenge 4 did not already register these recipes** (or to reconcile the environment name to `env-azure-prod`):
 
 ```bash
 rad deploy radius/aks-env.bicep \
