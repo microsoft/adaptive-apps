@@ -331,7 +331,7 @@ rad recipe list --environment {environment-name}
 
 The repository ships two environment Bicep files that define environments *and* register all recipes in a single deployment. This is the recommended pattern for a platform team: environment config and recipe registration are infrastructure-as-code, not manual CLI steps.
 
-> **Naming note:** Stage 2 uses the repository sample environment name `trading`. The AKS prep guide also uses `RADIUS_GROUP=trading` and `RADIUS_WORKSPACE=aks-trading`. If teams used the teaching names from Challenge 2 (`rg-finance` / `rg-trading`, `env-azure-prod` / `env-local-prod`), either create/switch to the `trading` group/environment for the sample app or adjust the command parameters to match their existing names.
+> **Naming note:** These commands use the Challenge 2 teaching names — group `rg-trading` with environments `env-local-prod` and `env-azure-prod`. The shipped `aks-env.bicep` defaults its `environmentName` (and Kubernetes `namespace`) parameter to `trading`, so the AKS command passes `--parameters environmentName=env-azure-prod` to align the Radius environment with the teaching names. If your team instead followed the sample values in [`prepare-aks.md`](../../common/prepare-aks.md) (`RADIUS_GROUP=trading`, `RADIUS_WORKSPACE=aks-trading`, environment `trading`), use those names consistently in every command below instead.
 
 #### Local / Azure Local environment
 
@@ -356,7 +356,8 @@ This command deploys `local-env.bicep`, which creates the `env-local-prod` envir
 ```bash
 rad deploy radius/aks-env.bicep \
     --group rg-trading \
-    --environment trading \
+    --environment env-azure-prod \
+    --parameters environmentName=env-azure-prod \
     --parameters azureSubscriptionId=<subscription-id> \
     --parameters azureResourceGroup=<resource-group>
 ```
@@ -387,7 +388,7 @@ Navigate to **Environments** → select the environment → **Recipes**. All reg
 Verify via CLI:
 
 ```bash
-rad recipe list --environment trading
+rad recipe list --environment env-azure-prod
 ```
 
 #### Coaching questions
@@ -395,4 +396,4 @@ rad recipe list --environment trading
 - *"Both environments register a recipe for `Radius.Resources/postgreSqlDatabases`. What is different between them?"* (The template path points to a different Bicep file. The local recipe deploys a container; the AKS recipe calls AVM to provision a managed Azure service. The resource type schema — and therefore the application Bicep — is identical.)
 - *"Why is `rad deploy` used to register recipes instead of `rad recipe register`?"* (Using Bicep for environment + recipe registration is infrastructure-as-code. It is repeatable, reviewable, and version-controlled. `rad recipe register` is a CLI shortcut suitable for one-off experiments, not production.)
 - *"The `governance-opa:latest` recipe is the same in both environments. When would you want different governance recipes per environment?"* (When prod uses a stricter OPA policy bundle than non-prod, or when prod routes policy decisions to an external PDP rather than running OPA in-cluster.)
-- *"What is the `--group trading` flag?"* (It scopes the deployment to the `trading` Radius resource group — equivalent to `rad group switch trading` before running `rad deploy`.)
+- *"What is the `--group rg-trading` flag?"* (It scopes the deployment to the `rg-trading` Radius resource group — equivalent to `rad group switch rg-trading` before running `rad deploy`.)

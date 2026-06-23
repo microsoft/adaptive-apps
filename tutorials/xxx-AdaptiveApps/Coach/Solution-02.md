@@ -156,6 +156,8 @@ Radius control plane (one per site)
         └── Application: app-trading-web
 ```
 
+> **In this hack:** the diagram above shows the *general* multi-application pattern a platform team would use. The reference application you deploy from Challenge 4 onward is a **single** Radius application named `adaptive-apps`, deployed into the `rg-trading` resource group in each environment. The `app-finance-*` / `app-trading-*` entries are illustrative of how many applications would be organized under the same hierarchy.
+
 #### Understanding Workspaces
 
 A Radius **workspace** is a local, per-workstation CLI configuration that tells the `rad` CLI which Kubernetes cluster (and therefore which Radius control plane) to target. It lives in `~/.rad/config.yaml` — not in the cluster.

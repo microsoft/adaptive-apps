@@ -25,7 +25,7 @@ The resource type is the **contract** between the application team and the platf
 ```
 Application developer writes:                 Platform returns:
 ──────────────────────────────────            ──────────────────────────────────
-resource db 'Radius.Resources/               db.properties.host   → "pg.prod.svc"
+resource db 'Radius.Resources/               db.properties.host   → "sql.prod.svc"
   sqlDatabases@2025-08-01-preview' = {       db.properties.port   → 1433
   properties: {                              db.properties.secrets.password → "..."
     environment: environment
@@ -151,6 +151,8 @@ This registers the following types under the `Radius.Resources` namespace:
 | `Radius.Resources/workloadIdentities` | Workload identity configuration. Recipes: Kubernetes service account + federated credential (AKS), passthrough (local). |
 | `Radius.Resources/idProviders` | OpenID Connect identity provider. Recipes: Keycloak (local/on-prem), Microsoft Entra ID (Azure). |
 | `Radius.Resources/aiModels` | OpenAI-compatible AI inference endpoint. Recipes: Kaito in-cluster LLM (local), Azure OpenAI (Azure). |
+| `Radius.Resources/governance` | Policy decision point / governance integration. Recipes: Open Policy Agent (local and Azure). |
+| `Radius.Resources/agentGuardrails` | Agent governance sidecar prerequisites. Recipes: Agent Governance Toolkit sidecar support (local and Azure). |
 
 #### Explore in the dashboard
 
@@ -160,7 +162,7 @@ kubectl port-forward svc/dashboard -n radius-system 7007:80
 
 Then open `http://localhost:7007` in a browser.
 
-In **Resource Types**, verify all five types appear alongside `Radius.Resources/sqlDatabases` from Stage 1.
+In **Resource Types**, verify all seven types appear alongside `Radius.Resources/sqlDatabases` from Stage 1.
 
 Click into each type and walk teams through:
 
@@ -188,10 +190,12 @@ rad resource-type show Radius.Resources/aiModels
 
 #### Validation
 
-At the end of this challenge, `rad resource-type list` should return at least six types:
+At the end of this challenge, `rad resource-type list` should return at least eight types:
 
 ```
+Radius.Resources/agentGuardrails
 Radius.Resources/aiModels
+Radius.Resources/governance
 Radius.Resources/idProviders
 Radius.Resources/mqttBrokers
 Radius.Resources/postgreSqlDatabases
