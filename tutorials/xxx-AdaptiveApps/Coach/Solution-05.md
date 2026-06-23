@@ -280,7 +280,7 @@ The same resource types should now point to Azure-backed recipes where appropria
 | `Radius.Resources/governance` | OPA policy decision point in Kubernetes |
 | `Radius.Resources/agentGuardrails` | Agent Governance Toolkit sidecar support when guardrails are enabled |
 
-`Radius.Resources/idProviders` is intentionally not Azure-backed in `aks-env.bicep`; teams will replace identity-provider behavior in a later challenge.
+`Radius.Resources/idProviders` is intentionally not Azure-backed in `aks-env.bicep`; the environment keeps the existing identity-provider behavior, which is a valid environment decision rather than a portability failure.
 
 > **Known limitation:** The Azure Event Grid MQTT recipe provisions the namespace endpoint and returns the connection shape expected by `Radius.Resources/mqttBrokers`. Event Grid MQTT still requires authenticated clients plus topic-space and permission-binding configuration before publish/subscribe flows will work end to end. Treat this as a portability demonstration unless the team has also completed the Event Grid MQTT identity and permission setup.
 
