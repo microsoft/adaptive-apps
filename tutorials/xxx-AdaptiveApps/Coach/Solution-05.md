@@ -160,7 +160,7 @@ The recipe list should include the portable resource types registered by the env
 |---|---|
 | `Radius.Resources/postgreSqlDatabases` | PostgreSQL container with the trading application schema |
 | `Radius.Resources/mqttBrokers` | Eclipse Mosquitto container |
-| `Radius.Resources/idProviders` | Keycloak OIDC provider |
+| `Radius.Resources/idProviders` | Keycloak OIDC provider recipe (registered by the local environment; `app.bicep` wires OIDC login through its `oidc*` parameters and does not instantiate this resource) |
 | `Radius.Resources/workloadIdentities` | Local Kubernetes service account / no-op identity |
 | `Radius.Resources/aiModels` | Kaito in-cluster LLM when AI is enabled |
 | `Radius.Resources/governance` | OPA policy decision point when governance is enabled |
@@ -280,7 +280,7 @@ The same resource types should now point to Azure-backed recipes where appropria
 | `Radius.Resources/governance` | OPA policy decision point in Kubernetes |
 | `Radius.Resources/agentGuardrails` | Agent Governance Toolkit sidecar support when guardrails are enabled |
 
-`Radius.Resources/idProviders` is intentionally not Azure-backed in `aks-env.bicep`; the environment keeps the existing identity-provider behavior, which is a valid environment decision rather than a portability failure.
+`Radius.Resources/idProviders` is intentionally not registered in `aks-env.bicep`, and `app.bicep` does not instantiate an idProviders resource in either environment. The application's OIDC login is driven by its `oidc*` deployment parameters, so identity-provider behavior is configured at the application/parameter layer rather than carried by an environment recipe. Registering the recipe locally but not in Azure is a valid environment decision, not a portability failure.
 
 > **Known limitation:** The Azure Event Grid MQTT recipe provisions the namespace endpoint and returns the connection shape expected by `Radius.Resources/mqttBrokers`. Event Grid MQTT still requires authenticated clients plus topic-space and permission-binding configuration before publish/subscribe flows will work end to end. Treat this as a portability demonstration unless the team has also completed the Event Grid MQTT identity and permission setup.
 
@@ -350,20 +350,21 @@ If the deployment is on AKS, also verify the Azure resources were created in the
 
 ```bash
 az resource list \
+    --subscription <subscription-id> \
     --resource-group <resource-group> \
     --output table
 ```
 
-Expose the frontend from the second environment:
+Expose the frontend from the second environment. If the Stage 2 expose session is still running on local port 3000, stop it first or pick a different local port so the two tunnels do not collide:
 
 ```bash
 rad resource expose Applications.Core/containers frontend \
     -a adaptive-apps \
-    --port 3000 \
+    --port 3001 \
     --remote-port 3000
 ```
 
-Open `http://localhost:3000` and verify the deployment is reachable. If the second environment uses Azure Event Grid MQTT without topic spaces, permission bindings, and client authorization configured, browser access can work while MQTT-backed flows fail; use that as a coaching moment about which portability gaps belong in recipes versus separate platform setup.
+Open `http://localhost:3001` and verify the deployment is reachable. If the second environment uses Azure Event Grid MQTT without topic spaces, permission bindings, and client authorization configured, browser access can work while MQTT-backed flows fail; use that as a coaching moment about which portability gaps belong in recipes versus separate platform setup.
 
 ### Stage 5 - Compare the two deployments
 
@@ -413,7 +414,7 @@ The app graph should look familiar because the Radius application resources are 
 At the end of this challenge, teams should be able to demonstrate:
 
 - The same `radius/app.bicep` file was used for both deployments.
-- Each environment has a recipe list for the same portable resource types.
+- Each environment registers recipes for the resource types the deployed app actually uses (PostgreSQL, MQTT, workload identities, plus AI/governance/guardrails when enabled); teams can identify intentional differences, such as `idProviders` being registered locally but not in Azure.
 - The application deploys and is reachable in both environments; full runtime parity on the Azure MQTT path requires the Event Grid topic-space and permission setup called out above.
 - The backing infrastructure can differ by environment without changing the application resource declarations; in the current repo, MQTT, workload identity, and AI show the clearest differences.
 - The team can explain which changes were environment/platform changes and which were application deployment parameters.
@@ -438,7 +439,7 @@ Confirm AKS workload identity is enabled, the backend and frontend managed ident
 
 **The second deployment overwrote the first**
 
-If both deployments target the same Radius control plane and group, the fixed application name `adaptive-apps` represents the same Radius application resource. Use separate workspaces/control planes for the cleanest environment split, or separate Radius groups within `rg-trading` if the team is simulating multiple environments on one control plane.
+If both deployments target the same Radius control plane and group, the fixed application name `adaptive-apps` represents the same Radius application resource. Use separate workspaces/control planes for the cleanest environment split, or a separate Radius group per environment (`rg-trading` is itself a Radius group, so add a second group rather than nesting one inside it) if the team is simulating multiple environments on one control plane.
 
 **AI works locally but fails in Azure**
 
