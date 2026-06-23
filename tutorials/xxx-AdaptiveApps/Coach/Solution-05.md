@@ -2,7 +2,12 @@
 
 [< Previous Solution](./Solution-04.md) - **[Home](./README.md)** - [Next Solution >](./Solution-06.md)
 
-> This is a facilitation guide. It deliberately contains no step-by-step solution or command sequence. Your job is to help teams reason their way to a working second deployment, not to hand them the commands. The concrete deployment flow lives in the student-facing assets and the earlier challenges; resist the urge to read it out.
+> This guide has two parts. **Sections 1-9 are a facilitation guide** - use them to help
+> teams reason their way to a working second deployment rather than handing them answers.
+> The **Detailed Solution Walkthrough** at the end is validated ground truth (exact commands,
+> expected outcomes, troubleshooting) for confirming a team's work, unblocking a stuck team,
+> or running the closing demo. Lead with facilitation; reach for the walkthrough only after
+> the hint ladder is exhausted.
 
 ## 1. Challenge Overview for Coaches
 
@@ -126,3 +131,315 @@ A team has met the objectives when they can demonstrate the following, in their 
 - **Cross-team compare.** If multiple teams chose different approaches (two clusters vs one cluster, parameter-carried vs environment-carried difference), have them present to each other and defend the trade-offs.
 - **"Add a third environment" thought experiment.** Ask teams to estimate the change set for a hypothetical third environment without building it. A small, confident answer is a sign the boundary landed.
 - **Portability gaps as a backlog.** Discuss which gaps (managed database, full Event Grid MQTT setup, identity-provider behavior) belong in recipes versus separate platform work, and who would own each. This connects the challenge to how the platform would actually evolve.
+
+---
+
+## Detailed Solution Walkthrough (Reference)
+
+Sections 1-9 above are how to **coach** this challenge: facilitate, ask questions, and
+let teams discover the portability boundary themselves. This walkthrough is the
+validated deployment path so you have ground truth on hand - use it to confirm a team's
+work, unblock a stuck team, or run the closing demo. Do **not** hand these commands to
+teams up front; reach for them only after the hint ladder has been exhausted.
+
+### Stage 1 - Confirm the first environment is ready
+
+Start from an environment completed in Challenge 4. Do not recreate the control plane, resource types, or recipes here; Challenge 5 is about reusing them. The examples below use the Challenge 4 sample group `rg-trading` and environment `env-local-prod`.
+
+```bash
+rad workspace switch <first-workspace>
+rad group switch rg-trading
+
+rad environment show env-local-prod
+rad recipe list --environment env-local-prod
+```
+
+The recipe list should include the portable resource types registered by the environment. The application uses a subset directly, and optional features such as AI, governance, and guardrails activate additional types based on deployment parameters.
+
+| Resource type | Local / Azure Local recipe outcome |
+|---|---|
+| `Radius.Resources/postgreSqlDatabases` | PostgreSQL container with the trading application schema |
+| `Radius.Resources/mqttBrokers` | Eclipse Mosquitto container |
+| `Radius.Resources/idProviders` | Keycloak OIDC provider |
+| `Radius.Resources/workloadIdentities` | Local Kubernetes service account / no-op identity |
+| `Radius.Resources/aiModels` | Kaito in-cluster LLM when AI is enabled |
+| `Radius.Resources/governance` | OPA policy decision point when governance is enabled |
+| `Radius.Resources/agentGuardrails` | Agent Governance Toolkit sidecar support when guardrails are enabled |
+
+If recipes are missing, send the team back to Challenge 4. Challenge 5 depends on the environment having the recipe mappings in place.
+
+### Stage 2 - Deploy the app to the first environment
+
+Use the same application Bicep the team will later deploy elsewhere:
+
+```bash
+rad deploy radius/app.bicep \
+    --group rg-trading \
+    --environment env-local-prod \
+    --parameters imageRegistry=ghcr.io/microsoft/adaptive-apps \
+    --parameters imageTag=latest \
+    --parameters authUsername=admin \
+    --parameters authPassword=<your-password>
+```
+
+If the team is validating AI portability, enable the recipe-backed AI resource:
+
+```bash
+rad deploy radius/app.bicep \
+    --group rg-trading \
+    --environment env-local-prod \
+    --parameters imageRegistry=ghcr.io/microsoft/adaptive-apps \
+    --parameters imageTag=latest \
+    --parameters authUsername=admin \
+    --parameters authPassword=<your-password> \
+    --parameters aiProvider=local \
+    --parameters aiModel=qwen2.5-coder-7b-instruct
+```
+
+Validate the app model and backing resources:
+
+```bash
+rad app graph -a adaptive-apps
+rad resource list -a adaptive-apps
+kubectl get pods -n env-local-prod
+```
+
+Expose the frontend and verify the app works:
+
+```bash
+rad resource expose Applications.Core/containers frontend \
+    -a adaptive-apps \
+    --port 3000 \
+    --remote-port 3000
+```
+
+Open `http://localhost:3000` and sign in with the `authUsername` and `authPassword` values used during deployment.
+
+#### What to discuss
+
+- *"Which command named the environment?"* (`--environment env-local-prod`; the app model did not hard-code the target.)
+- *"Where did the database host, MQTT host, and optional AI endpoint come from?"* (Recipe outputs projected through Radius connections and explicit secret wiring.)
+- *"What would you expect to change when the same app goes to Azure?"* (The recipes and provider scope, not the app resource declarations.)
+
+---
+
+### Stage 3 - Confirm or prepare the second environment
+
+The second environment should already have a Kubernetes cluster and Radius control plane from Challenge 1 and Challenge 2. The Azure-backed example below uses the AKS workspace from Challenge 2 and the repository's `radius/aks-env.bicep` from Challenge 4.
+
+Switch to the second workspace and verify the group exists:
+
+```bash
+rad workspace switch <second-workspace>
+rad group list
+```
+
+If `rg-trading` is not listed, create it. Then switch to it:
+
+```bash
+rad group create rg-trading
+rad group switch rg-trading
+```
+
+Register Azure credentials with the Radius control plane if the team has not already done so. If the team followed the AKS preparation guide and used workload identity for Radius, prefer the `rad credential register azure wi ...` pattern from Challenge 2. If they are using a client secret for the hack environment, this form also works:
+
+```bash
+rad credential register azure \
+    --client-id <appId> \
+    --client-secret <password> \
+    --tenant-id <tenant>
+```
+
+Deploy the Azure-backed environment definition:
+
+```bash
+rad deploy radius/aks-env.bicep \
+    --group rg-trading \
+    --environment env-azure-prod \
+    --parameters namespace=env-azure-prod \
+    --parameters environmentName=env-azure-prod \
+    --parameters azureSubscriptionId=<subscription-id> \
+    --parameters azureResourceGroup=<resource-group>
+```
+
+Verify the recipe mapping:
+
+```bash
+rad environment show env-azure-prod
+rad recipe list --environment env-azure-prod
+```
+
+The same resource types should now point to Azure-backed recipes where appropriate:
+
+| Resource type | AKS / Azure recipe outcome |
+|---|---|
+| `Radius.Resources/postgreSqlDatabases` | PostgreSQL container recipe (`postgres:latest`) in the current repo; replaceable by a managed PostgreSQL recipe later |
+| `Radius.Resources/mqttBrokers` | Azure Event Grid MQTT namespace endpoint |
+| `Radius.Resources/workloadIdentities` | Pass-through of pre-provisioned Azure workload identity values |
+| `Radius.Resources/aiModels` | Azure OpenAI account and deployment when AI is enabled |
+| `Radius.Resources/governance` | OPA policy decision point in Kubernetes |
+| `Radius.Resources/agentGuardrails` | Agent Governance Toolkit sidecar support when guardrails are enabled |
+
+`Radius.Resources/idProviders` is intentionally not Azure-backed in `aks-env.bicep`; teams will replace identity-provider behavior in a later challenge.
+
+> **Known limitation:** The Azure Event Grid MQTT recipe provisions the namespace endpoint and returns the connection shape expected by `Radius.Resources/mqttBrokers`. Event Grid MQTT still requires authenticated clients plus topic-space and permission-binding configuration before publish/subscribe flows will work end to end. Treat this as a portability demonstration unless the team has also completed the Event Grid MQTT identity and permission setup.
+
+#### Coaching tip
+
+If a team asks why the Azure environment uses a different Bicep file, point out that `aks-env.bicep` is platform-team code. It defines the target platform, provider scope, and recipe catalog. The portability test is whether `radius/app.bicep` stays unchanged.
+
+---
+
+### Stage 4 - Deploy the same app to the second environment
+
+Run the same application file against the second workspace and environment. The file path remains `radius/app.bicep`.
+
+For the AKS/Azure example, pass the managed identity values created for the backend and frontend workloads. The repository includes a helper at `tutorials/getting-started/assets/app-wi-setup.sh`; the important output for this challenge is the managed identity client ID for each workload. AKS must have workload identity enabled, and the identities still need the Event Grid MQTT permissions required by the target namespace.
+
+```bash
+rad deploy radius/app.bicep \
+    --group rg-trading \
+    --environment env-azure-prod \
+    --parameters imageRegistry=ghcr.io/microsoft/adaptive-apps \
+    --parameters imageTag=latest \
+    --parameters authUsername=admin \
+    --parameters authPassword=<your-password> \
+    --parameters backendClientId=<backend-managed-identity-client-id> \
+    --parameters frontendClientId=<frontend-managed-identity-client-id> \
+    --parameters workloadIdentityTenantId=<tenant-id>
+```
+
+For a second environment that still uses the Kubernetes MQTT recipe, the workload identity parameters can remain omitted:
+
+```bash
+rad deploy radius/app.bicep \
+    --group rg-trading \
+    --environment env-azure-prod \
+    --parameters imageRegistry=ghcr.io/microsoft/adaptive-apps \
+    --parameters imageTag=latest \
+    --parameters authUsername=admin \
+    --parameters authPassword=<your-password>
+```
+
+For AI-enabled Azure deployments, keep `aiProvider=local`. In this application model, `local` means "use the environment-registered `Radius.Resources/aiModels` recipe." In the Azure environment, that recipe is `ai-agent-azure-openai:latest`, so the backing implementation is Azure OpenAI:
+
+```bash
+rad deploy radius/app.bicep \
+    --group rg-trading \
+    --environment env-azure-prod \
+    --parameters imageRegistry=ghcr.io/microsoft/adaptive-apps \
+    --parameters imageTag=latest \
+    --parameters authUsername=admin \
+    --parameters authPassword=<your-password> \
+    --parameters backendClientId=<backend-managed-identity-client-id> \
+    --parameters frontendClientId=<frontend-managed-identity-client-id> \
+    --parameters workloadIdentityTenantId=<tenant-id> \
+    --parameters aiProvider=local \
+    --parameters aiModel=gpt-4o
+```
+
+Validate the second deployment:
+
+```bash
+rad app graph -a adaptive-apps
+rad resource list -a adaptive-apps
+kubectl get pods -n env-azure-prod
+```
+
+If the deployment is on AKS, also verify the Azure resources were created in the configured Azure resource group:
+
+```bash
+az resource list \
+    --resource-group <resource-group> \
+    --output table
+```
+
+Expose the frontend from the second environment:
+
+```bash
+rad resource expose Applications.Core/containers frontend \
+    -a adaptive-apps \
+    --port 3000 \
+    --remote-port 3000
+```
+
+Open `http://localhost:3000` and verify the deployment is reachable. If the second environment uses Azure Event Grid MQTT without topic spaces, permission bindings, and client authorization configured, browser access can work while MQTT-backed flows fail; use that as a coaching moment about which portability gaps belong in recipes versus separate platform setup.
+
+### Stage 5 - Compare the two deployments
+
+Have teams compare the application graph and the backing platform resources in both environments.
+
+In the first workspace:
+
+```bash
+rad workspace switch <first-workspace>
+rad app graph -a adaptive-apps
+rad resource list -a adaptive-apps
+rad recipe list --environment env-local-prod
+```
+
+In the second workspace:
+
+```bash
+rad workspace switch <second-workspace>
+rad app graph -a adaptive-apps
+rad resource list -a adaptive-apps
+rad recipe list --environment env-azure-prod
+```
+
+The app graph should look familiar because the Radius application resources are the same. The recipe outputs and backing infrastructure should differ because the environments are different.
+
+#### Expected differences
+
+| Area | First environment | Second environment |
+|---|---|---|
+| `radius/app.bicep` | Same file | Same file |
+| Kubernetes namespace | Usually `env-local-prod` | Usually `env-azure-prod` on the second cluster |
+| Database backend | Containerized PostgreSQL | Containerized PostgreSQL in the current repo; can be swapped by changing the environment recipe |
+| MQTT backend | Mosquitto | Azure Event Grid MQTT endpoint; full messaging also needs topic-space and permission setup |
+| Workload identity | Local/no-op service account outputs | Pre-provisioned Azure workload identity outputs |
+| AI backend, if enabled | Kaito / local OpenAI-compatible endpoint | Azure OpenAI through the recipe |
+
+#### Coaching questions
+
+- *"What changed between the two app deployments?"* (Workspace, environment, and parameter values. The app model stayed the same.)
+- *"Where is the platform-specific logic located?"* (In the environment's recipe registrations and the recipe Bicep files.)
+- *"Why does the app still connect to the database without a new connection string?"* (The resource type contract and recipe outputs are stable; Radius projects the outputs into the container through connections.)
+- *"What would make this app less portable?"* (Hard-coded hostnames, cloud-specific SDK setup in `app.bicep`, direct Azure resource declarations in the application model, or environment-specific image builds.)
+- *"Who owns each file now?"* (`radius/app.bicep` is app-team code; `radius/*-env.bicep` and `radius/recipes/*` are platform-team code.)
+
+### Validation checklist
+
+At the end of this challenge, teams should be able to demonstrate:
+
+- The same `radius/app.bicep` file was used for both deployments.
+- Each environment has a recipe list for the same portable resource types.
+- The application deploys and is reachable in both environments; full runtime parity on the Azure MQTT path requires the Event Grid topic-space and permission setup called out above.
+- The backing infrastructure can differ by environment without changing the application resource declarations; in the current repo, MQTT, workload identity, and AI show the clearest differences.
+- The team can explain which changes were environment/platform changes and which were application deployment parameters.
+
+### Common Issues
+
+**Recipes are missing in the second environment**
+
+Run `rad recipe list --environment env-azure-prod` in the second workspace. If the list is empty or only partially populated, redeploy the correct environment Bicep (`radius/local-env.bicep` or `radius/aks-env.bicep`) before deploying the app.
+
+**The app deployed to the wrong cluster**
+
+Run `rad workspace list` and `kubectl config current-context`. The `rad` workspace chooses the Radius control plane; the Kubernetes context is used when creating or updating that workspace. Teams often switch `kubectl` context but forget to switch `rad` workspace.
+
+**Azure recipe deployment fails with authorization errors**
+
+Confirm `rad credential register azure` was run against the second workspace and that the service principal has permission on the Azure resource group passed to `aks-env.bicep`.
+
+**Azure MQTT auth or publish/subscribe fails**
+
+Confirm AKS workload identity is enabled, the backend and frontend managed identity client IDs were passed to `app.bicep`, and the Event Grid namespace has the topic-space and permission-binding configuration required for those identities. The current `mqtt-azure-event-grid` recipe creates the namespace endpoint; it does not complete all MQTT authorization setup.
+
+**The second deployment overwrote the first**
+
+If both deployments target the same Radius control plane and group, the fixed application name `adaptive-apps` represents the same Radius application resource. Use separate workspaces/control planes for the cleanest environment split, or separate Radius groups within `rg-trading` if the team is simulating multiple environments on one control plane.
+
+**AI works locally but fails in Azure**
+
+Check that the Azure environment recipe for `Radius.Resources/aiModels` is registered and that the requested `aiModel` value is available in the target Azure OpenAI region. The app still passes `aiProvider=local` because that tells `app.bicep` to use the recipe-backed `aiModels` resource; the environment decides whether the recipe produces Kaito or Azure OpenAI.
