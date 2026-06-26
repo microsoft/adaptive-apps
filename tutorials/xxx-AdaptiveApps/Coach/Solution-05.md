@@ -77,7 +77,7 @@ The cleanest demo uses the workspaces established in Challenge 2: `ws-local-prod
 
 ### Stage 1 - Confirm the Challenge 04 end state
 
-Start by confirming that the team is really continuing from Challenge 04 rather than rebuilding it. They should be able to show the database recipe registration (`Radius.Resources/postgreSqlDatabases`) and explain the `context` and `result` contract.
+Start by confirming that the team is really continuing from Challenge 04 rather than rebuilding it. They should be able to show the database recipe registration (`Radius.Resources/postgreSqlDatabases`) and explain the `context` and `result` contract. The example below is based on the "local" environment, replace when needed.
 
 ```bash
 rad workspace switch ws-local-prod
@@ -179,14 +179,30 @@ rad group create rg-trading
 rad group switch rg-trading
 ```
 
-Register Azure credentials with the Radius control plane if the environment's recipes need Azure provider scope and credentials:
+Register Azure credentials with the Radius control plane if the environment's recipes need Azure provider scope and credentials.
+
+Use the command variant that matches your identity model and Radius CLI version:
 
 ```bash
-rad credential register azure \
+# Workload identity (recommended for AKS). No client secret required.
+rad credential register azure wi \
+    --client-id <appId> \
+    --tenant-id <tenant>
+
+# Service principal (use only when workload identity is unavailable).
+rad credential register azure sp \
     --client-id <appId> \
     --client-secret <password> \
     --tenant-id <tenant>
 ```
+
+Verify registration:
+
+```bash
+rad credential show azure
+```
+
+If teams see `Error: unknown flag: --client-id`, they likely ran `rad credential register azure` without `wi` or `sp`. In current CLI versions, `--client-id` is valid only under `azure wi` or `azure sp`.
 
 Ensure the second environment has equivalent recipe mappings. The database capability should still be `Radius.Resources/postgreSqlDatabases`; the recipe implementation differs per environment — a PostgreSQL container locally and Azure Database for PostgreSQL Flexible Server on AKS.
 
