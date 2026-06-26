@@ -202,6 +202,37 @@ Verify registration:
 rad credential show azure
 ```
 
+Grant the Radius identity permission on the Azure resource group used by `env-azure-prod`.
+This is required for recipes such as `mqtt-azure-event-grid` to create Azure resources.
+
+```bash
+export AZURE_SUBSCRIPTION=<subscription-id>
+export RESOURCE_GROUP=<azure-resource-group>
+
+# Use the same appId passed to `rad credential register azure wi --client-id ...`
+export RADIUS_APP_ID=<radius-workload-identity-appId>
+export RADIUS_SP_OBJECT_ID=$(az ad sp show --id "$RADIUS_APP_ID" --query id -o tsv)
+
+# Prevent MissingSubscription by setting and passing subscription explicitly.
+az account set --subscription "$AZURE_SUBSCRIPTION"
+
+az role assignment create \
+    --subscription "$AZURE_SUBSCRIPTION" \
+    --assignee-object-id "$RADIUS_SP_OBJECT_ID" \
+    --assignee-principal-type ServicePrincipal \
+    --role Contributor \
+    --scope "/subscriptions/$AZURE_SUBSCRIPTION/resourceGroups/$RESOURCE_GROUP"
+
+# Verify
+az role assignment list \
+    --subscription "$AZURE_SUBSCRIPTION" \
+    --assignee-object-id "$RADIUS_SP_OBJECT_ID" \
+    --scope "/subscriptions/$AZURE_SUBSCRIPTION/resourceGroups/$RESOURCE_GROUP" \
+    -o table
+```
+
+If teams see `(MissingSubscription) The request did not have a subscription...`, the Azure CLI context is not set for the target subscription or `--subscription` was omitted.
+
 If teams see `Error: unknown flag: --client-id`, they likely ran `rad credential register azure` without `wi` or `sp`. In current CLI versions, `--client-id` is valid only under `azure wi` or `azure sp`.
 
 Ensure the second environment has equivalent recipe mappings. The database capability should still be `Radius.Resources/postgreSqlDatabases`; the recipe implementation differs per environment — a PostgreSQL container locally and Azure Database for PostgreSQL Flexible Server on AKS.
@@ -240,6 +271,13 @@ The `backendClientId` and `frontendClientId` values come from the user-assigned 
 
 First get the AKS OIDC issuer URL and tenant ID:
 
+If you have completed the previous solutions these are stored in variables, check if populated:
+```bash
+ echo $AKS_OIDC_ISSUER
+ echo $TENANT_ID
+```
+If exist skip the following step:
+
 ```bash
 export AKS_OIDC_ISSUER=$(az aks show \
     --name <aks-cluster-name> \
@@ -263,11 +301,19 @@ Then run the helper once for each workload:
 ```bash
 ./tutorials/getting-started/assets/app-wi-setup.sh \
     backend \
-    <azure-resource-group> \
-    <subscription-id> \
+    $RESOURCE_GROUP\
+    $AZURE_SUBSCRIPTION \
     "$AKS_OIDC_ISSUER" \
     <environment-namespace> \
     default
+
+/tutorials/getting-started/assets/app-wi-setup.sh \
+    frontend \
+    $RESOURCE_GROUP \
+    $AZURE_SUBSCRIPTION \
+    "$AKS_OIDC_ISSUER" \
+    trading \
+    default    
 
 ./tutorials/getting-started/assets/app-wi-setup.sh \
     frontend \
@@ -287,6 +333,12 @@ Copy the `Client ID` from each script run:
 | `backendClientId` | `Client ID` printed by the `backend` script run |
 | `frontendClientId` | `Client ID` printed by the `frontend` script run |
 | `workloadIdentityTenantId` | `$TENANT_ID` from `az account show` |
+
+First make  the rad resource type are bundled:
+```bash
+cd radius
+rad bicep publish-extension --from-file resource-types/types.yaml --target types.tgz
+```
 
 For example:
 
@@ -432,6 +484,26 @@ Run `rad recipe list --environment <environment-name>`. If `Radius.Resources/pos
 **Azure recipe deployment fails with authorization errors**
 
 Confirm `rad credential register azure` was run against the second workspace and that the configured identity has permission on the Azure resource group used by the second environment.
+
+If no RBAC assignment exists yet, run:
+
+```bash
+export AZURE_SUBSCRIPTION=<subscription-id>
+export RESOURCE_GROUP=<azure-resource-group>
+export RADIUS_APP_ID=<radius-workload-identity-appId>
+export RADIUS_SP_OBJECT_ID=$(az ad sp show --id "$RADIUS_APP_ID" --query id -o tsv)
+
+az account set --subscription "$AZURE_SUBSCRIPTION"
+
+az role assignment create \
+    --subscription "$AZURE_SUBSCRIPTION" \
+    --assignee-object-id "$RADIUS_SP_OBJECT_ID" \
+    --assignee-principal-type ServicePrincipal \
+    --role Contributor \
+    --scope "/subscriptions/$AZURE_SUBSCRIPTION/resourceGroups/$RESOURCE_GROUP"
+```
+
+Then retry `rad deploy ...`.
 
 **Azure MQTT auth or publish/subscribe fails**
 
