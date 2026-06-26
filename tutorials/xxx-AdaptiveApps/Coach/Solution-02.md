@@ -177,10 +177,10 @@ Pick **one or more** target environments and follow the corresponding guide. Eac
 
 | Environment | Guide | Notes |
 |---|---|---|
-| Local k3s (via k3d) | [common/prepareRadius-k3s.md](../common/prepareRadius-k3s.md) | Lightweight, ideal for dev/testing |
-| Azure Kubernetes Service (AKS) | [common/prepareRadius-aks.md](../common/prepareRadius-aks.md) | Production-grade; integrates with ACR and Key Vault |
-| Azure Arc-enabled cluster | [common/prepareRadius-arc.md](../common/prepareRadius-arc.md) | On-premises, edge, or multi-cloud |
-| Azure Local | [common/prepareRadius-azure-local.md](../common/prepareRadius-azure-local.md) | Fully disconnected or intermittently connected |
+| Local k3s (via k3d) | [adaptive-apps/tutorials/common/prepareRadius-k3s.md at microhack-EU · microsoft/adaptive-apps](https://github.com/microsoft/adaptive-apps/blob/microhack-EU/tutorials/common/prepareRadius-k3s.md) | Lightweight, ideal for dev/testing |
+| Azure Kubernetes Service (AKS) | [adaptive-apps/tutorials/common/prepareRadius-aks.md at microhack-EU · microsoft/adaptive-apps](https://github.com/microsoft/adaptive-apps/blob/microhack-EU/tutorials/common/prepareRadius-aks.md) | Production-grade; integrates with ACR and Key Vault |
+| Azure Arc-enabled cluster | [adaptive-apps/tutorials/common/prepareRadius-arc.md at microhack-EU · microsoft/adaptive-apps](https://github.com/microsoft/adaptive-apps/blob/microhack-EU/tutorials/common/prepareRadius-arc.md) | On-premises, edge, or multi-cloud |
+| Azure Local | [adaptive-apps/tutorials/common/prepareRadius-azure-local.md at microhack-EU · microsoft/adaptive-apps](https://github.com/microsoft/adaptive-apps/blob/microhack-EU/tutorials/common/prepareRadius-azure-local.md) | Fully disconnected or intermittently connected |
 
 For each environment you choose, follow the corresponding guide **in full**. The guide includes:
 1. Radius control plane installation
@@ -195,9 +195,9 @@ For each environment you choose, follow the corresponding guide **in full**. The
 
 If you are deploying to multiple sites (e.g., Azure + Azure Local + Azure Local Disconnected), follow the guides sequentially:
 
-1. Follow [common/prepareRadius-aks.md](../common/prepareRadius-aks.md) to set up Azure
+1. Follow [adaptive-apps/tutorials/common/prepareRadius-aks.md at microhack-EU · microsoft/adaptive-apps](https://github.com/microsoft/adaptive-apps/blob/microhack-EU/tutorials/common/prepareRadius-aks.md) to set up Azure
 2. Switch kubectl context to Azure Local cluster
-3. Follow [common/prepareRadius-azure-local.md](../common/prepareRadius-azure-local.md) to set up Azure Local
+3. Follow [adaptive-apps/tutorials/common/prepareRadius-azure-local.md at microhack-EU · microsoft/adaptive-apps](https://github.com/microsoft/adaptive-apps/blob/microhack-EU/tutorials/common/prepareRadius-azure-local.md) to set up Azure Local
 4. Repeat for additional sites as needed
 
 Each site will have:
