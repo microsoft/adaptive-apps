@@ -30,3 +30,36 @@ Pick **one or mutiple** environments and follow the linked guide. Each leaves yo
 | Azure Local | [`common/prepare-azure-local.md`](../../common/prepare-azure-local.md) |
 
 For Azure Local workshop steps and command flow, use [`common/prepare-azure-local.md`](../../common/prepare-azure-local.md) as the source of truth.
+
+#### 2.2.2 Install the portfolio chart
+
+Before moving to Challenge 02, ensure the portfolio baseline is installed with Helm. Reuse the same commands and options from [`tutorials/getting-started/README.md`](../../getting-started/README.md) section **2.2.2 Install the portfolio chart**.
+
+Set the same variables used in getting-started and install the chart:
+
+```bash
+export PORTFOLIO=min          # or: core | ent | min-ai | core-ai | ent-ai
+export RELEASE=$PORTFOLIO
+export NAMESPACE=$PORTFOLIO
+
+helm install $RELEASE charts/adaptive-apps \
+  -f charts/adaptive-apps/profiles/$PORTFOLIO.yaml \
+  -n $NAMESPACE --create-namespace
+```
+
+For AKS, use the managed Istio override form from getting-started:
+
+```bash
+helm install $RELEASE charts/adaptive-apps \
+  -f charts/adaptive-apps/profiles/$PORTFOLIO.yaml \
+  --set features.istio.install=false \
+  --set istio.namespace=aks-istio-system \
+  -n $NAMESPACE --create-namespace
+```
+
+Validate the release before continuing:
+
+```bash
+helm ls -A
+kubectl get pods -n $NAMESPACE
+```
