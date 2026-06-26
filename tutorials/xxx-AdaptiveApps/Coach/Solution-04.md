@@ -21,7 +21,7 @@ The relationship between the three layers:
 ```
 Resource Type (Challenge 3)          Recipe (this challenge)
 ──────────────────────────────        ──────────────────────────────────────────
-Radius.Resources/sqlDatabases         recipes/azure/sql-server.bicep
+Radius.Resources/sqlDatabases         radius/recipes/sql-server/sql-server.bicep
   input:  size, environment           → reads context.resource.properties.size
   output: host, port, database        → outputs result.values.host / port / database
   secret: password                    → outputs result.secrets.password
@@ -111,10 +111,10 @@ Navigate to **Environments** → `env-azure-prod` → **Recipes**. The list is e
 
 #### Write the recipe Bicep
 
-Have teams create `recipes/azure/sql-server.bicep`. Walk through each section as they write it:
+Have teams create `radius/recipes/sql-server/sql-server.bicep`. Walk through each section as they write it:
 
 ```bicep
-// recipes/azure/sql-server.bicep
+// radius/recipes/sql-server/sql-server.bicep
 // Radius Recipe for Radius.Resources/sqlDatabases (Azure SQL Server)
 //
 // Provisions: Azure SQL Server + single database via AVM.
@@ -193,7 +193,7 @@ output result object = {
 }
 ```
 
-#### Publish and register the recipe
+#### Publish the recipe
 
 Publish the recipe Bicep to the team's ACR (OCI registry). Challenge 01 does not create an ACR automatically; use an existing registry or create one before this step. ACR names must be globally unique and contain only lowercase letters and numbers:
 
@@ -208,7 +208,7 @@ az acr create \
 az acr login -n "$ACR_NAME"
 
 rad bicep publish \
-    --file recipes/azure/sql-server.bicep \
+  --file radius/recipes/sql-server/sql-server.bicep \
     --target br:${ACR_NAME}.azurecr.io/recipes/sql-server:1.0.0
 ```
 
@@ -227,14 +227,14 @@ the shell parsed each line as a separate command. Use one line, or use shell-app
 **Bash (one line):**
 
 ```bash
-rad bicep publish --file recipes/azure/sql-server.bicep --target "br:${ACR_NAME}.azurecr.io/recipes/sql-server:1.0.0"
+rad bicep publish --file radius/recipes/sql-server/sql-server.bicep --target "br:${ACR_NAME}.azurecr.io/recipes/sql-server:1.0.0"
 ```
 
 **Bash (multiline):**
 
 ```bash
 rad bicep publish \
-  --file recipes/azure/sql-server.bicep \
+  --file radius/recipes/sql-server/sql-server.bicep \
   --target "br:${ACR_NAME}.azurecr.io/recipes/sql-server:1.0.0"
 ```
 
@@ -243,7 +243,7 @@ rad bicep publish \
 ```powershell
 $env:ACR_NAME="<acr-name>"
 rad bicep publish `
-  --file recipes/azure/sql-server.bicep `
+  --file radius/recipes/sql-server/sql-server.bicep `
   --target "br:$($env:ACR_NAME).azurecr.io/recipes/sql-server:1.0.0"
 ```
 
@@ -291,6 +291,8 @@ Then rerun publish and register commands.
 
 Also verify RBAC: the signed-in identity needs at least `AcrPush` on the target registry.
 
+#### Register the recipe
+
 Register the recipe against `{environment-name}` for the `sqlDatabases` type.
 
 If you are not sure which environment to target, list available workspaces and environments first:
@@ -329,11 +331,11 @@ rad recipe list --environment {environment-name}
 
 ### Stage 2 — Register the pre-built recipes for the portable app
 
-The repository ships two environment Bicep files that define environments *and* register all recipes in a single deployment. This is the recommended pattern for a platform team: environment config and recipe registration are infrastructure-as-code, not manual CLI steps.
+The repository ships two environment Bicep files that define environments *and* register all recipes in a single deployment. This is the recommended pattern for a platform team: environment config and recipe registration are infrastructure-as-code, not manual CLI steps. To import the recipies the commands differ per environment type.
 
 > **Naming note:** These commands use the Challenge 2 teaching names — group `rg-trading` with environments `env-local-prod` and `env-azure-prod`. The shipped `aks-env.bicep` defaults its `environmentName` (and Kubernetes `namespace`) parameter to `trading`, so the AKS command passes `--parameters environmentName=env-azure-prod` to align the Radius environment with the teaching names. If your team instead followed the sample values in [`prepare-aks.md`](../../common/prepare-aks.md) (`RADIUS_GROUP=trading`, `RADIUS_WORKSPACE=aks-trading`, environment `trading`), use those names consistently in every command below instead.
 
-#### Local / Azure Local environment
+#### Local / Azure Local environment (only when you local)
 
 ```bash
 rad deploy radius/local-env.bicep --group rg-trading --environment env-local-prod
@@ -351,15 +353,15 @@ This command deploys `local-env.bicep`, which creates the `env-local-prod` envir
 | `Radius.Resources/governance` | `governance-opa:latest` | Open Policy Agent (Kubernetes) |
 | `Radius.Resources/agentGuardrails` | `agent-guardrails-agt:latest` | Agent Governance Toolkit sidecar support |
 
-#### AKS / Azure environment
+#### AKS / Azure environment (only for Azure)
 
 ```bash
 rad deploy radius/aks-env.bicep \
     --group rg-trading \
     --environment env-azure-prod \
     --parameters environmentName=env-azure-prod \
-    --parameters azureSubscriptionId=<subscription-id> \
-    --parameters azureResourceGroup=<resource-group>
+    --parameters azureSubscriptionId=$AZURE_SUBSCRIPTION\
+    --parameters azureResourceGroup=$RESOURCE_GROUP
 ```
 
 This registers a parallel set of Azure-backed recipes against the same resource types:
