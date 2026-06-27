@@ -6,19 +6,28 @@
 - **Direct network access to the Kubernetes API server** (typically 10.x.x.x:6443 on your management VM).
 - `cluster-admin` access on the Azure Local cluster.
 - `rad` CLI and `kubectl` installed on the machine running commands (see Stage 0 for connectivity options).
-- Azure Local is typically fully disconnected or has limited/intermittent cloud connectivity.
+- **This guide is optimized for LocalBox** but the Radius setup steps (Stages 1–5) apply to any Azure Local cluster with AKS enabled by Azure Arc deployed and direct network line-of-sight to the Kubernetes API server (typically 10.x.x.x:6443).
 
-### Important: Connectivity Architecture
+### Important: Kubernetes Connectivity Architecture
 
 **Why not Arc proxy (`az connectedk8s proxy`)?**
 
-Azure Arc's proxy endpoint is designed for read-only kubectl operations (e.g., `kubectl get pods`). Radius resource API operations (e.g., `rad group create`, `rad env create`) require direct Kubernetes API access and will fail with an **unsupported API version** error when routed through the Arc proxy.
+Azure Arc's proxy endpoint has limitations for certain custom resource APIs, particularly Radius UCP operations (e.g., `rad group create`, `rad env create`). These operations require direct Kubernetes API access and will fail with an **unsupported API version** error when routed through the Arc proxy.
 
 **Solution:**
 - Use **Azure Bastion** (Standard SKU recommended) to RDP/SSH into the management VM where the Kubernetes API is natively reachable.
 - Or use direct network routing if your client machine has line-of-sight to the control plane subnet.
 
-This guide assumes you are connecting via **Azure Bastion native RDP** to the management VM, where tools and direct cluster access are already configured.
+**Scope and Applicability**
+
+This guide is **optimized for LocalBox** (the [Azure Arc Jumpstart](https://jumpstart.azure.com/azure_jumpstart_localbox/getting_started) virtualized sandbox: nested Hyper-V, 2-node Azure Local, AKS enabled by Arc, management VM with AD). Stage 0 (connectivity) is LocalBox-specific because it uses Azure Bastion to reach the management VM.
+
+**However, Stages 1–5 (tool installation and Radius setup) are generic and will work on any Azure Local cluster with:**
+- AKS enabled by Azure Arc deployed
+- Direct network access to the Kubernetes API server (10.x.x.x:6443)
+- A machine (or VM) with line-of-sight to that control plane
+
+For non-LocalBox deployments, adapt Stage 0 connectivity guidance to your environment's topology.
 
 ## Stage 0 — Connect to the management VM via Azure Bastion
 
@@ -46,21 +55,6 @@ az network bastion rdp `
 ```
 
 This opens RDP in your native client. Then proceed to Stage 1.
-
-### Verify connectivity to Kubernetes API
-
-Before proceeding, confirm that the management VM can reach the Kubernetes API server directly:
-
-```powershell
-# Check kubectl context (should show a direct server URL, not /proxies/)
-kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}'; Write-Host ""
-
-# Verify reachability to control plane
-$apiServer = kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}' -replace 'https://', '' -replace ':6443.*', ''
-Test-NetConnection $apiServer -Port 6443
-```
-
-Expected output: `TcpTestSucceeded : True` and a server URL like `https://10.10.0.105:6443` (not containing `/proxies/`).
 
 ---
 
@@ -162,14 +156,26 @@ az aksarc get-credentials \
 
 This kubeconfig is **direct** (server URL = `https://10.x.x.x:6443`) and will work for all Radius commands.
 
-### 1.3 Verify cluster access
+### 1.3 Verify cluster access and direct connectivity
 
 ```powershell
+# Check kubectl context (should show a direct server URL, not /proxies/)
+kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}'; Write-Host ""
+
+# Verify reachability to control plane
+$apiServer = kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}' -replace 'https://', '' -replace ':6443.*', ''
+Test-NetConnection $apiServer -Port 6443
+
+# Confirm cluster nodes
 kubectl get nodes
 kubectl config current-context
 ```
 
-Expected: Nodes listed with Ready status, and context should match your cluster name.
+Expected output:
+- Server URL like `https://10.10.0.105:6443` (not containing `/proxies/`)
+- `TcpTestSucceeded : True` (direct control plane reachability)
+- Nodes listed with Ready status
+- Context matching your cluster name
 
 ### 1.4 Install Radius into the Azure Local cluster
 
@@ -327,27 +333,16 @@ rad version
 
 ## Notes
 
-- **Connectivity model:** Use Azure Bastion (Standard SKU) to RDP/SSH into the management VM. Do **not** use `az connectedk8s proxy` for Radius CLI operations — it only supports read-only kubectl commands. Always use direct kubeconfig retrieved via `az aksarc get-credentials`.
-- **Disconnected operation:** Azure Local is designed to operate independently without cloud connectivity. Configure in-cluster recipes only and handle data sync separately.
-- **Naming convention:** Use `env-local-prod` for connected scenarios and `env-local-disconnected-prod` for offline scenarios so teams can distinguish them clearly.
-- **Artifact mirroring:** For disconnected sites, mirror required container images and OCI artifacts to local registries before workload deployment.
-- **Resilience:** Azure Local + federated Radius control planes (one per site) provide the strongest resilience for multi-site edge deployments.
+- **Connectivity model (LocalBox):** Use Azure Bastion (Standard SKU with native client support enabled) to RDP into the management VM (**LocalBox-Client** / **AzLMGMT**). Do **not** use `az connectedk8s proxy` for Radius CLI operations — it has limitations for Radius UCP resource APIs. Always use direct kubeconfig retrieved via `az aksarc get-credentials`.
+- **Management VM naming:** In LocalBox, the management VM is named **AzLMGMT** in Hyper-V or **LocalBox-Client** in Azure Resource Manager.
+- **Bastion connection options:**
+  - Browser-based RDP via Azure Portal (Stage 0, Option A)
+  - Native RDP client via `az network bastion rdp` if native client support is enabled (Stage 0, Option B)
 - **Tools installation:** If MSI installation is blocked by policy on the management VM, use the alternative PowerShell-based download method provided in Stage 1.1, which does not require admin policy approval for MSI execution.
-
-### Localbox-specific guidance
-
-If deploying on **Localbox** (Azure Local developer environment), the management VM is typically named **AzLMGMT** (in Hyper-V) or **LocalBox-Client** (in Azure Resource Manager). Use Azure Bastion to connect:
-
-```powershell
-az network bastion rdp `
-  --name <localbox-bastion-name> `
-  --resource-group <localbox-resource-group> `
-  --target-resource-id "/subscriptions/<subscription-id>/resourceGroups/<resource-group>/providers/Microsoft.Compute/virtualMachines/LocalBox-Client"
-```
-
-Once connected via RDP, the management VM has direct network access to the Kubernetes cluster at `10.10.0.105:6443` (or your configured control plane IP). Proceed with Stage 1 tool installation.
+- **Applicability:** Stage 0 (connectivity) is LocalBox-specific. Stages 1\u20135 (tool installation, kubeconfig retrieval, Radius workspace/environment setup) are generic and apply to any Azure Local cluster with AKS deployed and direct API server line-of-sight.
 
 ## Next steps
 
-1. If connected: Proceed to Challenge 2 — Recipe authoring and application deployment on Azure Local.
-2. If disconnected: Proceed to Challenge 2, but keep all recipes in-cluster and set up data sync strategies per [docs/data-sync/README.md](../../docs/data-sync/README.md).
+Proceed to Challenge 2 — Recipe authoring and application deployment on Azure Local.
+
+For data synchronization in hybrid scenarios (if cloud connectivity is available), refer to [docs/data-sync/README.md](../../docs/data-sync/README.md) for platform-specific guidance.
