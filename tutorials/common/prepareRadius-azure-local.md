@@ -230,14 +230,14 @@ rad group switch rg-trading
 For connected Azure Local (with optional Azure backend):
 
 ```powershell
-rad env create env-local-prod --group rg-trading --namespace prod
+rad env create env-local-prod --group rg-trading --kubernetes-namespace prod
 rad env switch env-local-prod
 ```
 
 For disconnected Azure Local (in-cluster recipes only):
 
 ```powershell
-rad env create env-local-disconnected-prod --group rg-trading --namespace prod-disconnected
+rad env create env-local-disconnected-prod --group rg-trading --kubernetes-namespace prod-disconnected
 rad env switch env-local-disconnected-prod
 ```
 
