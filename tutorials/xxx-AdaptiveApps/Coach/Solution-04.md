@@ -385,20 +385,11 @@ Also verify RBAC: the signed-in identity needs at least `AcrPush` on the target 
 
 #### Register the recipe
 
-Register the recipe against `{environment-name}` for the `sqlDatabases` type.
+Register the recipe for the `sqlDatabases` type in your target environment.
 
 If you are not sure which environment to target, list available workspaces and environments first:
 
-**Bash:**
-
 ```bash
-rad workspace list
-rad env list
-```
-
-**PowerShell:**
-
-```powershell
 rad workspace list
 rad env list
 ```
@@ -408,8 +399,9 @@ Then register the recipe:
 **Bash:**
 
 ```bash
+export ENVIRONMENT_NAME="env-local-prod"  # Use your actual environment name
 rad recipe register default \
-    --environment {environment-name} \
+    --environment "$ENVIRONMENT_NAME" \
     --resource-type Radius.Resources/sqlDatabases \
     --template-kind bicep \
     --template-path ${ACR_NAME}.azurecr.io/recipes/sql-server:1.0.0
@@ -418,19 +410,20 @@ rad recipe register default \
 **PowerShell:**
 
 ```powershell
+$ENVIRONMENT_NAME = "env-local-prod"  # Use your actual environment name
 rad recipe register default `
-    --environment {environment-name} `
+    --environment "$ENVIRONMENT_NAME" `
     --resource-type Radius.Resources/sqlDatabases `
     --template-kind bicep `
-    --template-path "$($env:ACR_NAME).azurecr.io/recipes/sql-server:1.0.0"
+    --template-path "$($ACR_NAME).azurecr.io/recipes/sql-server:1.0.0"
 ```
 
-Verify in the dashboard: navigate to **Environments** → `{environment-name}` → **Recipes** — the `Radius.Resources/sqlDatabases` entry should now appear with the template path.
+Verify in the dashboard: navigate to **Environments** → select your environment → **Recipes** — the `Radius.Resources/sqlDatabases` entry should now appear with the template path.
 
-Verify via CLI (same for both bash and PowerShell):
+Verify via CLI:
 
 ```bash
-rad recipe list --environment {environment-name}
+rad recipe list --environment "$ENVIRONMENT_NAME"
 ```
 
 #### What to discuss
