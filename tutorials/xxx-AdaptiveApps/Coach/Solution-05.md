@@ -673,6 +673,40 @@ At the end of this challenge, teams should be able to demonstrate:
 
 ### Common Issues
 
+**Deployment fails with "RecipeNotFoundFailure: could not find recipe 'default'"**
+
+**Symptom:**
+```
+Error: {
+  "code": "ResourceDeploymentFailure",
+  "message": "Failed",
+  "details": [{
+    "code": "RecipeNotFoundFailure",
+    "message": "could not find recipe \"default\" in environment \"/planes/radius/local/resourcegroups/rg-trading/providers/Applications.Core/environments/env-local-prod\""
+  }]
+}
+```
+
+This error occurs for `Radius.Resources/workloadIdentities`, `Radius.Resources/mqttBrokers`, `Radius.Resources/postgreSqlDatabases`, or other resource types.
+
+**Root cause:** Challenge 04 Stage 2 has not been completed. The environment exists, but no recipes have been registered for the resource types the application is trying to deploy.
+
+**Solution:** Return to Challenge 04 and complete **Stage 2 — Register the pre-built recipes**. Run:
+
+**Bash:**
+
+```bash
+rad deploy radius/local-env.bicep --group rg-trading --environment env-local-prod
+```
+
+**PowerShell:**
+
+```powershell
+rad deploy radius/local-env.bicep --group rg-trading --environment env-local-prod
+```
+
+This registers all required recipes (`postgreSqlDatabases`, `mqttBrokers`, `workloadIdentities`, etc.) in the environment. Then retry `rad deploy radius/app.bicep ...`.
+
 **The second deployment overwrote the first**
 
 If both deployments target the same Radius control plane and group, the fixed application name `adaptive-apps` represents the same Radius application resource. Use separate workspaces/control planes for the cleanest environment split, or a separate Radius group per environment if the team is simulating multiple environments on one control plane.
