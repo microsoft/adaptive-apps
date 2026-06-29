@@ -21,17 +21,22 @@ rad version
 With the AKS cluster as the current `kubectl` context:
 
 ```bash
-rad install kubernetes --set rp.publicEndpointOverride=localhost:8081
+rad install kubernetes \
+  --set rp.publicEndpointOverride=localhost:8081 \
+  --set global.azureWorkloadIdentity.enabled=true
 ```
 
 This deploys the Radius control plane (applications-rp, controller, bicep-de, UCP, dashboard, etc.) into the `radius-system` namespace.
+The workload identity setting is required when the Radius Azure provider uses `rad credential register azure wi`; without it, the credential is stored but the control-plane pods cannot exchange workload identity tokens.
 
 If this fails with `response status code 403: denied` while downloading the Radius Helm chart from `ghcr.io`, clear stale GitHub Container Registry credentials and retry:
 
 ```bash
 helm registry logout ghcr.io || true
 docker logout ghcr.io || true
-rad install kubernetes --set rp.publicEndpointOverride=localhost:8081
+rad install kubernetes \
+  --set rp.publicEndpointOverride=localhost:8081 \
+  --set global.azureWorkloadIdentity.enabled=true
 ```
 
 ### 1.3 Verify all Radius pods are healthy

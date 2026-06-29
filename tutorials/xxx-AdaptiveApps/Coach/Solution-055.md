@@ -517,7 +517,7 @@ else
 fi
 ```
 
-Then retry `rad recipe show` or deployment. If `rad recipe show` still returns `RecipeLanguageFailure` with ACR `401`, confirm both the credential and ACR RBAC are using the same app ID/object ID before escalating.
+Then retry `rad recipe show` or deployment. If `rad recipe show` still returns `RecipeLanguageFailure` with ACR `401`, confirm both the credential and ACR RBAC are using the same app ID/object ID, then verify that Radius was installed with Azure workload identity enabled.
 
 ### F. Verify ACR RBAC at correct scope
 
@@ -543,7 +543,54 @@ fi
 
 Expected role: `AcrPull` on the registry resource ID (not only at resource-group root).
 
-### G. Tenant policy constraints
+### G. Verify Radius workload identity wiring
+
+`rad credential register azure wi` only stores the Azure credential. The Radius control plane also must have been installed with Azure workload identity enabled so pods such as `bicep-de` can use that credential to fetch private Bicep modules from ACR.
+
+Check the `bicep-de` service account and federated credential:
+
+```bash
+kubectl get serviceaccount bicep-de -n radius-system \
+  -o jsonpath='{.metadata.annotations.azure\.workload\.identity/client-id}{"\n"}'
+
+az ad app federated-credential list \
+  --id "$RADIUS_APP_ID" \
+  --query "[?name=='radius-bicep-de'].{name:name,issuer:issuer,subject:subject}" \
+  -o table
+```
+
+Expected:
+
+- the service account annotation matches `$RADIUS_APP_ID`
+- the federated credential subject is `system:serviceaccount:radius-system:bicep-de`
+- the federated credential issuer matches this AKS cluster's OIDC issuer, not the other cluster in a two-AKS workshop
+
+If the service account annotation is empty or wrong, reinstall the Radius control plane with workload identity enabled, then re-register the credential:
+
+```bash
+rad install kubernetes --reinstall \
+  --set rp.publicEndpointOverride=localhost:8081 \
+  --set global.azureWorkloadIdentity.enabled=true
+
+export TENANT_ID=$(az account show --query tenantId -o tsv)
+
+rad credential register azure wi \
+  --client-id "$RADIUS_APP_ID" \
+  --tenant-id "$TENANT_ID"
+
+kubectl rollout restart deployment/bicep-de -n radius-system
+kubectl rollout status deployment/bicep-de -n radius-system --timeout=2m
+```
+
+Then retry:
+
+```bash
+rad recipe show default \
+  --environment "$RADIUS_ENVIRONMENT" \
+  --resource-type Radius.Resources/postgreSqlDatabases
+```
+
+### H. Tenant policy constraints
 
 If tenant policy blocks one or both auth modes:
 
@@ -552,7 +599,7 @@ If tenant policy blocks one or both auth modes:
 
 In this case, create a portal-issued secret that complies with policy and validate it using step C.
 
-### H. Known limitation note (Radius v0.58)
+### I. Known limitation note (Radius v0.58)
 
 If all of the following are true:
 

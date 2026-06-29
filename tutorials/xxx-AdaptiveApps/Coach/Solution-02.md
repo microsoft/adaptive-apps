@@ -273,7 +273,9 @@ If `rad install kubernetes` fails before installing anything and shows `response
 ```bash
 helm registry logout ghcr.io || true
 docker logout ghcr.io || true
-rad install kubernetes --set rp.publicEndpointOverride=localhost:8081
+rad install kubernetes \
+  --set rp.publicEndpointOverride=localhost:8081 \
+  --set global.azureWorkloadIdentity.enabled=true
 ```
 
 ### Workspace or environment commands failing
