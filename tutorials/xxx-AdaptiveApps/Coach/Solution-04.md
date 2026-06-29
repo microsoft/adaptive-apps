@@ -445,15 +445,15 @@ The repository ships two environment Bicep files that define environments *and* 
 
 **Bash:**
 
+For AZURE and AKS:
 ```bash
-rad deploy radius/local-env.bicep --group rg-trading --environment {env-local/azure-prod}
+rad deploy radius/aks-env.bicep --group rg-trading --environment env-azure-prod
+```
+For LOCAL:
+```bash
+rad deploy radius/local-env.bicep --group rg-trading --environment env-local-prod
 ```
 
-**PowerShell:**
-
-```powershell
-rad deploy radius/local-env.bicep --group rg-trading --environment {env-local/azure-prod}
-```
 
 This command deploys `local-env.bicep`, which creates the `env-local-prod` environment and registers the following recipes against `Radius.Resources/*`:
 
