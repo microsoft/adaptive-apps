@@ -46,6 +46,8 @@ These parameters are used throughout the guide. Adjust them to match your enviro
 
 `TARGET_KUBERNETES_CONTEXT` is the kubeconfig context for the cluster that hosts the target Radius workspace. This can be AKS, Arc-enabled Kubernetes, Azure Local, or another Kubernetes cluster where Radius is installed. `RADIUS_APP_NAME` is used to find the Radius Entra application created during workload identity setup. The AKS helper names it `${TARGET_KUBERNETES_CONTEXT}-radius-app`; override `RADIUS_APP_NAME` if your team used a different app name.
 
+For the optional two-AKS workshop path, this is normally `aks-azure-prod`, not `aks-local-prod`.
+
 `ACR_NAME` is the Azure Container Registry used as the team's private OCI registry for recipe publishing. It is either:
 
 - the ACR created during Azure Local preparation, or
@@ -238,6 +240,13 @@ rad bicep publish \
 Switch to the target workspace and register the recipe for PostgreSQL only in that environment:
 
 ```bash
+if [ -z "$TARGET_KUBERNETES_CONTEXT" ] || [ "$TARGET_KUBERNETES_CONTEXT" = "<target-kubernetes-context>" ]; then
+  echo "Set TARGET_KUBERNETES_CONTEXT to the kubeconfig context for the target Radius workspace. Available contexts:"
+  kubectl config get-contexts -o name
+  exit 1
+fi
+
+kubectl config use-context "$TARGET_KUBERNETES_CONTEXT"
 rad workspace switch "$RADIUS_WORKSPACE"
 rad group switch "$RADIUS_GROUP"
 
@@ -253,6 +262,13 @@ rad recipe register default \
 Validate:
 
 ```bash
+if [ -z "$TARGET_KUBERNETES_CONTEXT" ] || [ "$TARGET_KUBERNETES_CONTEXT" = "<target-kubernetes-context>" ]; then
+  echo "Set TARGET_KUBERNETES_CONTEXT to the kubeconfig context for the target Radius workspace. Available contexts:"
+  kubectl config get-contexts -o name
+  exit 1
+fi
+
+kubectl config use-context "$TARGET_KUBERNETES_CONTEXT"
 rad workspace switch "$RADIUS_WORKSPACE"
 export ACTIVE_CONTEXT=$(kubectl config current-context)
 echo "Active Kubernetes context: ${ACTIVE_CONTEXT}"
@@ -450,6 +466,13 @@ Expected payload shape:
 ### E. Force control-plane refresh after credential update
 
 ```bash
+if [ -z "$TARGET_KUBERNETES_CONTEXT" ] || [ "$TARGET_KUBERNETES_CONTEXT" = "<target-kubernetes-context>" ]; then
+  echo "Set TARGET_KUBERNETES_CONTEXT to the kubeconfig context for the target Radius workspace. Available contexts:"
+  kubectl config get-contexts -o name
+  exit 1
+fi
+
+kubectl config use-context "$TARGET_KUBERNETES_CONTEXT"
 rad workspace switch "$RADIUS_WORKSPACE"
 export ACTIVE_CONTEXT=$(kubectl config current-context)
 echo "Active Kubernetes context: ${ACTIVE_CONTEXT}"
