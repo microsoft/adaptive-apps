@@ -447,7 +447,7 @@ The repository ships two environment Bicep files that define environments *and* 
 
 For AZURE and AKS:
 ```bash
-rad deploy radius/aks-env.bicep --group rg-trading --environment env-azure-prod
+rad deploy radius/aks-env.bicep --group rg-trading --environment env-azure-prod --parameters environmentName=env-azure-prod --parameters azureSubscriptionId=$AZURE_SUBSCRIPTION --parameters azureResourceGroup=$RESOURCE_GROUP
 ```
 For LOCAL:
 ```bash
