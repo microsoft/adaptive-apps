@@ -54,6 +54,20 @@ For non-AKS targets, set `KUBERNETES_CONTEXT` to the kubeconfig context that hos
 - the ACR created during Azure Local preparation, or
 - the ACR the team created in Challenge 04 before publishing recipe Bicep modules.
 
+Use the registry resource name only, not the login server. For example, use `swewesbackacr`, not `swewesbackacr.azurecr.io`.
+
+If you pasted the login server by mistake, normalize it before continuing:
+
+```bash
+case "$ACR_NAME" in
+  *.azurecr.io)
+    export ACR_NAME="${ACR_NAME%.azurecr.io}"
+    ;;
+esac
+
+echo "Using ACR_NAME=${ACR_NAME}"
+```
+
 For AKS-only teams, Challenge 01 may not have created an ACR. If you do not know the registry name, list registries in the resource group or create one by following the ACR setup step in [Solution-04.md](./Solution-04.md):
 
 ```bash
@@ -281,37 +295,51 @@ else
     if [ -z "$RADIUS_APP_ID" ]; then
       echo "Could not find Entra app ${RADIUS_APP_NAME}. Recheck RADIUS_APP_NAME or rerun the target cluster workload identity setup."
     else
-      export RADIUS_SP_OBJECT_ID=$(az ad sp show --id "$RADIUS_APP_ID" --query id -o tsv)
-      export ACR_ID=$(az acr show -n "$ACR_NAME" -g "$RESOURCE_GROUP" --subscription "$AZURE_SUBSCRIPTION" --query id -o tsv)
+      case "$ACR_NAME" in
+        *.azurecr.io)
+          export ACR_NAME="${ACR_NAME%.azurecr.io}"
+          ;;
+      esac
 
-      az role assignment create \
-        --subscription "$AZURE_SUBSCRIPTION" \
-        --assignee-object-id "$RADIUS_SP_OBJECT_ID" \
-        --assignee-principal-type ServicePrincipal \
-        --role AcrPull \
-        --scope "$ACR_ID"
+      if [ -z "$ACR_NAME" ] || [ "$ACR_NAME" = "<your-team-acr-name>" ]; then
+        echo "Set ACR_NAME to your registry resource name, for example swewesbackacr. Do not include .azurecr.io."
+      else
+        export RADIUS_SP_OBJECT_ID=$(az ad sp show --id "$RADIUS_APP_ID" --query id -o tsv)
+        export ACR_ID=$(az acr show -n "$ACR_NAME" -g "$RESOURCE_GROUP" --subscription "$AZURE_SUBSCRIPTION" --query id -o tsv)
 
-      echo "If the role assignment already exists, Azure returns a conflict and that is safe to ignore."
+        if [ -z "$ACR_ID" ]; then
+          echo "Could not resolve ACR_ID for ACR_NAME=${ACR_NAME}. Check ACR_NAME, RESOURCE_GROUP, and AZURE_SUBSCRIPTION before retrying."
+        else
+          az role assignment create \
+            --subscription "$AZURE_SUBSCRIPTION" \
+            --assignee-object-id "$RADIUS_SP_OBJECT_ID" \
+            --assignee-principal-type ServicePrincipal \
+            --role AcrPull \
+            --scope "$ACR_ID"
 
-      az account set --subscription "$AZURE_SUBSCRIPTION"
-      az role assignment list \
-        --subscription "$AZURE_SUBSCRIPTION" \
-        --assignee-object-id "$RADIUS_SP_OBJECT_ID" \
-        --scope "$ACR_ID" \
-        --query "[].{role:roleDefinitionName,scope:scope}" -o table
+          echo "If the role assignment already exists, Azure returns a conflict and that is safe to ignore."
 
-      export TENANT_ID=$(az account show --query tenantId -o tsv)
-      rad credential register azure wi \
-        --client-id "$RADIUS_APP_ID" \
-        --tenant-id "$TENANT_ID"
-      rad credential show azure
+          az account set --subscription "$AZURE_SUBSCRIPTION"
+          az role assignment list \
+            --subscription "$AZURE_SUBSCRIPTION" \
+            --assignee-object-id "$RADIUS_SP_OBJECT_ID" \
+            --scope "$ACR_ID" \
+            --query "[].{role:roleDefinitionName,scope:scope}" -o table
 
-      kubectl rollout restart deployment/bicep-de -n radius-system
-      kubectl rollout status deployment/bicep-de -n radius-system --timeout=2m
+          export TENANT_ID=$(az account show --query tenantId -o tsv)
+          rad credential register azure wi \
+            --client-id "$RADIUS_APP_ID" \
+            --tenant-id "$TENANT_ID"
+          rad credential show azure
 
-      rad recipe show default \
-        --environment "$RADIUS_ENVIRONMENT" \
-        --resource-type Radius.Resources/postgreSqlDatabases
+          kubectl rollout restart deployment/bicep-de -n radius-system
+          kubectl rollout status deployment/bicep-de -n radius-system --timeout=2m
+
+          rad recipe show default \
+            --environment "$RADIUS_ENVIRONMENT" \
+            --resource-type Radius.Resources/postgreSqlDatabases
+        fi
+      fi
     fi
   fi
 fi
@@ -494,11 +522,23 @@ Then retry `rad recipe show` or deployment. If `rad recipe show` still returns `
 ### F. Verify ACR RBAC at correct scope
 
 ```bash
-az role assignment list \
-  --subscription "$AZURE_SUBSCRIPTION" \
-  --assignee-object-id "$RADIUS_SP_OBJECT_ID" \
-  --scope "$ACR_ID" \
-  --query "[].{role:roleDefinitionName,scope:scope}" -o table
+case "$ACR_NAME" in
+  *.azurecr.io)
+    export ACR_NAME="${ACR_NAME%.azurecr.io}"
+    ;;
+esac
+
+export ACR_ID=$(az acr show -n "$ACR_NAME" -g "$RESOURCE_GROUP" --subscription "$AZURE_SUBSCRIPTION" --query id -o tsv)
+
+if [ -z "$ACR_ID" ]; then
+  echo "Could not resolve ACR_ID for ACR_NAME=${ACR_NAME}. Check ACR_NAME, RESOURCE_GROUP, and AZURE_SUBSCRIPTION before retrying."
+else
+  az role assignment list \
+    --subscription "$AZURE_SUBSCRIPTION" \
+    --assignee-object-id "$RADIUS_SP_OBJECT_ID" \
+    --scope "$ACR_ID" \
+    --query "[].{role:roleDefinitionName,scope:scope}" -o table
+fi
 ```
 
 Expected role: `AcrPull` on the registry resource ID (not only at resource-group root).
