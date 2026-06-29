@@ -243,18 +243,16 @@ Switch to the target workspace and register the recipe for PostgreSQL only in th
 if [ -z "$TARGET_KUBERNETES_CONTEXT" ] || [ "$TARGET_KUBERNETES_CONTEXT" = "<target-kubernetes-context>" ]; then
   echo "Set TARGET_KUBERNETES_CONTEXT to the kubeconfig context for the target Radius workspace. Available contexts:"
   kubectl config get-contexts -o name
-  exit 1
+else
+  kubectl config use-context "$TARGET_KUBERNETES_CONTEXT" &&
+  rad workspace switch "$RADIUS_WORKSPACE" &&
+  rad group switch "$RADIUS_GROUP" &&
+  rad recipe register default \
+    --environment "$RADIUS_ENVIRONMENT" \
+    --resource-type Radius.Resources/postgreSqlDatabases \
+    --template-kind bicep \
+    --template-path "$ACR_NAME.azurecr.io/recipes/postgres-azure-flex:solution-055"
 fi
-
-kubectl config use-context "$TARGET_KUBERNETES_CONTEXT"
-rad workspace switch "$RADIUS_WORKSPACE"
-rad group switch "$RADIUS_GROUP"
-
-rad recipe register default \
-  --environment "$RADIUS_ENVIRONMENT" \
-  --resource-type Radius.Resources/postgreSqlDatabases \
-  --template-kind bicep \
-  --template-path "$ACR_NAME.azurecr.io/recipes/postgres-azure-flex:solution-055"
 ```
 
 > Replace `${ACR_NAME}` with your actual team ACR name.
@@ -265,59 +263,57 @@ Validate:
 if [ -z "$TARGET_KUBERNETES_CONTEXT" ] || [ "$TARGET_KUBERNETES_CONTEXT" = "<target-kubernetes-context>" ]; then
   echo "Set TARGET_KUBERNETES_CONTEXT to the kubeconfig context for the target Radius workspace. Available contexts:"
   kubectl config get-contexts -o name
-  exit 1
+else
+  kubectl config use-context "$TARGET_KUBERNETES_CONTEXT" &&
+  rad workspace switch "$RADIUS_WORKSPACE"
+
+  export ACTIVE_CONTEXT=$(kubectl config current-context)
+  echo "Active Kubernetes context: ${ACTIVE_CONTEXT}"
+
+  if [ "$ACTIVE_CONTEXT" != "$TARGET_KUBERNETES_CONTEXT" ]; then
+    echo "Expected kubectl context ${TARGET_KUBERNETES_CONTEXT}, but active context is ${ACTIVE_CONTEXT}. Switch to the target Radius workspace/context before registering credentials."
+  else
+    export RADIUS_APP_ID=$(az ad app list \
+      --display-name "$RADIUS_APP_NAME" \
+      --query "[0].appId" -o tsv)
+
+    if [ -z "$RADIUS_APP_ID" ]; then
+      echo "Could not find Entra app ${RADIUS_APP_NAME}. Recheck RADIUS_APP_NAME or rerun the target cluster workload identity setup."
+    else
+      export RADIUS_SP_OBJECT_ID=$(az ad sp show --id "$RADIUS_APP_ID" --query id -o tsv)
+      export ACR_ID=$(az acr show -n "$ACR_NAME" -g "$RESOURCE_GROUP" --subscription "$AZURE_SUBSCRIPTION" --query id -o tsv)
+
+      az role assignment create \
+        --subscription "$AZURE_SUBSCRIPTION" \
+        --assignee-object-id "$RADIUS_SP_OBJECT_ID" \
+        --assignee-principal-type ServicePrincipal \
+        --role AcrPull \
+        --scope "$ACR_ID"
+
+      echo "If the role assignment already exists, Azure returns a conflict and that is safe to ignore."
+
+      az account set --subscription "$AZURE_SUBSCRIPTION"
+      az role assignment list \
+        --subscription "$AZURE_SUBSCRIPTION" \
+        --assignee-object-id "$RADIUS_SP_OBJECT_ID" \
+        --scope "$ACR_ID" \
+        --query "[].{role:roleDefinitionName,scope:scope}" -o table
+
+      export TENANTID=$(az account show --query tenantId -o tsv)
+      rad credential register azure wi \
+        --client-id "$RADIUS_APP_ID" \
+        --tenant-id "$TENANTID"
+      rad credential show azure
+
+      kubectl rollout restart deployment/bicep-de -n radius-system
+      kubectl rollout status deployment/bicep-de -n radius-system --timeout=2m
+
+      rad recipe show default \
+        --environment "$RADIUS_ENVIRONMENT" \
+        --resource-type Radius.Resources/postgreSqlDatabases
+    fi
+  fi
 fi
-
-kubectl config use-context "$TARGET_KUBERNETES_CONTEXT"
-rad workspace switch "$RADIUS_WORKSPACE"
-export ACTIVE_CONTEXT=$(kubectl config current-context)
-echo "Active Kubernetes context: ${ACTIVE_CONTEXT}"
-
-if [ "$ACTIVE_CONTEXT" != "$TARGET_KUBERNETES_CONTEXT" ]; then
-  echo "Expected kubectl context ${TARGET_KUBERNETES_CONTEXT}, but active context is ${ACTIVE_CONTEXT}. Switch to the target Radius workspace/context before registering credentials."
-  exit 1
-fi
-
-export RADIUS_APP_ID=$(az ad app list \
-  --display-name "$RADIUS_APP_NAME" \
-  --query "[0].appId" -o tsv)
-
-if [ -z "$RADIUS_APP_ID" ]; then
-  echo "Could not find Entra app ${RADIUS_APP_NAME}. Recheck RADIUS_APP_NAME or rerun the target cluster workload identity setup."
-  exit 1
-fi
-
-export RADIUS_SP_OBJECT_ID=$(az ad sp show --id "$RADIUS_APP_ID" --query id -o tsv)
-export ACR_ID=$(az acr show -n "$ACR_NAME" -g "$RESOURCE_GROUP" --subscription "$AZURE_SUBSCRIPTION" --query id -o tsv)
-
-az role assignment create \
-  --subscription "$AZURE_SUBSCRIPTION" \
-  --assignee-object-id "$RADIUS_SP_OBJECT_ID" \
-  --assignee-principal-type ServicePrincipal \
-  --role AcrPull \
-  --scope "$ACR_ID"
-
-echo "If the role assignment already exists, Azure returns a conflict and that is safe to ignore."
-
-az account set --subscription "$AZURE_SUBSCRIPTION"
-az role assignment list \
-  --subscription "$AZURE_SUBSCRIPTION" \
-  --assignee-object-id "$RADIUS_SP_OBJECT_ID" \
-  --scope "$ACR_ID" \
-  --query "[].{role:roleDefinitionName,scope:scope}" -o table
-
-export TENANTID=$(az account show --query tenantId -o tsv)
-rad credential register azure wi \
-  --client-id "$RADIUS_APP_ID" \
-  --tenant-id "$TENANTID"
-rad credential show azure
-
-kubectl rollout restart deployment/bicep-de -n radius-system
-kubectl rollout status deployment/bicep-de -n radius-system --timeout=2m
-
-rad recipe show default \
-  --environment "$RADIUS_ENVIRONMENT" \
-  --resource-type Radius.Resources/postgreSqlDatabases
 ```
 
 The `rad credential register` output must reference the target workspace context, for example `Kubernetes (context=aks-azure-prod)` for the optional two-AKS path. If it references a different cluster, switch to the target workspace and rerun the block.
@@ -469,28 +465,27 @@ Expected payload shape:
 if [ -z "$TARGET_KUBERNETES_CONTEXT" ] || [ "$TARGET_KUBERNETES_CONTEXT" = "<target-kubernetes-context>" ]; then
   echo "Set TARGET_KUBERNETES_CONTEXT to the kubeconfig context for the target Radius workspace. Available contexts:"
   kubectl config get-contexts -o name
-  exit 1
+else
+  kubectl config use-context "$TARGET_KUBERNETES_CONTEXT" &&
+  rad workspace switch "$RADIUS_WORKSPACE"
+
+  export ACTIVE_CONTEXT=$(kubectl config current-context)
+  echo "Active Kubernetes context: ${ACTIVE_CONTEXT}"
+
+  if [ "$ACTIVE_CONTEXT" != "$TARGET_KUBERNETES_CONTEXT" ]; then
+    echo "Expected kubectl context ${TARGET_KUBERNETES_CONTEXT}, but active context is ${ACTIVE_CONTEXT}. Switch to the target Radius workspace/context before refreshing credentials."
+  else
+    export TENANTID=$(az account show --query tenantId -o tsv)
+
+    rad credential register azure wi \
+      --client-id "$RADIUS_APP_ID" \
+      --tenant-id "$TENANTID"
+    rad credential show azure
+
+    kubectl rollout restart deployment/bicep-de -n radius-system
+    kubectl rollout status deployment/bicep-de -n radius-system --timeout=2m
+  fi
 fi
-
-kubectl config use-context "$TARGET_KUBERNETES_CONTEXT"
-rad workspace switch "$RADIUS_WORKSPACE"
-export ACTIVE_CONTEXT=$(kubectl config current-context)
-echo "Active Kubernetes context: ${ACTIVE_CONTEXT}"
-
-if [ "$ACTIVE_CONTEXT" != "$TARGET_KUBERNETES_CONTEXT" ]; then
-  echo "Expected kubectl context ${TARGET_KUBERNETES_CONTEXT}, but active context is ${ACTIVE_CONTEXT}. Switch to the target Radius workspace/context before refreshing credentials."
-  exit 1
-fi
-
-export TENANTID=$(az account show --query tenantId -o tsv)
-
-rad credential register azure wi \
-  --client-id "$RADIUS_APP_ID" \
-  --tenant-id "$TENANTID"
-rad credential show azure
-
-kubectl rollout restart deployment/bicep-de -n radius-system
-kubectl rollout status deployment/bicep-de -n radius-system --timeout=2m
 ```
 
 Then retry `rad recipe show` or deployment. If `rad recipe show` still returns `RecipeLanguageFailure` with ACR `401`, confirm both the credential and ACR RBAC are using the same app ID/object ID before escalating.
