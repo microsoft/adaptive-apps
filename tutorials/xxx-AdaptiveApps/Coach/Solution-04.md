@@ -495,7 +495,7 @@ This registers a parallel set of Azure-backed recipes against the same resource 
 
 | Resource type | Recipe | Backend |
 |---|---|---|
-| `Radius.Resources/postgreSqlDatabases` | `postgres:latest` | Azure Database for PostgreSQL Flexible Server (AVM) |
+| `Radius.Resources/postgreSqlDatabases` | `postgres-azure-flex:latest` | Azure Database for PostgreSQL Flexible Server (AVM) |
 | `Radius.Resources/mqttBrokers` | `mqtt-azure-event-grid:latest` | Azure Event Grid MQTT namespace (AVM) |
 | `Radius.Resources/workloadIdentities` | `workload-identity-azure:latest` | AKS workload identity + federated credential |
 | `Radius.Resources/aiModels` | `ai-agent-azure-openai:latest` | Azure OpenAI account + deployment (AVM) |

@@ -648,7 +648,7 @@ The app graph should look familiar because the Radius application resources are 
 |---|---|---|
 | Application model | Same file | Same file |
 | Kubernetes namespace | Usually `env-local-prod` | `trading` with `aks-env.bicep` defaults, or `env-azure-prod` on the Challenge 2 path |
-| Database backend | PostgreSQL container recipe (`postgres:latest`) | Azure Database for PostgreSQL Flexible Server recipe (AVM) |
+| Database backend | PostgreSQL container recipe (`postgres:latest`) | Azure Database for PostgreSQL Flexible Server recipe (`postgres-azure-flex:latest`, AVM) |
 | MQTT backend | Local broker or first-environment recipe | Azure Event Grid MQTT endpoint or second-environment broker recipe |
 | Workload identity | Local/no-op or first-environment identity recipe | Azure workload identity values |
 | AI backend, if enabled | Kaito / local OpenAI-compatible endpoint | Azure OpenAI through the recipe |

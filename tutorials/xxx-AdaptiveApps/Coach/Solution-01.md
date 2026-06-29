@@ -29,6 +29,10 @@ Pick **one or mutiple** environments and follow the linked guide. Each leaves yo
 | Azure Arc-enabled cluster | [`common/prepare-arc.md`](../../common/prepare-arc.md) |
 | Azure Local | [`common/prepare-azure-local.md`](../../common/prepare-azure-local.md) |
 
+The AKS installation with the WI_helper script might fail "(MissingSubscription) The request did not have a subscription or a valid tenant level resource provider.
+Code: MissingSubscription
+Message: The request did not have a subscription or a valid tenant level resource provider." You can continue.
+
 For Azure Local workshop steps and command flow, use [`common/prepare-azure-local.md`](../../common/prepare-azure-local.md) as the source of truth.
 
 #### 2.2.2 Install the portfolio chart
@@ -48,12 +52,31 @@ helm install $RELEASE charts/adaptive-apps \
 ```
 
 For AKS, use the managed Istio override form from getting-started:
+!!! and make sure you are in the right AKS context
+!!! if you are using AKS on Azure to virtualize the LOCAL environment use this variant also. !!!
 
 ```bash
+kubectl config current-context
+
+kubectl config use-context $AKS_CLUSTER$
+
+
 helm install $RELEASE charts/adaptive-apps \
   -f charts/adaptive-apps/profiles/$PORTFOLIO.yaml \
   --set features.istio.install=false \
   --set istio.namespace=aks-istio-system \
+  -n $NAMESPACE --create-namespace
+```
+
+For LOCAL, use the command below and make sure you are in the right AKS context
+
+```bash
+kubectl config current-context
+
+kubectl config use-context $AKS_CLUSTER$
+
+helm install $RELEASE charts/adaptive-apps \
+  -f charts/adaptive-apps/profiles/$PORTFOLIO.yaml \
   -n $NAMESPACE --create-namespace
 ```
 
