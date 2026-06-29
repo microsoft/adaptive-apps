@@ -252,9 +252,9 @@ Open `http://localhost:3000` and sign in with the `authUsername` and `authPasswo
 
 ---
 
-### Stage 3 - Confirm or prepare the second environment
+### Stage 3 - Confirm or prepare the second environment (ws-azure-prod)
 
-Apply the same parity checklist for the second environment. This stage covers Steps 1-3; Stage 4 continues with Steps 4-5.
+Apply the same parity checklist for the second environment (ws-azure-prod). This stage covers Steps 1-3; Stage 4 continues with Steps 4-5.
 
 The second environment should already have a Kubernetes cluster and Radius control plane from Challenges 1 and 2. Challenge 4 should have given teams enough recipe knowledge to register the same required resource types in this environment.
 
