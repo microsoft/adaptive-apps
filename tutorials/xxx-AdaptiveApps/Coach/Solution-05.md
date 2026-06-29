@@ -9,6 +9,7 @@
 - Expected time: **45-75 minutes** if both environments were prepared in earlier challenges. Add time if a second cluster, Azure credentials, or the Azure resource group still need to be provisioned.
 - Biggest coaching risk: teams try to make the second deployment work by editing the application model. Redirect them to the environment, recipe registration, workspace, group, and parameter layer.
 - Treat the database resource as the continuity proof from Challenge 04. The application asks for `Radius.Resources/postgreSqlDatabases`; the environment chooses the recipe implementation (a PostgreSQL container locally, Azure Database for PostgreSQL on AKS).
+- If the workshop has no Azure Local, Arc, k3d, or other Kubernetes target, two AKS clusters are an acceptable lab fallback. Make teams state the limitation clearly: this proves Radius environment portability and recipe substitution, not Azure Local runtime fidelity.
 - Be explicit about the boundary between a portability demonstration and full runtime parity. Azure Event Grid MQTT returns a namespace endpoint, but end-to-end publish/subscribe also needs clients, topic spaces, and permission bindings.
 
 ## Key Concepts - Portability After Recipes
@@ -63,7 +64,7 @@ The answer should keep pointing back to the same principle: the application asks
 
 ### Targeting discipline
 
-The cleanest demo uses the workspaces established in Challenge 2: `ws-local-prod` for `env-local-prod` and `ws-azure-prod` for `env-azure-prod`. A one-cluster fallback can still demonstrate the pattern with two Radius environments or groups, but coaches should make teams name that limitation. The important teaching point is that `rad` workspace/group/environment and `kubectl` context are separate sources of truth and can drift.
+The cleanest demo uses the workspaces established in Challenge 2: `ws-local-prod` for `env-local-prod` and `ws-azure-prod` for `env-azure-prod`. If both workspaces point to AKS clusters, label `ws-local-prod` as a workshop stand-in for the local/edge environment rather than calling it Azure Local. A one-cluster fallback can still demonstrate the pattern with two Radius environments or groups, but coaches should make teams name that limitation. The important teaching point is that `rad` workspace/group/environment and `kubectl` context are separate sources of truth and can drift.
 
 ### Known portability gaps to discuss
 
@@ -700,7 +701,7 @@ The app graph should look familiar because the Radius application resources are 
 |---|---|---|
 | Application model | Same file | Same file |
 | Kubernetes namespace | Usually `env-local-prod` | `trading` with `aks-env.bicep` defaults, or `env-azure-prod` on the Challenge 2 path |
-| Database backend | PostgreSQL container recipe (`postgres:latest`) | Azure Database for PostgreSQL Flexible Server recipe (`postgres-azure-flex:latest`, AVM) |
+| Database backend | PostgreSQL container recipe (`postgres:latest`) | Azure Database for PostgreSQL Flexible Server recipe (`postgres-azure-flex:latest`) |
 | MQTT backend | Local broker or first-environment recipe | Azure Event Grid MQTT endpoint or second-environment broker recipe |
 | Workload identity | Local/no-op or first-environment identity recipe | Azure workload identity values |
 | AI backend, if enabled | Kaito / local OpenAI-compatible endpoint | Azure OpenAI through the recipe |

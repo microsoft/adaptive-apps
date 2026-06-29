@@ -200,6 +200,8 @@ If you are deploying to multiple sites (e.g., Azure + Azure Local + Azure Local 
 3. Follow [adaptive-apps/tutorials/common/prepareRadius-azure-local.md at microhack-EU · microsoft/adaptive-apps](https://github.com/microsoft/adaptive-apps/blob/microhack-EU/tutorials/common/prepareRadius-azure-local.md) to set up Azure Local
 4. Repeat for additional sites as needed
 
+For a workshop without Azure Local or another non-AKS cluster, the same federated model can be practiced with **two AKS clusters**. Treat one AKS cluster as the logical local/edge environment (`ws-local-prod` / `env-local-prod`) and the other as the Azure environment (`ws-azure-prod` / `env-azure-prod`). Be explicit with teams that this is a lab convenience: both physical clusters are AKS, but the portability boundary is still taught through separate Radius control planes, environments, and recipe mappings.
+
 Each site will have:
 - Its own Radius control plane
 - Its own workspaces, environments, and resource groups
@@ -296,14 +298,16 @@ If you have multiple AKS clusters with separate Radius control planes, each team
 kubectl config use-context <azure-aks-context>
 
 # Create and switch to Azure workspace
-rad workspace create ws-azure-prod
+rad workspace create kubernetes ws-azure-prod \
+    --context "$(kubectl config current-context)" --force
 rad workspace switch ws-azure-prod
 
 # Switch kubectl to Local AKS cluster
 kubectl config use-context <local-aks-context>
 
 # Create and switch to Local workspace
-rad workspace create ws-local-prod
+rad workspace create kubernetes ws-local-prod \
+    --context "$(kubectl config current-context)" --force
 rad workspace switch ws-local-prod
 ```
 

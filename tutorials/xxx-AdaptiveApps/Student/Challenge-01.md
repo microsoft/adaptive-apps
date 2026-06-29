@@ -15,7 +15,7 @@ A well-prepared platform is the foundation for everything that follows. Decision
 
 ## Description
 
-As a team, set up and validate at least one target environment so that the following are true:
+As a team, set up and validate at least one target environment so that the following are true. If your team will complete the portability challenge during this event, prepare two target environments now:
 
 - A Kubernetes cluster is available and the current `kubectl` context points at it from every team member's workstation. Any CNCF-conformant cluster works (AKS, kind, k3d, Arc-enabled Kubernetes, or Azure Local). AKS with OIDC issuer and workload identity enabled is strongly recommended for later challenges.
 - An **Azure Container Registry (ACR)** exists and is attached to the cluster so it can pull images without a pull secret.
@@ -51,10 +51,11 @@ To complete this challenge successfully, you should be able to:
 - The account used to create the cluster needs sufficient Azure RBAC permissions (Contributor on the resource group at minimum).
 - If AKS provisioning seems to hang, check `az aks show` for provisioning state rather than retrying the create command.
 - Start with a single environment (AKS) and only add a second environment (Arc, Azure Local) if time allows.
+- If no Azure Local, Arc-enabled, k3d, or other Kubernetes target is available, your coach may ask you to use a second AKS cluster as a workshop stand-in for the local/edge environment. This is not the same as Azure Local, but it gives Challenge 5 two real Radius control planes and environments to compare.
 
 ## Advanced Challenges (Optional)
 
 Finished early? Try one or more of the following:
 
-- Set up a **second** target environment (for example kind locally, or an Arc-enabled cluster) so that Challenge 5 (Port the App Across Environments) has two real platforms to demonstrate portability.
+- Set up a **second** target environment (for example kind locally, an Arc-enabled cluster, Azure Local, or a second AKS cluster used as a workshop stand-in) so that Challenge 5 (Port the App Across Environments) has two environments to demonstrate portability.
 - Write a short runbook explaining how to **tear down and recreate** the cluster cleanly, including the ACR, Key Vault, and Storage dependencies.

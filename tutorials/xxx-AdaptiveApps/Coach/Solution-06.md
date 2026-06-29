@@ -11,6 +11,8 @@ Challenge 06 moves from "portable infrastructure" to "portable identity". Teams 
 
 The architectural pattern remains stable: the frontend authenticates through OIDC, Keycloak is the broker, and upstream identity differs by environment.
 
+If the workshop uses the two-AKS fallback and no AD DS is available, keep the same learning objective by using a coach-approved substitute for the local upstream identity provider: Keycloak local users, a second Entra application/tenant, or another lightweight OIDC/LDAP provider. Do not describe that path as Azure Local; describe it as a lab stand-in for environment-specific identity plumbing.
+
 ### Intended learning outcomes
 
 - Understand how Keycloak acts as an identity broker while preserving a stable app OIDC contract.
@@ -87,6 +89,7 @@ Acceptable variations:
 - Different Keycloak IdP display names and mapper naming.
 - Different workspace/group naming, if used consistently.
 - Different test users, as long as authentication path is verifiable end-to-end.
+- For the two-AKS fallback, a local identity substitute instead of AD DS, if coaches explicitly call out the limitation.
 
 ## Optional Demo and Discussion Points
 
@@ -158,6 +161,8 @@ export OIDC_BROWSER_AUTH_ENDPOINT=http://localhost:8080/realms/master/protocol/o
 ```
 
 > Repeat this section for each environment's Keycloak instance if teams run separate clusters/namespaces.
+
+> **Two-AKS fallback:** If there is no AD DS for `env-local-prod`, keep the frontend OIDC client contract identical and configure a simpler local upstream provider (for example Keycloak local users or a second Entra-backed IdP). The point is to prove environment-specific identity plumbing without changing the app.
 
 ### Stage 3 - Configure `env-azure-prod` for Entra federation
 

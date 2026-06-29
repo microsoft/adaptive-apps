@@ -4,7 +4,7 @@
 
 ## Objective
 
-This extension guide adds an Azure PostgreSQL implementation for `Radius.Resources/postgreSqlDatabases` in `env-azure-prod` **without changing the default source path used by existing environments**.
+This extension guide documents the transition path for adding an Azure PostgreSQL implementation for `Radius.Resources/postgreSqlDatabases` in `env-azure-prod`. The current branch has already productized this baseline: the Azure environment maps PostgreSQL to `postgres-azure-flex:latest`, while the local environment stays on the container recipe.
 
 The pattern is:
 
@@ -14,15 +14,15 @@ The pattern is:
 4. Redeploy the app unchanged.
 5. Keep rollback command ready.
 
-This preserves the current default behavior for local environments and existing docs.
+This preserves the current default behavior for local environments while making the Azure-backed environment use Azure Database for PostgreSQL Flexible Server.
 
 ---
 
 ## Non-Breaking Principle
 
 - Do **not** change the current `radius/local-env.bicep` recipe mapping.
-- Do **not** change the current `radius/aks-env.bicep` mapping yet.
-- Override recipe mapping at environment level using `rad recipe register` for `env-azure-prod` only.
+- For experiments, override recipe mapping at environment level using `rad recipe register` for `env-azure-prod` only.
+- For the productized branch baseline, `radius/aks-env.bicep` maps `Radius.Resources/postgreSqlDatabases` to `postgres-azure-flex:latest` directly so Challenge 04 and Challenge 05 use the Azure-backed recipe by default.
 
 ---
 
