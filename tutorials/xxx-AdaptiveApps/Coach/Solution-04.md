@@ -441,32 +441,6 @@ The repository ships two environment Bicep files that define environments *and* 
 
 > **Naming note:** These commands use the Challenge 2 teaching names — group `rg-trading` with environments `env-local-prod` and `env-azure-prod`. The shipped `aks-env.bicep` defaults its `environmentName` (and Kubernetes `namespace`) parameter to `trading`, so the AKS command passes `--parameters environmentName=env-azure-prod` to align the Radius environment with the teaching names. If your team instead followed the sample values in [`prepare-aks.md`](../../common/prepare-aks.md) (`RADIUS_GROUP=trading`, `RADIUS_WORKSPACE=aks-trading`, environment `trading`), use those names consistently in every command below instead.
 
-#### Azure Local environment (apply for local for env-local-Prod)
-
-**Bash:**
-
-For AZURE and AKS:
-```bash
-rad deploy radius/aks-env.bicep --group rg-trading --environment env-azure-prod --parameters environmentName=env-azure-prod --parameters azureSubscriptionId=$AZURE_SUBSCRIPTION --parameters azureResourceGroup=$RESOURCE_GROUP
-```
-For LOCAL:
-```bash
-rad deploy radius/local-env.bicep --group rg-trading --environment env-local-prod
-```
-
-
-This command deploys `local-env.bicep`, which creates the `env-local-prod` environment and registers the following recipes against `Radius.Resources/*`:
-
-| Resource type | Recipe | Backend |
-|---|---|---|
-| `Radius.Resources/postgreSqlDatabases` | `postgres:latest` | PostgreSQL 16 container (Kubernetes) |
-| `Radius.Resources/mqttBrokers` | `mqtt:latest` | Eclipse Mosquitto container (Kubernetes) |
-| `Radius.Resources/idProviders` | `idp-keycloak:latest` | Keycloak OIDC container (Kubernetes) |
-| `Radius.Resources/workloadIdentities` | `workload-identity-local:latest` | Kubernetes service account (no-op) |
-| `Radius.Resources/aiModels` | `ai-agent-kaito:latest` | Kaito in-cluster LLM (Kubernetes GPU) |
-| `Radius.Resources/governance` | `governance-opa:latest` | Open Policy Agent (Kubernetes) |
-| `Radius.Resources/agentGuardrails` | `agent-guardrails-agt:latest` | Agent Governance Toolkit sidecar support |
-
 #### AKS / Azure environment (apply for Azure env-azure-prod)
 
 **Bash:**
@@ -503,6 +477,26 @@ This registers a parallel set of Azure-backed recipes against the same resource 
 | `Radius.Resources/agentGuardrails` | `agent-guardrails-agt:latest` | Agent Governance Toolkit sidecar support |
 
 Note that `Radius.Resources/idProviders` has no Azure recipe — Keycloak runs in-cluster in both environments. This is intentional: the portable-app pattern delegates IdP selection to the environment, and teams will replace the Keycloak recipe with a Microsoft Entra ID recipe in Challenge 6.
+
+#### Azure Local environment (apply for local for env-local-Prod)
+
+**Bash:**
+```bash
+rad deploy radius/local-env.bicep --group rg-trading --environment env-local-prod
+```
+
+This command deploys `local-env.bicep`, which creates the `env-local-prod` environment and registers the following recipes against `Radius.Resources/*`:
+
+| Resource type | Recipe | Backend |
+|---|---|---|
+| `Radius.Resources/postgreSqlDatabases` | `postgres:latest` | PostgreSQL 16 container (Kubernetes) |
+| `Radius.Resources/mqttBrokers` | `mqtt:latest` | Eclipse Mosquitto container (Kubernetes) |
+| `Radius.Resources/idProviders` | `idp-keycloak:latest` | Keycloak OIDC container (Kubernetes) |
+| `Radius.Resources/workloadIdentities` | `workload-identity-local:latest` | Kubernetes service account (no-op) |
+| `Radius.Resources/aiModels` | `ai-agent-kaito:latest` | Kaito in-cluster LLM (Kubernetes GPU) |
+| `Radius.Resources/governance` | `governance-opa:latest` | Open Policy Agent (Kubernetes) |
+| `Radius.Resources/agentGuardrails` | `agent-guardrails-agt:latest` | Agent Governance Toolkit sidecar support |
+
 
 #### Verify in the dashboard
 
