@@ -38,15 +38,13 @@ If no Azure Local, Arc-enabled, k3d, or other Kubernetes target is available, co
 
 This optional fallback is not architecturally equivalent to Azure Local. It is a practical way to preserve the portability learning objective: the same application model is deployed to two Radius environments while the environment and recipe layer owns the platform-specific behavior.
 
-The AKS installation with the WI_helper script might fail "(MissingSubscription) The request did not have a subscription or a valid tenant level resource provider.
-Code: MissingSubscription
-Message: The request did not have a subscription or a valid tenant level resource provider." You can continue.
+The AKS installation with the `wi-helper.sh` script might fail with `MissingSubscription` because the helper attempts a tenant-level provider lookup. If the AKS cluster exists and workload identity is enabled, coaches can continue and revisit credential registration during the Radius setup.
 
 For Azure Local workshop steps and command flow, use [`common/prepare-azure-local.md`](../../common/prepare-azure-local.md) as the source of truth.
 
-#### 2.2.2 Install the portfolio chart
+#### Install the portfolio chart
 
-Before moving to Challenge 02, ensure the portfolio baseline is installed with Helm. Reuse the same commands and options from [`tutorials/getting-started/README.md`](../../getting-started/README.md) section **2.2.2 Install the portfolio chart**.
+Before moving to Challenge 02, ensure the portfolio baseline is installed with Helm. This mirrors the **Install the portfolio chart** step in [`tutorials/getting-started/README.md`](../../getting-started/README.md), but is included here so coaches do not need to jump between guides.
 
 Set the same variables used in getting-started and install the chart:
 
