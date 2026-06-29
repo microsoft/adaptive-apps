@@ -116,9 +116,9 @@ Use the same teaching sequence in each environment, with only environment-specif
 4. Deploy the same application model with environment-specific parameters.
 5. Validate graph, resources, and runtime reachability.
 
-### Stage 2 - Deploy the app to the first environment
+### Stage 2 - Deploy the app to the first environment (ws-local-prod)
 
-Use the parity checklist explicitly for the first environment.
+Use the parity checklist explicitly for the environment ws-local-prod, for ws-azure-prod go to the second environment,
 
 #### Step 1 - Target workspace/group/environment (first environment)
 
