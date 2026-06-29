@@ -251,6 +251,15 @@ rad recipe register default \
 Validate:
 
 ```bash
+rad workspace switch "$RADIUS_WORKSPACE"
+export ACTIVE_CONTEXT=$(kubectl config current-context)
+echo "Active Kubernetes context: ${ACTIVE_CONTEXT}"
+
+if [ "$ACTIVE_CONTEXT" != "$AKS_CLUSTER" ]; then
+  echo "Expected kubectl context ${AKS_CLUSTER}, but active context is ${ACTIVE_CONTEXT}. Switch to the Azure AKS workspace/context before registering credentials."
+  exit 1
+fi
+
 export RADIUS_APP_ID=$(az ad app list \
   --display-name "${AKS_CLUSTER}-radius-app" \
   --query "[0].appId" -o tsv)
@@ -270,10 +279,8 @@ az role assignment create \
   --role AcrPull \
   --scope "$ACR_ID"
 
-# Allow RBAC propagation before validating recipe resolution.
-# If assignment already exists, Azure returns a conflict and this is safe to ignore.
+echo "If the role assignment already exists, Azure returns a conflict and that is safe to ignore."
 
-# Verify the role assignment was created
 az account set --subscription "$AZURE_SUBSCRIPTION"
 az role assignment list \
   --subscription "$AZURE_SUBSCRIPTION" \
@@ -281,22 +288,21 @@ az role assignment list \
   --scope "$ACR_ID" \
   --query "[].{role:roleDefinitionName,scope:scope}" -o table
 
-# Make sure the active Radius workspace is using this identity for Azure-backed recipe resolution.
 export TENANTID=$(az account show --query tenantId -o tsv)
 rad credential register azure wi \
   --client-id "$RADIUS_APP_ID" \
   --tenant-id "$TENANTID"
 rad credential show azure
 
-# Force the Bicep deployment engine to reload the credential before resolving the private ACR module.
 kubectl rollout restart deployment/bicep-de -n radius-system
 kubectl rollout status deployment/bicep-de -n radius-system --timeout=2m
 
-# Now retry recipe show (wait 2-5 minutes if this is the first attempt)
 rad recipe show default \
   --environment env-azure-prod \
   --resource-type Radius.Resources/postgreSqlDatabases
 ```
+
+The `rad credential register` output must reference the Azure AKS workspace context, for example `Kubernetes (context=aks-azure-prod)`. If it references `aks-local-prod`, switch to `ws-azure-prod` and rerun the block.
 
 If `rad recipe show` or later deploy steps fail with auth errors, see [Appendix: Troubleshooting](#appendix-troubleshooting).
 
@@ -443,6 +449,14 @@ Expected payload shape:
 
 ```bash
 rad workspace switch "$RADIUS_WORKSPACE"
+export ACTIVE_CONTEXT=$(kubectl config current-context)
+echo "Active Kubernetes context: ${ACTIVE_CONTEXT}"
+
+if [ "$ACTIVE_CONTEXT" != "$AKS_CLUSTER" ]; then
+  echo "Expected kubectl context ${AKS_CLUSTER}, but active context is ${ACTIVE_CONTEXT}. Switch to the Azure AKS workspace/context before refreshing credentials."
+  exit 1
+fi
+
 export TENANTID=$(az account show --query tenantId -o tsv)
 
 rad credential register azure wi \
