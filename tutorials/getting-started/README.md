@@ -15,12 +15,14 @@ This tutorial walks you through the step of deploying an Adaptive Apps portfolio
 
 ## 1. Choose your portfolio
 
-Pick a portfolio and export it. **Every subsequent step references `$PORTFOLIO`** — re-export it in any new terminal you open.
+Pick one portfolio (`min`, `core`, `ent`, `min-ai`, `core-ai`, or `ent-ai`) and export it. **Every subsequent step references `$PORTFOLIO`** — re-export it in any new terminal you open.
 
 ```bash
-export PORTFOLIO=min          # or: core | ent | min-ai | core-ai | ent-ai
-export RELEASE=$PORTFOLIO     # Helm release name; defaults to the portfolio
-export NAMESPACE=$PORTFOLIO   # Kubernetes namespace for the portfolio
+cd "$(git rev-parse --show-toplevel)"
+
+export PORTFOLIO=min
+export RELEASE=$PORTFOLIO
+export NAMESPACE=$PORTFOLIO
 ```
 
 If your target is AKS, define a few more environment variables:

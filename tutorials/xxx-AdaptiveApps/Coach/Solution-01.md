@@ -46,10 +46,12 @@ For Azure Local workshop steps and command flow, use [`common/prepare-azure-loca
 
 Before moving to Challenge 02, ensure the portfolio baseline is installed with Helm. This mirrors the **Install the portfolio chart** step in [`tutorials/getting-started/README.md`](../../getting-started/README.md), but is included here so coaches do not need to jump between guides.
 
-Set the same variables used in getting-started and install the chart:
+Choose one portfolio (`min`, `core`, `ent`, `min-ai`, `core-ai`, or `ent-ai`), then run the install commands from the repository root:
 
 ```bash
-export PORTFOLIO=min          # or: core | ent | min-ai | core-ai | ent-ai
+cd "$(git rev-parse --show-toplevel)"
+
+export PORTFOLIO=min
 export RELEASE=$PORTFOLIO
 export NAMESPACE=$PORTFOLIO
 
