@@ -37,14 +37,18 @@ export KUBERNETES_CONTEXT="${AKS_CLUSTER}"
 export RADIUS_APP_NAME="${AKS_CLUSTER}-radius-app"
 export RADIUS_WORKSPACE="ws-azure-prod"
 export RADIUS_ENVIRONMENT="env-azure-prod"
+export RADIUS_NAMESPACE="${RADIUS_ENVIRONMENT}"
 export RADIUS_GROUP="rg-trading"
 export RADIUS_ENVIRONMENT_ID="/planes/radius/local/resourceGroups/${RADIUS_GROUP}/providers/Applications.Core/environments/${RADIUS_ENVIRONMENT}"
 export RADIUS_APP_GROUP="${RADIUS_GROUP}-psql"
+export RECIPE_REGISTRY="ghcr.io/microsoft/adaptive-apps/recipes"
 export RESOURCE_GROUP="<your-azure-resource-group>"
 export AZURE_SUBSCRIPTION="<your-subscription-id>"
 ```
 
 These parameters are used throughout the guide. Adjust them to match your environment.
+
+If you are continuing from an earlier draft of this guide, stop using `RADIUS_TEST_GROUP`. It has been replaced by `RADIUS_APP_GROUP`. When deploying into `RADIUS_APP_GROUP`, always pass `RADIUS_ENVIRONMENT_ID` rather than the short environment name, because the environment itself lives in `RADIUS_GROUP`.
 
 For AKS targets, reuse `AKS_CLUSTER` from [`prepare-aks.md`](../../common/prepare-aks.md). In the standard two-AKS workshop path, the Azure/cloud target uses `AKS_CLUSTER=aks-azure-prod`, `KUBERNETES_CONTEXT=aks-azure-prod`, and `RADIUS_WORKSPACE=ws-azure-prod`.
 
@@ -253,7 +257,28 @@ rad bicep publish \
 
 ## Stage 3 - Register Recipe Override in the Target Environment
 
-Switch to the target workspace and register the recipe for PostgreSQL only in that environment:
+First make sure the target Azure environment has the full baseline recipe set from Challenge 04. This is what registers `mqttBrokers`, `workloadIdentities`, `aiModels`, `governance`, and `agentGuardrails`; this extension only overrides the PostgreSQL recipe.
+
+```bash
+if [ -z "$KUBERNETES_CONTEXT" ] || [ "$KUBERNETES_CONTEXT" = "<target-kubernetes-context>" ]; then
+  echo "Set KUBERNETES_CONTEXT to the kubeconfig context for the target Radius workspace. Available contexts:"
+  kubectl config get-contexts -o name
+else
+  kubectl config use-context "$KUBERNETES_CONTEXT" &&
+  rad workspace switch "$RADIUS_WORKSPACE" &&
+  rad group switch "$RADIUS_GROUP" &&
+  rad deploy radius/aks-env.bicep \
+    --group "$RADIUS_GROUP" \
+    --environment "$RADIUS_ENVIRONMENT" \
+    --parameters environmentName="$RADIUS_ENVIRONMENT" \
+    --parameters namespace="$RADIUS_NAMESPACE" \
+    --parameters recipeRegistry="$RECIPE_REGISTRY" \
+    --parameters azureSubscriptionId="$AZURE_SUBSCRIPTION" \
+    --parameters azureResourceGroup="$RESOURCE_GROUP"
+fi
+```
+
+Then register the PostgreSQL override in that same environment:
 
 ```bash
 if [ -z "$KUBERNETES_CONTEXT" ] || [ "$KUBERNETES_CONTEXT" = "<target-kubernetes-context>" ]; then
@@ -339,6 +364,8 @@ else
           rad recipe show default \
             --environment "$RADIUS_ENVIRONMENT_ID" \
             --resource-type Radius.Resources/postgreSqlDatabases
+
+          rad recipe list --environment "$RADIUS_ENVIRONMENT_ID"
         fi
       fi
     fi
@@ -349,6 +376,8 @@ fi
 The `rad credential register` output must reference the target workspace context, for example `Kubernetes (context=aks-azure-prod)` for the optional two-AKS path. If it references a different cluster, switch to the target workspace and rerun the block.
 
 If `rad recipe show` or later deploy steps fail with auth errors, see [Appendix: Troubleshooting](#appendix-troubleshooting).
+
+Before moving on, confirm the recipe list includes at least `Radius.Resources/postgreSqlDatabases`, `Radius.Resources/mqttBrokers`, and `Radius.Resources/workloadIdentities`. If `mqttBrokers` or `workloadIdentities` are missing, rerun the baseline `radius/aks-env.bicep` deployment above, then rerun the PostgreSQL override because the baseline deployment can restore the default PostgreSQL recipe.
 
 Confirm that `templatePath` is exactly:
 
@@ -394,7 +423,7 @@ Why this matters: recipe registration affects new provisioning. Reusing an exist
 
 If your environment requires workload-identity params, pass them exactly as in Solution-05.
 
-If deployment fails with `RecipeDownloadFailed` or `AuthenticationFailed`, use [Appendix: Troubleshooting](#appendix-troubleshooting) before retrying.
+If deployment fails with `RecipeNotFoundFailure`, the target environment is missing one or more baseline recipes. Return to Stage 3, deploy `radius/aks-env.bicep`, and rerun the PostgreSQL override before retrying. If deployment fails with `RecipeDownloadFailed` or `AuthenticationFailed`, use [Appendix: Troubleshooting](#appendix-troubleshooting) before retrying.
 
 ---
 
@@ -428,7 +457,7 @@ rad recipe register default \
   --environment "$RADIUS_ENVIRONMENT_ID" \
   --resource-type Radius.Resources/postgreSqlDatabases \
   --template-kind bicep \
-  --template-path "${ACR_NAME}.azurecr.io/recipes/postgres:latest"
+  --template-path "${RECIPE_REGISTRY}/postgres-azure-flex:latest"
 ```
 
 Then redeploy the app.

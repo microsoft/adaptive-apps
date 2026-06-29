@@ -104,7 +104,7 @@ If a team deliberately chose different names, have them translate every command 
 | Workload identity recipe | `Radius.Resources/workloadIdentities` is registered or intentionally handled for the first environment. |
 | Optional AI recipe | `Radius.Resources/aiModels` is registered if the team will test AI portability. |
 
-If `Radius.Resources/postgreSqlDatabases` is missing, send the team back to Challenge 04. Challenge 05 depends on the environment having the recipe mapping in place.
+If any recipe for a resource type the app declares is missing, send the team back to Challenge 04. Challenge 05 depends on each target environment having its recipe mappings in place before deploying the app.
 
 #### What to discuss
 
@@ -771,19 +771,15 @@ This error occurs for `Radius.Resources/workloadIdentities`, `Radius.Resources/m
 
 **Root cause:** Challenge 04 Stage 2 has not been completed. The environment exists, but no recipes have been registered for the resource types the application is trying to deploy.
 
-**Solution:** Return to Challenge 04 and complete **Stage 2 — Register the pre-built recipes**. Run:
+**Solution:** Return to Challenge 04 and complete **Stage 2 — Register the pre-built recipes** for the environment that failed.
 
-**Bash:**
+For the local/edge environment, run:
 
 ```bash
 rad deploy radius/local-env.bicep --group "$RADIUS_GROUP" --environment "$RADIUS_LOCAL_ENVIRONMENT"
 ```
 
-**PowerShell:**
-
-```powershell
-rad deploy radius/local-env.bicep --group "$RADIUS_GROUP" --environment "$RADIUS_LOCAL_ENVIRONMENT"
-```
+For the Azure environment, run `radius/aks-env.bicep` with the same `RADIUS_ENVIRONMENT`, `RADIUS_NAMESPACE`, `AZURE_SUBSCRIPTION`, and `RESOURCE_GROUP` values used when the environment was created.
 
 This registers all required recipes (`postgreSqlDatabases`, `mqttBrokers`, `workloadIdentities`, etc.) in the environment. Then retry `rad deploy radius/app.bicep ...`.
 
@@ -806,7 +802,7 @@ The `rad` workspace chooses the Radius control plane; the Kubernetes context is 
 rad recipe list --environment <environment-name>
 ```
 
-If `Radius.Resources/postgreSqlDatabases` is missing, return to Challenge 04 and deploy `local-env.bicep` / `aks-env.bicep` (Stage 2) to register the database recipe before deploying the app.
+If a required resource type is missing, return to Challenge 04 and deploy `local-env.bicep` / `aks-env.bicep` (Stage 2) to register the full baseline recipe set before deploying the app.
 
 **Azure recipe deployment fails with authorization errors**
 
