@@ -294,12 +294,12 @@ export TENANTID=<tenantId>
 ```bash
 # Workload identity (recommended for AKS). No client secret required.
 rad credential register azure wi \
-    --client-id $APP_ID \
+    --client-id $RADIUS_APP_ID \
     --tenant-id TENANTID
 
 # Service principal (use only when workload identity is unavailable).
 rad credential register azure sp \
-    --client-id $APP_ID \
+    --client-id $RADIUS_APP_ID \
     --client-secret <password> \
     --tenant-id $TENANTID
 ```
@@ -309,12 +309,12 @@ rad credential register azure sp \
 ```powershell
 # Workload identity (recommended for AKS). No client secret required.
 rad credential register azure wi `
-    --client-id $APP_ID `
+    --client-id $RADIUS_APP_ID `
     --tenant-id $TENANTID
 
 # Service principal (use only when workload identity is unavailable).
 rad credential register azure sp `
-    --client-id $APP_ID `
+    --client-id $RADIUS_APP_ID `
     --client-secret <password> `
     --tenant-id $TENANTID
 ```
@@ -332,7 +332,6 @@ This is required for recipes such as `mqtt-azure-event-grid` to create Azure res
 
 ```bash
 # Use the same appId passed to `rad credential register azure wi --client-id ...`
-export RADIUS_APP_ID=$APP_ID
 export RADIUS_SP_OBJECT_ID=$(az ad sp show --id "$RADIUS_APP_ID" --query id -o tsv)
 
 # Prevent MissingSubscription by setting and passing subscription explicitly.
