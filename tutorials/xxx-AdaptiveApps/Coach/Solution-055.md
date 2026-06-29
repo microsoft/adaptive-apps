@@ -38,6 +38,7 @@ export RADIUS_APP_NAME="${AKS_CLUSTER}-radius-app"
 export RADIUS_WORKSPACE="ws-azure-prod"
 export RADIUS_ENVIRONMENT="env-azure-prod"
 export RADIUS_GROUP="rg-trading"
+export RADIUS_ENVIRONMENT_ID="/planes/radius/local/resourceGroups/${RADIUS_GROUP}/providers/Applications.Core/environments/${RADIUS_ENVIRONMENT}"
 export RADIUS_TEST_GROUP="rg-trading-psql"
 export RESOURCE_GROUP="<your-azure-resource-group>"
 export AZURE_SUBSCRIPTION="<your-subscription-id>"
@@ -263,7 +264,7 @@ else
   rad workspace switch "$RADIUS_WORKSPACE" &&
   rad group switch "$RADIUS_GROUP" &&
   rad recipe register default \
-    --environment "$RADIUS_ENVIRONMENT" \
+    --environment "$RADIUS_ENVIRONMENT_ID" \
     --resource-type Radius.Resources/postgreSqlDatabases \
     --template-kind bicep \
     --template-path "$ACR_NAME.azurecr.io/recipes/postgres-azure-flex:solution-055"
@@ -336,7 +337,7 @@ else
           kubectl rollout status deployment/bicep-de -n radius-system --timeout=2m
 
           rad recipe show default \
-            --environment "$RADIUS_ENVIRONMENT" \
+            --environment "$RADIUS_ENVIRONMENT_ID" \
             --resource-type Radius.Resources/postgreSqlDatabases
         fi
       fi
@@ -359,9 +360,13 @@ ${ACR_NAME}.azurecr.io/recipes/postgres-azure-flex:solution-055
 
 ## Stage 4 - Redeploy App to the Target Environment
 
-Deploy into a fresh Radius group so existing resources do not mask the recipe change.
+Deploy into a fresh Radius group so existing resources do not mask the recipe change. Because the environment lives in `RADIUS_GROUP` and the test app lives in `RADIUS_TEST_GROUP`, pass the full environment ID during deployment.
 
 ```bash
+if ! rad group show "$RADIUS_TEST_GROUP" >/dev/null 2>&1; then
+  rad group create "$RADIUS_TEST_GROUP"
+fi
+
 rad group switch "$RADIUS_TEST_GROUP"
 ```
 
@@ -378,7 +383,7 @@ rad bicep publish-extension \
 ```bash
 rad deploy radius/app.bicep \
   --group "$RADIUS_TEST_GROUP" \
-  --environment "$RADIUS_ENVIRONMENT" \
+  --environment "$RADIUS_ENVIRONMENT_ID" \
   --parameters imageRegistry=ghcr.io/microsoft/adaptive-apps \
   --parameters imageTag=latest \
   --parameters authUsername=admin \
@@ -420,7 +425,7 @@ If needed, switch the target environment back to the current default PostgreSQL 
 
 ```bash
 rad recipe register default \
-  --environment "$RADIUS_ENVIRONMENT" \
+  --environment "$RADIUS_ENVIRONMENT_ID" \
   --resource-type Radius.Resources/postgreSqlDatabases \
   --template-kind bicep \
   --template-path "${ACR_NAME}.azurecr.io/recipes/postgres:latest"
@@ -594,7 +599,7 @@ Then retry:
 
 ```bash
 rad recipe show default \
-  --environment "$RADIUS_ENVIRONMENT" \
+  --environment "$RADIUS_ENVIRONMENT_ID" \
   --resource-type Radius.Resources/postgreSqlDatabases
 ```
 
