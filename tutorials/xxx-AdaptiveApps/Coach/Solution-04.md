@@ -267,6 +267,8 @@ cat > ~/.docker/config.json <<EOF
 EOF
 ```
 
+The Azure CLI warning about refresh tokens is expected. Do not use the returned value as a raw registry API bearer token; use it as the password in Docker/OCI auth config with username `00000000-0000-0000-0000-000000000000`, as shown above.
+
 **PowerShell:**
 
 ```powershell
@@ -378,6 +380,8 @@ cat > ~/.docker/config.json <<EOF
 }
 EOF
 ```
+
+The Azure CLI warning about refresh tokens is expected. Do not use the returned value as a raw registry API bearer token; use it as the password in Docker/OCI auth config with username `00000000-0000-0000-0000-000000000000`, as shown above.
 
 Then rerun publish and register commands.
 
