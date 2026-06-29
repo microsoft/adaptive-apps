@@ -147,10 +147,24 @@ First make sure the Radius resource types have been imported into the active con
 rad resource-type list
 ```
 
+Also make sure the local Bicep extension package exists. `radius/app.bicep` imports `radius/types.tgz`, and that generated file is intentionally ignored by Git:
+
+```bash
+rad bicep publish-extension \
+    --from-file radius/resource-types/types.yaml \
+    --target radius/types.tgz
+```
+
 **PowerShell:**
 
 ```powershell
 rad resource-type list
+```
+
+```powershell
+rad bicep publish-extension `
+    --from-file radius/resource-types/types.yaml `
+    --target radius/types.tgz
 ```
 
 Use the same application file the team will later deploy elsewhere. The command below uses the canonical group and environment names from the earlier challenges.

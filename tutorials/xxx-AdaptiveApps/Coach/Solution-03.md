@@ -155,9 +155,19 @@ kubectl get nodes
 rad resource-type create -f radius/resource-types/types.yaml
 ```
 
+Generate the local Bicep extension package that `radius/app.bicep` imports. This file is generated per workstation and is ignored by Git, so each participant may need to run this even after the resource types are already registered in Radius:
+
+```bash
+rad bicep publish-extension \
+  --from-file radius/resource-types/types.yaml \
+  --target radius/types.tgz
+```
+
 > **Federated / optional two-cluster note:** Resource types are stored in the active Radius control plane. If the team has separate workspaces for `ws-local-prod` and `ws-azure-prod` (including the optional two-AKS workshop fallback), repeat this import in each workspace before moving on to recipes.
 >
 > For the Azure workspace, set `RADIUS_WORKSPACE=ws-azure-prod` instead.
+>
+> `radius/types.tgz` is a local Bicep build artifact, not a Radius control-plane resource. Generate it once per workstation from the repository root; you do not need a separate copy per workspace.
 >
 > If `rad resource-type create` fails with `no such host`, the active `rad` workspace points at a stale or deleted Kubernetes API server. Re-fetch the AKS credentials for the intended cluster, switch to that context, and recreate the workspace before retrying:
 >

@@ -367,6 +367,14 @@ rad group switch "$RADIUS_TEST_GROUP"
 
 Then deploy app without changing `radius/app.bicep`:
 
+If this workstation has not generated the local Radius Bicep extension yet, create it first:
+
+```bash
+rad bicep publish-extension \
+  --from-file radius/resource-types/types.yaml \
+  --target radius/types.tgz
+```
+
 ```bash
 rad deploy radius/app.bicep \
   --group "$RADIUS_TEST_GROUP" \
