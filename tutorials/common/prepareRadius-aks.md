@@ -123,12 +123,13 @@ The workload identity setup from [prepare-aks.md](./prepare-aks.md) created an E
 
 ```bash
 export AKS_CLUSTER="<your-cluster-name>"
-export APPLICATION_CLIENT_ID=$(az ad app list \
-  --query "[?displayName=='${AKS_CLUSTER}-radius-app'].appId | [0]" -o tsv)
+export RADIUS_APP_NAME="${AKS_CLUSTER}-radius-app"
+export RADIUS_APP_ID=$(az ad app list \
+  --query "[?displayName=='${RADIUS_APP_NAME}'].appId | [0]" -o tsv)
 export TENANT_ID=$(az account show --query tenantId -o tsv)
 
 rad credential register azure wi \
-  --client-id "$APPLICATION_CLIENT_ID" --tenant-id "$TENANT_ID"
+  --client-id "$RADIUS_APP_ID" --tenant-id "$TENANT_ID"
 
 # Verify (may take 30+ seconds to refresh):
 rad credential show azure

@@ -39,7 +39,7 @@ export RADIUS_WORKSPACE="ws-azure-prod"
 export RADIUS_ENVIRONMENT="env-azure-prod"
 export RADIUS_GROUP="rg-trading"
 export RADIUS_ENVIRONMENT_ID="/planes/radius/local/resourceGroups/${RADIUS_GROUP}/providers/Applications.Core/environments/${RADIUS_ENVIRONMENT}"
-export RADIUS_TEST_GROUP="rg-trading-psql"
+export RADIUS_APP_GROUP="${RADIUS_GROUP}-psql"
 export RESOURCE_GROUP="<your-azure-resource-group>"
 export AZURE_SUBSCRIPTION="<your-subscription-id>"
 ```
@@ -360,14 +360,14 @@ ${ACR_NAME}.azurecr.io/recipes/postgres-azure-flex:solution-055
 
 ## Stage 4 - Redeploy App to the Target Environment
 
-Deploy into a fresh Radius group so existing resources do not mask the recipe change. Because the environment lives in `RADIUS_GROUP` and the test app lives in `RADIUS_TEST_GROUP`, pass the full environment ID during deployment.
+Deploy into a fresh Radius group so existing resources do not mask the recipe change. Because the environment lives in `RADIUS_GROUP` and the test app lives in `RADIUS_APP_GROUP`, pass the full environment ID during deployment.
 
 ```bash
-if ! rad group show "$RADIUS_TEST_GROUP" >/dev/null 2>&1; then
-  rad group create "$RADIUS_TEST_GROUP"
+if ! rad group show "$RADIUS_APP_GROUP" >/dev/null 2>&1; then
+  rad group create "$RADIUS_APP_GROUP"
 fi
 
-rad group switch "$RADIUS_TEST_GROUP"
+rad group switch "$RADIUS_APP_GROUP"
 ```
 
 Then deploy app without changing `radius/app.bicep`:
@@ -382,7 +382,7 @@ rad bicep publish-extension \
 
 ```bash
 rad deploy radius/app.bicep \
-  --group "$RADIUS_TEST_GROUP" \
+  --group "$RADIUS_APP_GROUP" \
   --environment "$RADIUS_ENVIRONMENT_ID" \
   --parameters imageRegistry=ghcr.io/microsoft/adaptive-apps \
   --parameters imageTag=latest \
