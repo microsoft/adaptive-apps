@@ -42,6 +42,8 @@ export AZURE_SUBSCRIPTION="<your-subscription-id>"
 
 These parameters are used throughout the guide. Adjust them to match your environment.
 
+`AKS_CLUSTER` is also used to find the Radius Entra application created by `tutorials/getting-started/assets/wi-helper.sh` during AKS preparation. That helper names the app `${AKS_CLUSTER}-radius-app`.
+
 `ACR_NAME` is the Azure Container Registry used as the team's private OCI registry for recipe publishing. It is either:
 
 - the ACR created during Azure Local preparation, or
@@ -249,7 +251,15 @@ rad recipe register default \
 Validate:
 
 ```bash
-export RADIUS_APP_ID="0e342b46-16d7-4c12-9e08-a6872d789444"
+export RADIUS_APP_ID=$(az ad app list \
+  --display-name "${AKS_CLUSTER}-radius-app" \
+  --query "[0].appId" -o tsv)
+
+if [ -z "$RADIUS_APP_ID" ]; then
+  echo "Could not find Entra app ${AKS_CLUSTER}-radius-app. Recheck AKS_CLUSTER or rerun the AKS workload identity setup from prepare-aks.md."
+  exit 1
+fi
+
 export RADIUS_SP_OBJECT_ID=$(az ad sp show --id "$RADIUS_APP_ID" --query id -o tsv)
 export ACR_ID=$(az acr show -n "$ACR_NAME" -g "$RESOURCE_GROUP" --subscription "$AZURE_SUBSCRIPTION" --query id -o tsv)
 
@@ -367,6 +377,13 @@ Use this section when Stage 3 or Stage 4 fails due to credential or registry acc
 ### B. Correct Radius credential registration syntax
 
 The command must include the authentication mode (`sp` or `wi`):
+
+```bash
+export RADIUS_APP_ID=$(az ad app list \
+  --display-name "${AKS_CLUSTER}-radius-app" \
+  --query "[0].appId" -o tsv)
+export TENANTID=$(az account show --query tenantId -o tsv)
+```
 
 ```bash
 rad credential register azure sp \
