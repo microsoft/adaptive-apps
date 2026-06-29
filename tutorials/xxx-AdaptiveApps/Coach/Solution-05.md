@@ -106,7 +106,37 @@ If `Radius.Resources/postgreSqlDatabases` is missing, send the team back to Chal
 
 ---
 
+### Parity checklist for both environments
+
+Use the same teaching sequence in each environment, with only environment-specific values changing:
+
+1. Target workspace/group/environment.
+2. Set or verify credentials and RBAC (only where needed).
+3. Verify required recipes for required resource types.
+4. Deploy the same application model with environment-specific parameters.
+5. Validate graph, resources, and runtime reachability.
+
 ### Stage 2 - Deploy the app to the first environment
+
+Use the parity checklist explicitly for the first environment.
+
+#### Step 1 - Target workspace/group/environment (first environment)
+
+```bash
+rad workspace switch ws-local-prod
+rad group switch rg-trading
+rad environment show env-local-prod
+```
+
+#### Step 2 - Set/verify credentials and RBAC (only where needed)
+
+For this local-first deployment path, no additional Azure credential or RBAC setup is required before deployment.
+
+#### Step 3 - Verify required recipes for required resource types
+
+```bash
+rad recipe list --environment env-local-prod
+```
 
 First make sure the rad resource types are bundled:
 
@@ -125,6 +155,8 @@ rad bicep publish-extension --from-file resource-types/types.yaml --target types
 ```
 
 Use the same application file the team will later deploy elsewhere. The command below uses the sample group and environment names; substitute the team's names if Challenge 04 used different ones.
+
+#### Step 4 - Deploy the same app model with first-environment parameters
 
 **Bash:**
 
@@ -180,6 +212,8 @@ rad deploy radius/app.bicep `
     --parameters aiModel=qwen2.5-coder-7b-instruct
 ```
 
+#### Step 5 - Validate graph/resources/runtime
+
 Validate the app model and backing resources:
 
 ```bash
@@ -220,7 +254,11 @@ Open `http://localhost:3000` and sign in with the `authUsername` and `authPasswo
 
 ### Stage 3 - Confirm or prepare the second environment
 
+Apply the same parity checklist for the second environment. This stage covers Steps 1-3; Stage 4 continues with Steps 4-5.
+
 The second environment should already have a Kubernetes cluster and Radius control plane from Challenges 1 and 2. Challenge 4 should have given teams enough recipe knowledge to register the same required resource types in this environment.
+
+#### Step 1 - Target workspace/group/environment (second environment)
 
 Switch to the second workspace established in Challenge 2 and verify the Radius group exists:
 
@@ -236,7 +274,13 @@ rad group create rg-trading
 rad group switch rg-trading
 ```
 
-Register Azure credentials with the Radius control plane if the environment's recipes need Azure provider scope and credentials.
+```bash
+rad environment show env-azure-prod
+```
+
+#### Step 2 - Set/verify credentials and RBAC (only where needed)
+
+Register Azure credentials with the Radius control plane if the environment's recipes need Azure provider scope and credentials. The client ID can be found in the console output from earlier commands or by searching for {AKS_CLUSTER}-radius-app.
 
 Use the command variant that matches your identity model and Radius CLI version:
 
@@ -339,6 +383,8 @@ If teams see `(MissingSubscription) The request did not have a subscription...`,
 
 If teams see `Error: unknown flag: --client-id`, they likely ran `rad credential register azure` without `wi` or `sp`. In current CLI versions, `--client-id` is valid only under `azure wi` or `azure sp`.
 
+#### Step 3 - Verify required recipes for required resource types
+
 Ensure the second environment has equivalent recipe mappings. The database capability should still be `Radius.Resources/postgreSqlDatabases`; the recipe implementation differs per environment — a PostgreSQL container locally and Azure Database for PostgreSQL Flexible Server on AKS.
 
 ```bash
@@ -363,7 +409,11 @@ If a team asks why the second environment can use a different recipe or environm
 
 ---
 
-### Stage 4 - Deploy the same app to the second environment
+### Stage 4 - Continue parity checklist on second environment (deploy + validate)
+
+This stage completes Step 4 and Step 5 for the second environment.
+
+#### Step 4 - Deploy the same app model with second-environment parameters
 
 Run the same application file against the second workspace and environment. The file path remains `radius/app.bicep`.
 
@@ -420,13 +470,13 @@ The helper federates a managed identity to a Kubernetes service account in a spe
 **Bash:**
 
 ```bash
-rad environment show <environment-name> --output json | jq -r '.properties.compute.namespace'
+rad environment show env-azure-prod --output json | jq -r '.properties.compute.namespace'
 ```
 
 **PowerShell:**
 
 ```powershell
-(rad environment show <environment-name> --output json | ConvertFrom-Json).properties.compute.namespace
+(rad environment show env-azure-prod --output json | ConvertFrom-Json).properties.compute.namespace
 ```
 
 With the shipped `aks-env.bicep` defaults this namespace is `trading` (it matches the environment name in that sample); the Challenge 2 teaching path configures it as `env-azure-prod`. Use whatever your team configured for `<environment-namespace>` below. The service account name is the value the application model binds to — `default` unless the team changed `workloadIdentityServiceAccountName`.
@@ -576,6 +626,8 @@ rad deploy radius/app.bicep `
     --parameters aiProvider=local `
     --parameters aiModel=gpt-4o
 ```
+
+#### Step 5 - Validate graph/resources/runtime
 
 Validate the second deployment:
 
