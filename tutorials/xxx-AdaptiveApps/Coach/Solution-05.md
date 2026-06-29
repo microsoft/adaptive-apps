@@ -331,11 +331,8 @@ This is required for recipes such as `mqtt-azure-event-grid` to create Azure res
 **Bash:**
 
 ```bash
-export AZURE_SUBSCRIPTION=<subscription-id>
-export RESOURCE_GROUP=<azure-resource-group>
-
 # Use the same appId passed to `rad credential register azure wi --client-id ...`
-export RADIUS_APP_ID=<radius-workload-identity-appId>
+export RADIUS_APP_ID=$APP_ID
 export RADIUS_SP_OBJECT_ID=$(az ad sp show --id "$RADIUS_APP_ID" --query id -o tsv)
 
 # Prevent MissingSubscription by setting and passing subscription explicitly.
