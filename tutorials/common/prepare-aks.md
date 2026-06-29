@@ -16,6 +16,7 @@ export AZURE_SUBSCRIPTION=<your Azure subscrption id>
 export RESOURCE_GROUP=<Azure resource group>
 export AZURE_LOCATION=<Azure region, i.e. westus2>
 export AKS_CLUSTER=<AKS cluster name>
+export AKS_NODE_VM_SIZE=Standard_D2s_v5
 export RADIUS_WORKSPACE=aks-trading
 export RADIUS_GROUP=trading
 export RADIUS_ENVIRONMENT=trading
@@ -57,12 +58,20 @@ kubectl config get-contexts
     --resource-group $RESOURCE_GROUP \
     --name $AKS_CLUSTER \
     --node-count 2 \
+    --node-vm-size $AKS_NODE_VM_SIZE \
+    --node-osdisk-type Managed \
     --enable-addons monitoring \
     --generate-ssh-keys  \
     --enable-oidc-issuer \
     --enable-workload-identity
     ```
     > **NOTE:** If you want to reuse an existing AKS cluster, make sure OIDC issuer an Workload Idenity are enabled: `az aks update --resource-group <resource group name> --name <aks cluster name> --enable-oidc-issuer --enable-workload-identity`
+
+    > **Troubleshooting:** If cluster creation fails with `OverconstrainedAllocationRequest`, Azure could not allocate the requested node pool shape in that region. Keep `--node-osdisk-type Managed` to avoid ephemeral OS disk constraints, then retry with another available VM size such as `Standard_D4s_v5` or another nearby Azure region. If a failed cluster resource was partially created, delete it before retrying:
+    >
+    > ```bash
+    > az aks delete --resource-group $RESOURCE_GROUP --name $AKS_CLUSTER --yes
+    > ```
     
 
 4. Get AKS credential and merge to your `kubectl` config:
