@@ -300,10 +300,10 @@ else
         --scope "$ACR_ID" \
         --query "[].{role:roleDefinitionName,scope:scope}" -o table
 
-      export TENANTID=$(az account show --query tenantId -o tsv)
+      export TENANT_ID=$(az account show --query tenantId -o tsv)
       rad credential register azure wi \
         --client-id "$RADIUS_APP_ID" \
-        --tenant-id "$TENANTID"
+        --tenant-id "$TENANT_ID"
       rad credential show azure
 
       kubectl rollout restart deployment/bicep-de -n radius-system
@@ -414,14 +414,14 @@ The command must include the authentication mode (`sp` or `wi`):
 export RADIUS_APP_ID=$(az ad app list \
   --display-name "$RADIUS_APP_NAME" \
   --query "[0].appId" -o tsv)
-export TENANTID=$(az account show --query tenantId -o tsv)
+export TENANT_ID=$(az account show --query tenantId -o tsv)
 ```
 
 ```bash
 rad credential register azure sp \
   --client-id "$RADIUS_APP_ID" \
   --client-secret "<secret-value>" \
-  --tenant-id "$TENANTID"
+  --tenant-id "$TENANT_ID"
 ```
 
 For workload identity mode:
@@ -429,7 +429,7 @@ For workload identity mode:
 ```bash
 rad credential register azure wi \
   --client-id "$RADIUS_APP_ID" \
-  --tenant-id "$TENANTID"
+  --tenant-id "$TENANT_ID"
 ```
 
 ### C. Validate secret correctness before redeploy
@@ -440,7 +440,7 @@ Always validate the secret value directly with Azure first:
 az login --service-principal \
   -u "$RADIUS_APP_ID" \
   -p "<secret-value>" \
-  --tenant "$TENANTID"
+  --tenant "$TENANT_ID"
 ```
 
 If this fails with `AADSTS7000215`, the value is wrong (often secret ID copied instead of secret value, or truncated copy). Create a new secret in portal and copy the full **Value** field.
@@ -476,11 +476,11 @@ else
   if [ "$ACTIVE_CONTEXT" != "$KUBERNETES_CONTEXT" ]; then
     echo "Expected kubectl context ${KUBERNETES_CONTEXT}, but active context is ${ACTIVE_CONTEXT}. Switch to the target Radius workspace/context before refreshing credentials."
   else
-    export TENANTID=$(az account show --query tenantId -o tsv)
+    export TENANT_ID=$(az account show --query tenantId -o tsv)
 
     rad credential register azure wi \
       --client-id "$RADIUS_APP_ID" \
-      --tenant-id "$TENANTID"
+      --tenant-id "$TENANT_ID"
     rad credential show azure
 
     kubectl rollout restart deployment/bicep-de -n radius-system

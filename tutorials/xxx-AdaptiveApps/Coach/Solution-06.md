@@ -120,11 +120,11 @@ Coach framing: the boxes and arrows change at the identity-provider edge, not at
 ```bash
 rad workspace switch ws-local-prod
 rad group switch rg-trading
-rad environment show env-local-prod
+rad env show env-local-prod
 
 rad workspace switch ws-azure-prod
 rad group switch rg-trading
-rad environment show env-azure-prod
+rad env show env-azure-prod
 ```
 
 ### Stage 2 - Create an OIDC client in Keycloak
@@ -132,7 +132,11 @@ rad environment show env-azure-prod
 Open Keycloak and create the OIDC client the sample app will use:
 
 ```bash
-kubectl port-forward -n $NAMESPACE svc/$RELEASE-keycloak 8080:8080
+export PORTFOLIO=min
+export KEYCLOAK_RELEASE=$PORTFOLIO
+export KEYCLOAK_NAMESPACE=$PORTFOLIO
+
+kubectl port-forward -n "$KEYCLOAK_NAMESPACE" "svc/${KEYCLOAK_RELEASE}-keycloak" 8080:8080
 ```
 
 In another terminal, open <http://localhost:8080>, log in as `admin` / `admin`
@@ -153,7 +157,7 @@ Export the OIDC environment variables:
 ```bash
 export OIDC_CLIENT_ID=adaptive-apps
 export OIDC_CLIENT_SECRET=<paste-from-credentials-tab>
-export OIDC_ISSUER=http://$RELEASE-keycloak.$NAMESPACE.svc.cluster.local:8080/realms/master
+export OIDC_ISSUER=http://${KEYCLOAK_RELEASE}-keycloak.${KEYCLOAK_NAMESPACE}.svc.cluster.local:8080/realms/master
 export OIDC_AUTH_ENDPOINT=$OIDC_ISSUER/protocol/openid-connect/auth
 export OIDC_TOKEN_ENDPOINT=$OIDC_ISSUER/protocol/openid-connect/token
 export OIDC_USERINFO_ENDPOINT=$OIDC_ISSUER/protocol/openid-connect/userinfo

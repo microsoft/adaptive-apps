@@ -403,9 +403,9 @@ Then register the recipe:
 **Bash:**
 
 ```bash
-export ENVIRONMENT_NAME="env-local-prod"  # Use your actual environment name
+export RADIUS_ENVIRONMENT="env-local-prod"
 rad recipe register default \
-    --environment "$ENVIRONMENT_NAME" \
+    --environment "$RADIUS_ENVIRONMENT" \
     --resource-type Radius.Resources/sqlDatabases \
     --template-kind bicep \
     --template-path ${ACR_NAME}.azurecr.io/recipes/sql-server:1.0.0
@@ -414,9 +414,9 @@ rad recipe register default \
 **PowerShell:**
 
 ```powershell
-$ENVIRONMENT_NAME = "env-local-prod"  # Use your actual environment name
+$RADIUS_ENVIRONMENT = "env-local-prod"
 rad recipe register default `
-    --environment "$ENVIRONMENT_NAME" `
+    --environment "$RADIUS_ENVIRONMENT" `
     --resource-type Radius.Resources/sqlDatabases `
     --template-kind bicep `
     --template-path "$($ACR_NAME).azurecr.io/recipes/sql-server:1.0.0"
@@ -427,7 +427,7 @@ Verify in the dashboard: navigate to **Environments** → select your environmen
 Verify via CLI:
 
 ```bash
-rad recipe list --environment "$ENVIRONMENT_NAME"
+rad recipe list --environment "$RADIUS_ENVIRONMENT"
 ```
 
 #### What to discuss

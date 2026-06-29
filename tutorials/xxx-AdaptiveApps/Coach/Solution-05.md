@@ -428,16 +428,19 @@ First get the AKS OIDC issuer URL and tenant ID:
 
 If you have completed the previous solutions these are stored in variables, check if populated:
 ```bash
+echo $AKS_CLUSTER
 echo $AKS_OIDC_ISSUER
+echo $RESOURCE_GROUP
 echo $TENANT_ID
 ```
 
 If exist skip the following step:
 
 ```bash
+export AKS_CLUSTER=aks-azure-prod
 export AKS_OIDC_ISSUER=$(az aks show \
-    --name <aks-cluster-name> \
-    --resource-group <aks-resource-group> \
+    --name "$AKS_CLUSTER" \
+    --resource-group "$RESOURCE_GROUP" \
     --query oidcIssuerProfile.issuerUrl \
     --output tsv)
 
@@ -448,16 +451,19 @@ export TENANT_ID=$(az account show --query tenantId --output tsv)
 
 If you have completed the previous solutions these are stored in variables, check if populated:
 ```powershell
+echo $env:AKS_CLUSTER
 echo $env:AKS_OIDC_ISSUER
+echo $env:RESOURCE_GROUP
 echo $env:TENANT_ID
 ```
 
 If exist skip the following step:
 
 ```powershell
+$AKS_CLUSTER = "aks-azure-prod"
 $AKS_OIDC_ISSUER = az aks show `
-    --name <aks-cluster-name> `
-    --resource-group <aks-resource-group> `
+    --name "$AKS_CLUSTER" `
+    --resource-group "$RESOURCE_GROUP" `
     --query oidcIssuerProfile.issuerUrl `
     --output tsv
 
@@ -640,8 +646,8 @@ If the deployment is on AKS, also verify the Azure resources were created in the
 
 ```bash
 az resource list \
-    --subscription <subscription-id> \
-    --resource-group <resource-group> \
+    --subscription "$AZURE_SUBSCRIPTION" \
+    --resource-group "$RESOURCE_GROUP" \
     --output table
 ```
 

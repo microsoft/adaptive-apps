@@ -61,8 +61,8 @@ Then run **one** install command for the target platform. If the release already
 For AKS, use the managed Istio override form from getting-started. This applies to both AKS clusters when using the optional two-AKS fallback, including the cluster that represents the logical local environment.
 
 ```bash
-export AKS_CONTEXT="<aks-context-name>"
-kubectl config use-context "$AKS_CONTEXT"
+export KUBERNETES_CONTEXT="<aks-context-name>"
+kubectl config use-context "$KUBERNETES_CONTEXT"
 kubectl config current-context
 
 helm upgrade --install $RELEASE charts/adaptive-apps \
@@ -75,8 +75,8 @@ helm upgrade --install $RELEASE charts/adaptive-apps \
 For non-AKS local clusters, use the command below and make sure you are in the right Kubernetes context:
 
 ```bash
-export LOCAL_CONTEXT="<local-kubernetes-context>"
-kubectl config use-context "$LOCAL_CONTEXT"
+export KUBERNETES_CONTEXT="<local-kubernetes-context>"
+kubectl config use-context "$KUBERNETES_CONTEXT"
 kubectl config current-context
 
 helm upgrade --install $RELEASE charts/adaptive-apps \
