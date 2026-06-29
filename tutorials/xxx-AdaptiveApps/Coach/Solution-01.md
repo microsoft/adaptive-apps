@@ -51,7 +51,10 @@ Choose one portfolio (`min`, `core`, `ent`, `min-ai`, `core-ai`, or `ent-ai`) an
 ```bash
 cd "$(git rev-parse --show-toplevel)"
 
-export PORTFOLIO=min
+# For env-azure-prod use core.
+# For env-local-prod with in-cluster AI, use core-ai.
+# Other options: min, ent, min-ai, ent-ai.
+export PORTFOLIO=core
 export RELEASE=$PORTFOLIO
 export NAMESPACE=$PORTFOLIO
 ```

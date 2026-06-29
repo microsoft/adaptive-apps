@@ -124,9 +124,9 @@ Use the same teaching sequence in each environment, with only environment-specif
 4. Deploy the same application model with environment-specific parameters.
 5. Validate graph, resources, and runtime reachability.
 
-### Stage 2 - Deploy the app to the first environment
+### Stage 2 - Deploy the app to the first environment (ws-local-prod)
 
-Use the parity checklist explicitly for the first environment.
+Use the parity checklist explicitly for the environment ws-local-prod, for ws-azure-prod go to the second environment,
 
 #### Step 1 - Target workspace/group/environment (first environment)
 
@@ -272,9 +272,9 @@ Open `http://localhost:3000` and sign in with the `authUsername` and `authPasswo
 
 ---
 
-### Stage 3 - Confirm or prepare the second environment
+### Stage 3 - Confirm or prepare the second environment (ws-azure-prod)
 
-Apply the same parity checklist for the second environment. This stage covers Steps 1-3; Stage 4 continues with Steps 4-5.
+Apply the same parity checklist for the second environment (ws-azure-prod). This stage covers Steps 1-3; Stage 4 continues with Steps 4-5.
 
 The second environment should already have a Kubernetes cluster and Radius control plane from Challenges 1 and 2. Challenge 4 should have given teams enough recipe knowledge to register the same required resource types in this environment.
 
@@ -307,16 +307,21 @@ Use the command variant that matches your identity model and Radius CLI version:
 **Bash:**
 
 ```bash
+export RADIUS_APP_ID=<appId>
+export TENANTID=<tenantId>
+```
+
+```bash
 # Workload identity (recommended for AKS). No client secret required.
 rad credential register azure wi \
-    --client-id <appId> \
-    --tenant-id <tenant>
+    --client-id $RADIUS_APP_ID \
+    --tenant-id TENANTID
 
 # Service principal (use only when workload identity is unavailable).
 rad credential register azure sp \
-    --client-id <appId> \
+    --client-id $RADIUS_APP_ID \
     --client-secret <password> \
-    --tenant-id <tenant>
+    --tenant-id $TENANTID
 ```
 
 **PowerShell:**
@@ -324,14 +329,14 @@ rad credential register azure sp \
 ```powershell
 # Workload identity (recommended for AKS). No client secret required.
 rad credential register azure wi `
-    --client-id <appId> `
-    --tenant-id <tenant>
+    --client-id $RADIUS_APP_ID `
+    --tenant-id $TENANTID
 
 # Service principal (use only when workload identity is unavailable).
 rad credential register azure sp `
-    --client-id <appId> `
+    --client-id $RADIUS_APP_ID `
     --client-secret <password> `
-    --tenant-id <tenant>
+    --tenant-id $TENANTID
 ```
 
 Verify registration:
@@ -346,11 +351,7 @@ This is required for recipes such as `mqtt-azure-event-grid` to create Azure res
 **Bash:**
 
 ```bash
-export AZURE_SUBSCRIPTION=<subscription-id>
-export RESOURCE_GROUP=<azure-resource-group>
-
 # Use the same appId passed to `rad credential register azure wi --client-id ...`
-export RADIUS_APP_ID=<radius-workload-identity-appId>
 export RADIUS_SP_OBJECT_ID=$(az ad sp show --id "$RADIUS_APP_ID" --query id -o tsv)
 
 # Prevent MissingSubscription by setting and passing subscription explicitly.
