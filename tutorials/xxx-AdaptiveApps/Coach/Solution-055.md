@@ -281,6 +281,17 @@ az role assignment list \
   --scope "$ACR_ID" \
   --query "[].{role:roleDefinitionName,scope:scope}" -o table
 
+# Make sure the active Radius workspace is using this identity for Azure-backed recipe resolution.
+export TENANTID=$(az account show --query tenantId -o tsv)
+rad credential register azure wi \
+  --client-id "$RADIUS_APP_ID" \
+  --tenant-id "$TENANTID"
+rad credential show azure
+
+# Force the Bicep deployment engine to reload the credential before resolving the private ACR module.
+kubectl rollout restart deployment/bicep-de -n radius-system
+kubectl rollout status deployment/bicep-de -n radius-system --timeout=2m
+
 # Now retry recipe show (wait 2-5 minutes if this is the first attempt)
 rad recipe show default \
   --environment env-azure-prod \
@@ -431,11 +442,19 @@ Expected payload shape:
 ### E. Force control-plane refresh after credential update
 
 ```bash
+rad workspace switch "$RADIUS_WORKSPACE"
+export TENANTID=$(az account show --query tenantId -o tsv)
+
+rad credential register azure wi \
+  --client-id "$RADIUS_APP_ID" \
+  --tenant-id "$TENANTID"
+rad credential show azure
+
 kubectl rollout restart deployment/bicep-de -n radius-system
 kubectl rollout status deployment/bicep-de -n radius-system --timeout=2m
 ```
 
-Then retry deployment.
+Then retry `rad recipe show` or deployment. If `rad recipe show` still returns `RecipeLanguageFailure` with ACR `401`, confirm both the credential and ACR RBAC are using the same app ID/object ID before escalating.
 
 ### F. Verify ACR RBAC at correct scope
 
