@@ -63,7 +63,7 @@ rad group switch rg-trading
 ### 2.3 Create environment
 
 ```bash
-rad env create env-local-prod --group rg-trading --namespace prod
+rad env create env-local-prod --group rg-trading --kubernetes-namespace prod
 rad env switch env-local-prod
 ```
 

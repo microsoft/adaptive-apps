@@ -79,7 +79,7 @@ rad group switch "$RADIUS_GROUP"
 ### 2.3 Create environment
 
 ```bash
-rad env create "$RADIUS_ENVIRONMENT" --group "$RADIUS_GROUP" --namespace "$RADIUS_NAMESPACE"
+rad env create "$RADIUS_ENVIRONMENT" --group "$RADIUS_GROUP" --kubernetes-namespace "$RADIUS_NAMESPACE"
 rad env switch "$RADIUS_ENVIRONMENT"
 ```
 

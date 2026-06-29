@@ -60,7 +60,7 @@ rad group switch rg-trading
 ### 2.3 Create environment
 
 ```bash
-rad env create env-local-prod --group rg-trading --namespace prod
+rad env create env-local-prod --group rg-trading --kubernetes-namespace prod
 rad env switch env-local-prod
 ```
 
@@ -93,10 +93,10 @@ Then open **http://localhost:7007** in a browser and verify:
 ## Notes
 
 - k3s is lightweight and ideal for development/testing. For production-grade testing, use AKS or Arc-enabled clusters.
-- All workloads deploy into the `prod` Kubernetes namespace by default. Change by modifying `--namespace prod` above.
+- All workloads deploy into the `prod` Kubernetes namespace by default. Change by modifying `--kubernetes-namespace prod` above.
 - If you need multiple environments on the same k3s cluster (e.g., prod and nonprod), use different namespaces:
   ```bash
-  rad env create env-local-nonprod --group rg-trading --namespace nonprod
+  rad env create env-local-nonprod --group rg-trading --kubernetes-namespace nonprod
   ```
 
 ## Next steps
