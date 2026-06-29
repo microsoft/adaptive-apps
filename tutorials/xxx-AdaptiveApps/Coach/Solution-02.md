@@ -246,6 +246,16 @@ kubectl logs <pod-name> -n radius-system
 
 Common issues: resource constraints, image pull failures, incorrect cluster configuration.
 
+### Radius Helm chart download denied by GHCR
+
+If `rad install kubernetes` fails before installing anything and shows `response status code 403: denied` for `ghcr.io`, Helm may be using stale GitHub Container Registry credentials from the local machine. Clear them and retry the same install command:
+
+```bash
+helm registry logout ghcr.io || true
+docker logout ghcr.io || true
+rad install kubernetes --set rp.publicEndpointOverride=localhost:8081
+```
+
 ### Workspace or environment commands failing
 
 Ensure you are using the correct `kubectl` context:
