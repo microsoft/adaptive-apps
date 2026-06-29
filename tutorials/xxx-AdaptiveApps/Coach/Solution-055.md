@@ -35,6 +35,7 @@ export ACR_NAME="azureazureacr1"                    # Your team's ACR name
 export AKS_CLUSTER="AKSCLUSTERAdaptiveAppsAzure1"   # Your AKS cluster name
 export RADIUS_WORKSPACE="ws-azure-prod"             # Your Radius workspace name
 export RADIUS_GROUP="rg-trading"                    # Your Radius group name
+export RADIUS_TEST_GROUP="rg-trading-psql"          # Fresh group to force reprovision with new recipe
 export RESOURCE_GROUP="adaptive-apps-azure1"        # Your Azure resource group
 export AZURE_SUBSCRIPTION="8b5cfe5f-9d86-49f5-a9bf-d87f40f58a63"  # Your subscription ID
 ```
@@ -188,12 +189,13 @@ Switch to the Azure workspace and register the recipe for PostgreSQL only in tha
 
 ```bash
 rad workspace switch "$RADIUS_WORKSPACE"
+rad group switch "$RADIUS_GROUP"
 
 rad recipe register default \
   --environment env-azure-prod \
   --resource-type Radius.Resources/postgreSqlDatabases \
   --template-kind bicep \
-  --template-path "${ACR_NAME}.azurecr.io/recipes/postgres-azure-flex:solution-055"
+  --template-path "$ACR_NAME.azurecr.io/recipes/postgres-azure-flex:solution-055"
 ```
 
 > Replace `${ACR_NAME}` with your actual ACR name (e.g., `azureazureacr1`)
@@ -206,21 +208,35 @@ rad recipe show default \
   --resource-type Radius.Resources/postgreSqlDatabases
 ```
 
+Confirm that `templatePath` is exactly:
+
+```text
+${ACR_NAME}.azurecr.io/recipes/postgres-azure-flex:solution-055
+```
+
 ---
 
 ## Stage 4 - Redeploy App to env-azure-prod
 
-Redeploy app without changing `radius/app.bicep`:
+Deploy into a fresh Radius group so existing resources do not mask the recipe change.
+
+```bash
+rad group switch "$RADIUS_TEST_GROUP"
+```
+
+Then deploy app without changing `radius/app.bicep`:
 
 ```bash
 rad deploy radius/app.bicep \
-  --group "$RADIUS_GROUP" \
+  --group "$RADIUS_TEST_GROUP" \
   --environment env-azure-prod \
   --parameters imageRegistry=ghcr.io/microsoft/adaptive-apps \
   --parameters imageTag=latest \
   --parameters authUsername=admin \
   --parameters authPassword=<your-password>
 ```
+
+Why this matters: recipe registration affects new provisioning. Reusing an existing app/group can keep previously provisioned resources and make it look like the override did not work.
 
 If your environment requires workload-identity params, pass them exactly as in Solution-05.
 
@@ -237,6 +253,7 @@ Expected result characteristics:
 - `provisioningState` is `Succeeded`.
 - `properties.host` is an Azure PostgreSQL FQDN.
 - `properties.port` is `5432`.
+- `properties.host` does not end with a Kubernetes cluster-local DNS suffix.
 
 Also validate in Azure:
 
