@@ -49,22 +49,18 @@ export PORTFOLIO=core
 export RELEASE=$PORTFOLIO
 export NAMESPACE=$PORTFOLIO
 ```
-```bash
-helm install $RELEASE charts/adaptive-apps \
-  -f charts/adaptive-apps/profiles/$PORTFOLIO.yaml \
-  -n $NAMESPACE --create-namespace
-```
 
-For AKS, use the managed Istio override form from getting-started:
-!!! and make sure you are in the right AKS context
-!!! if you are using AKS on Azure to virtualize the LOCAL environment use this variant also. !!!
+For AKS on AZURE: use the managed Istio override form from getting-started:
 
 ```bash
+#check the AKS context first
 kubectl config current-context
 
+# set the AKS context if not poiting to the right cluster:
 kubectl config use-context $AKS_CLUSTER$
+```
 
-
+```bash
 helm install $RELEASE charts/adaptive-apps \
   -f charts/adaptive-apps/profiles/$PORTFOLIO.yaml \
   --set features.istio.install=false \
@@ -72,13 +68,9 @@ helm install $RELEASE charts/adaptive-apps \
   -n $NAMESPACE --create-namespace
 ```
 
-For LOCAL, use the command below and make sure you are in the right AKS context
+For any other environment (non AKS on Azure) use: 
 
 ```bash
-kubectl config current-context
-
-kubectl config use-context $AKS_CLUSTER$
-
 helm install $RELEASE charts/adaptive-apps \
   -f charts/adaptive-apps/profiles/$PORTFOLIO.yaml \
   -n $NAMESPACE --create-namespace
