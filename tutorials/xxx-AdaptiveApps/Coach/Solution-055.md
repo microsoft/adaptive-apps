@@ -28,19 +28,30 @@ This preserves the current default behavior for local environments while making 
 
 ## Setup Parameters
 
-Before starting, set these environment variables in your terminal:
+Before starting, set these environment variables in your terminal. Replace the placeholder values with the environment your team prepared in earlier challenges.
 
 ```bash
-export ACR_NAME="azureazureacr1"                    # Your team's ACR name
-export AKS_CLUSTER="AKSCLUSTERAdaptiveAppsAzure1"   # Your AKS cluster name
-export RADIUS_WORKSPACE="ws-azure-prod"             # Your Radius workspace name
-export RADIUS_GROUP="rg-trading"                    # Your Radius group name
-export RADIUS_TEST_GROUP="rg-trading-psql"          # Fresh group to force reprovision with new recipe
-export RESOURCE_GROUP="adaptive-apps-azure1"        # Your Azure resource group
-export AZURE_SUBSCRIPTION="8b5cfe5f-9d86-49f5-a9bf-d87f40f58a63"  # Your subscription ID
+export ACR_NAME="<your-team-acr-name>"
+export AKS_CLUSTER="<your-aks-cluster-name>"
+export RADIUS_WORKSPACE="ws-azure-prod"
+export RADIUS_GROUP="rg-trading"
+export RADIUS_TEST_GROUP="rg-trading-psql"
+export RESOURCE_GROUP="<your-azure-resource-group>"
+export AZURE_SUBSCRIPTION="<your-subscription-id>"
 ```
 
 These parameters are used throughout the guide. Adjust them to match your environment.
+
+`ACR_NAME` is the Azure Container Registry used as the team's private OCI registry for recipe publishing. It is either:
+
+- the ACR created during Azure Local preparation, or
+- the ACR the team created in Challenge 04 before publishing recipe Bicep modules.
+
+For AKS-only teams, Challenge 01 may not have created an ACR. If you do not know the registry name, list registries in the resource group or create one by following the ACR setup step in [Solution-04.md](./Solution-04.md):
+
+```bash
+az acr list --resource-group "$RESOURCE_GROUP" --query "[].name" -o table
+```
 
 ---
 
@@ -176,8 +187,10 @@ Use a unique tag so this trial does not disturb shared `latest` tags. Publish to
 ### Set ACR name parameter
 
 ```bash
-export ACR_NAME="azureazureacr1"  # Replace with your ACR name
+export ACR_NAME="<your-team-acr-name>"
 ```
+
+Use the same ACR that was created or selected for recipe publishing in Challenge 04.
 
 ### Authenticate to ACR (Docker-free method)
 
@@ -231,7 +244,7 @@ rad recipe register default \
   --template-path "$ACR_NAME.azurecr.io/recipes/postgres-azure-flex:solution-055"
 ```
 
-> Replace `${ACR_NAME}` with your actual ACR name (e.g., `azureazureacr1`)
+> Replace `${ACR_NAME}` with your actual team ACR name.
 
 Validate:
 
