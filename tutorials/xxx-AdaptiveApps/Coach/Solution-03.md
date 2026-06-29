@@ -51,8 +51,15 @@ This step teaches teams to define a resource type schema by hand, so they unders
 
 #### Open the dashboard and navigate to Resource Types
 
+Choose the Radius workspace for the control plane you want to update. In the optional two-AKS path, repeat this challenge once for `ws-local-prod` and once for `ws-azure-prod`.
+
 ```bash
-rad workspace switch ws-azure-prod
+export RADIUS_WORKSPACE=ws-local-prod
+rad workspace switch "$RADIUS_WORKSPACE"
+
+kubectl config current-context
+kubectl get nodes
+
 kubectl port-forward svc/dashboard -n radius-system 7007:80
 ```
 
@@ -139,10 +146,33 @@ The repository ships a `types.yaml` file that defines all the portable resource 
 #### Import
 
 ```bash
+export RADIUS_WORKSPACE=ws-local-prod
+rad workspace switch "$RADIUS_WORKSPACE"
+
+kubectl config current-context
+kubectl get nodes
+
 rad resource-type create -f radius/resource-types/types.yaml
 ```
 
 > **Federated / optional two-cluster note:** Resource types are stored in the active Radius control plane. If the team has separate workspaces for `ws-local-prod` and `ws-azure-prod` (including the optional two-AKS workshop fallback), repeat this import in each workspace before moving on to recipes.
+>
+> For the Azure workspace, set `RADIUS_WORKSPACE=ws-azure-prod` instead.
+>
+> If `rad resource-type create` fails with `no such host`, the active `rad` workspace points at a stale or deleted Kubernetes API server. Re-fetch the AKS credentials for the intended cluster, switch to that context, and recreate the workspace before retrying:
+>
+> ```bash
+> export RESOURCE_GROUP=rg-swe-trading
+> export AKS_CLUSTER=aks-local-prod
+> export RADIUS_WORKSPACE=ws-local-prod
+>
+> az aks get-credentials --resource-group "$RESOURCE_GROUP" --name "$AKS_CLUSTER" --overwrite-existing
+> kubectl config use-context "$AKS_CLUSTER"
+> kubectl get nodes
+>
+> rad workspace create kubernetes "$RADIUS_WORKSPACE" --context "$(kubectl config current-context)" --force
+> rad workspace switch "$RADIUS_WORKSPACE"
+> ```
 
 This registers the following types under the `Radius.Resources` namespace:
 

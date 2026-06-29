@@ -291,6 +291,21 @@ Switch contexts as needed:
 kubectl config use-context <context-name>
 ```
 
+If a `rad` command fails with `dial tcp: lookup ...azmk8s.io: no such host`, the workspace usually points at a stale AKS API server from a deleted or recreated cluster. Re-fetch credentials and recreate the workspace against the current context:
+
+```bash
+export RESOURCE_GROUP=rg-swe-trading
+export AKS_CLUSTER=aks-local-prod
+export RADIUS_WORKSPACE=ws-local-prod
+
+az aks get-credentials --resource-group "$RESOURCE_GROUP" --name "$AKS_CLUSTER" --overwrite-existing
+kubectl config use-context "$AKS_CLUSTER"
+kubectl get nodes
+
+rad workspace create kubernetes "$RADIUS_WORKSPACE" --context "$(kubectl config current-context)" --force
+rad workspace switch "$RADIUS_WORKSPACE"
+```
+
 ### Environment or resource group not visible after creation
 
 Ensure you have switched to the correct workspace and environment:
