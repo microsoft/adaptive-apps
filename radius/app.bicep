@@ -434,7 +434,7 @@ resource aiAgentLocal 'Applications.Core/containers@2023-10-01-preview' = if (is
   }
 }
 
-resource aiAgentExternal 'Applications.Core/containers@2023-10-01-preview' = if (!isLocalAi) {
+resource aiAgentExternal 'Applications.Core/containers@2023-10-01-preview' = if (hasAi && !isLocalAi) {
   name: 'ai-agent'
   properties: {
     application: tradingApp.id
