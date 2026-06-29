@@ -46,7 +46,7 @@ For Azure Local workshop steps and command flow, use [`common/prepare-azure-loca
 
 Before moving to Challenge 02, ensure the portfolio baseline is installed with Helm. This mirrors the **Install the portfolio chart** step in [`tutorials/getting-started/README.md`](../../getting-started/README.md), but is included here so coaches do not need to jump between guides.
 
-Choose one portfolio (`min`, `core`, `ent`, `min-ai`, `core-ai`, or `ent-ai`), then run the install commands from the repository root:
+Choose one portfolio (`min`, `core`, `ent`, `min-ai`, `core-ai`, or `ent-ai`) and set the shared variables from the repository root:
 
 ```bash
 cd "$(git rev-parse --show-toplevel)"
@@ -54,11 +54,9 @@ cd "$(git rev-parse --show-toplevel)"
 export PORTFOLIO=min
 export RELEASE=$PORTFOLIO
 export NAMESPACE=$PORTFOLIO
-
-helm install $RELEASE charts/adaptive-apps \
-  -f charts/adaptive-apps/profiles/$PORTFOLIO.yaml \
-  -n $NAMESPACE --create-namespace
 ```
+
+Then run **one** install command for the target platform. If the release already exists, `helm upgrade --install` updates it instead of failing with `cannot reuse a name that is still in use`.
 
 For AKS, use the managed Istio override form from getting-started. This applies to both AKS clusters when using the optional two-AKS fallback, including the cluster that represents the logical local environment.
 
@@ -67,7 +65,7 @@ export AKS_CONTEXT="<aks-context-name>"
 kubectl config use-context "$AKS_CONTEXT"
 kubectl config current-context
 
-helm install $RELEASE charts/adaptive-apps \
+helm upgrade --install $RELEASE charts/adaptive-apps \
   -f charts/adaptive-apps/profiles/$PORTFOLIO.yaml \
   --set features.istio.install=false \
   --set istio.namespace=aks-istio-system \
@@ -81,7 +79,7 @@ export LOCAL_CONTEXT="<local-kubernetes-context>"
 kubectl config use-context "$LOCAL_CONTEXT"
 kubectl config current-context
 
-helm install $RELEASE charts/adaptive-apps \
+helm upgrade --install $RELEASE charts/adaptive-apps \
   -f charts/adaptive-apps/profiles/$PORTFOLIO.yaml \
   -n $NAMESPACE --create-namespace
 ```
