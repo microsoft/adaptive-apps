@@ -62,7 +62,7 @@ Recipe Bicep file  →  calls AVM module  →  provisions Azure resource
      (thin)                (thick)               (actual infra)
 ```
 
-The recipe owns: parameter shaping, `context` unpacking, output mapping to Radius `result`.  
+The recipe owns: parameter shaping, `context` unpacking, output mapping to Radius `result`.
 AVM owns: security defaults, naming, RBAC, diagnostics, compliance tags.
 
 Browse available AVM modules at **https://aka.ms/avm**.
@@ -98,7 +98,16 @@ This step teaches teams to write a recipe by hand, so they understand the `conte
 
 #### Open the dashboard and navigate to Recipes
 
+**Bash:**
+
 ```bash
+rad workspace switch ws-azure-prod
+kubectl port-forward svc/dashboard -n radius-system 7007:80
+```
+
+**PowerShell:**
+
+```powershell
 rad workspace switch ws-azure-prod
 kubectl port-forward svc/dashboard -n radius-system 7007:80
 ```
@@ -195,21 +204,102 @@ output result object = {
 
 #### Publish the recipe
 
-Publish the recipe Bicep to the team's ACR (OCI registry). Challenge 01 does not create an ACR automatically; use an existing registry or create one before this step. ACR names must be globally unique and contain only lowercase letters and numbers:
+Publish the recipe Bicep to the team's ACR (OCI registry).
+
+**For Azure Local teams:** The ACR was created during the [prepareRadius-azure-local.md](../../common/prepareRadius-azure-local.md) preparation phase. Retrieve its name from your environment and proceed to the publish command below.
+
+**For AKS teams:** An ACR may not have been created during preparation. If needed, create one first (ACR names must be globally unique and contain only lowercase letters and numbers):
+
+**Bash (if creating ACR):**
 
 ```bash
+export RESOURCE_GROUP="<your-resource-group>"
 export ACR_NAME=<globally-unique-acr-name>
 
 az acr create \
     --name "$ACR_NAME" \
     --resource-group "$RESOURCE_GROUP" \
     --sku Basic
+```
 
+**PowerShell (if creating ACR):**
+
+```powershell
+$RESOURCE_GROUP = "<your-resource-group>"
+$ACR_NAME = "<globally-unique-acr-name>"
+
+az acr create `
+    --name "$ACR_NAME" `
+    --resource-group "$RESOURCE_GROUP" `
+    --sku Basic
+```
+
+**Then authenticate to ACR (choose based on Docker availability):**
+
+**Option A: If Docker is installed (Bash & PowerShell):**
+
+```bash
 az acr login -n "$ACR_NAME"
+```
 
+```powershell
+az acr login -n "$ACR_NAME"
+```
+
+**Option B: If Docker is NOT installed (Docker-free authentication):**
+
+The `--expose-token` flag returns an ACR refresh token. Use it as a password with the fixed username `00000000-0000-0000-0000-000000000000`:
+
+**Bash:**
+
+```bash
+TOKEN=$(az acr login -n "$ACR_NAME" --expose-token -o tsv --query accessToken)
+mkdir -p ~/.docker
+AUTH=$(printf '00000000-0000-0000-0000-000000000000:%s' "$TOKEN" | base64 | tr -d '\n')
+cat > ~/.docker/config.json <<EOF
+{
+  "auths": {
+    "${ACR_NAME}.azurecr.io": {
+      "auth": "${AUTH}"
+    }
+  }
+}
+EOF
+```
+
+**PowerShell:**
+
+```powershell
+$TOKEN = az acr login -n "$ACR_NAME" --expose-token -o tsv --query accessToken
+$null = New-Item -ItemType Directory -Path "$env:USERPROFILE\.docker" -Force
+$Credentials = "00000000-0000-0000-0000-000000000000:$TOKEN"
+$AUTH = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($Credentials))
+$ConfigPath = "$env:USERPROFILE\.docker\config.json"
+@{
+    auths = @{
+        "$($ACR_NAME).azurecr.io" = @{
+            auth = $AUTH
+        }
+    }
+} | ConvertTo-Json | Set-Content $ConfigPath
+```
+
+**Then publish the recipe (same for both Bash and PowerShell):**
+
+**Bash:**
+
+```bash
 rad bicep publish \
   --file radius/recipes/sql-server/sql-server.bicep \
-    --target br:${ACR_NAME}.azurecr.io/recipes/sql-server:1.0.0
+  --target "br:${ACR_NAME}.azurecr.io/recipes/sql-server:1.0.0"
+```
+
+**PowerShell:**
+
+```powershell
+rad bicep publish `
+  --file radius/recipes/sql-server/sql-server.bicep `
+  --target "br:$($ACR_NAME).azurecr.io/recipes/sql-server:1.0.0"
 ```
 
 #### Troubleshooting publish command formatting
@@ -272,6 +362,8 @@ az acr login -n "$ACR_NAME"
 
 **Option B (Docker-free): write OCI auth config from an exposed token**
 
+The `--expose-token` flag returns an ACR refresh token. Use it as a password with the fixed username `00000000-0000-0000-0000-000000000000`:
+
 ```bash
 TOKEN=$(az acr login -n "$ACR_NAME" --expose-token -o tsv --query accessToken)
 mkdir -p ~/.docker
@@ -293,7 +385,7 @@ Also verify RBAC: the signed-in identity needs at least `AcrPush` on the target 
 
 #### Register the recipe
 
-Register the recipe against `{environment-name}` for the `sqlDatabases` type.
+Register the recipe for the `sqlDatabases` type in your target environment.
 
 If you are not sure which environment to target, list available workspaces and environments first:
 
@@ -302,22 +394,36 @@ rad workspace list
 rad env list
 ```
 
-Then run:
+Then register the recipe:
+
+**Bash:**
 
 ```bash
+export ENVIRONMENT_NAME="env-local-prod"  # Use your actual environment name
 rad recipe register default \
-    --environment {environment-name} \
+    --environment "$ENVIRONMENT_NAME" \
     --resource-type Radius.Resources/sqlDatabases \
     --template-kind bicep \
     --template-path ${ACR_NAME}.azurecr.io/recipes/sql-server:1.0.0
 ```
 
-Verify in the dashboard: navigate to **Environments** → `{environment-name}` → **Recipes** — the `Radius.Resources/sqlDatabases` entry should now appear with the template path.
+**PowerShell:**
+
+```powershell
+$ENVIRONMENT_NAME = "env-local-prod"  # Use your actual environment name
+rad recipe register default `
+    --environment "$ENVIRONMENT_NAME" `
+    --resource-type Radius.Resources/sqlDatabases `
+    --template-kind bicep `
+    --template-path "$($ACR_NAME).azurecr.io/recipes/sql-server:1.0.0"
+```
+
+Verify in the dashboard: navigate to **Environments** → select your environment → **Recipes** — the `Radius.Resources/sqlDatabases` entry should now appear with the template path.
 
 Verify via CLI:
 
 ```bash
-rad recipe list --environment {environment-name}
+rad recipe list --environment "$ENVIRONMENT_NAME"
 ```
 
 #### What to discuss
@@ -337,7 +443,15 @@ The repository ships two environment Bicep files that define environments *and* 
 
 #### Local / Azure Local environment (only when you local)
 
+**Bash:**
+
 ```bash
+rad deploy radius/local-env.bicep --group rg-trading --environment env-local-prod
+```
+
+**PowerShell:**
+
+```powershell
 rad deploy radius/local-env.bicep --group rg-trading --environment env-local-prod
 ```
 
@@ -355,12 +469,25 @@ This command deploys `local-env.bicep`, which creates the `env-local-prod` envir
 
 #### AKS / Azure environment (only for Azure)
 
+**Bash:**
+
 ```bash
 rad deploy radius/aks-env.bicep \
     --group rg-trading \
     --environment env-azure-prod \
     --parameters environmentName=env-azure-prod \
-    --parameters azureSubscriptionId=$AZURE_SUBSCRIPTION\
+    --parameters azureSubscriptionId=$AZURE_SUBSCRIPTION \
+    --parameters azureResourceGroup=$RESOURCE_GROUP
+```
+
+**PowerShell:**
+
+```powershell
+rad deploy radius/aks-env.bicep `
+    --group rg-trading `
+    --environment env-azure-prod `
+    --parameters environmentName=env-azure-prod `
+    --parameters azureSubscriptionId=$AZURE_SUBSCRIPTION `
     --parameters azureResourceGroup=$RESOURCE_GROUP
 ```
 
@@ -379,7 +506,15 @@ Note that `Radius.Resources/idProviders` has no Azure recipe — Keycloak runs i
 
 #### Verify in the dashboard
 
+**Bash:**
+
 ```bash
+kubectl port-forward svc/dashboard -n radius-system 7007:80
+```
+
+**PowerShell:**
+
+```powershell
 kubectl port-forward svc/dashboard -n radius-system 7007:80
 ```
 
@@ -387,7 +522,7 @@ Then open `http://localhost:7007` in a browser.
 
 Navigate to **Environments** → select the environment → **Recipes**. All registered recipe entries should appear. Click into any recipe to see the template path and kind.
 
-Verify via CLI:
+Verify via CLI (same for both bash and PowerShell):
 
 ```bash
 rad recipe list --environment env-azure-prod
