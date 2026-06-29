@@ -26,6 +26,23 @@ This preserves the current default behavior for local environments and existing 
 
 ---
 
+## Setup Parameters
+
+Before starting, set these environment variables in your terminal:
+
+```bash
+export ACR_NAME="azureazureacr1"                    # Your team's ACR name
+export AKS_CLUSTER="AKSCLUSTERAdaptiveAppsAzure1"   # Your AKS cluster name
+export RADIUS_WORKSPACE="ws-azure-prod"             # Your Radius workspace name
+export RADIUS_GROUP="rg-trading"                    # Your Radius group name
+export RESOURCE_GROUP="adaptive-apps-azure1"        # Your Azure resource group
+export AZURE_SUBSCRIPTION="8b5cfe5f-9d86-49f5-a9bf-d87f40f58a63"  # Your subscription ID
+```
+
+These parameters are used throughout the guide. Adjust them to match your environment.
+
+---
+
 ## Stage 1 - Add Azure PostgreSQL Recipe File
 
 Create a new file:
@@ -46,7 +63,8 @@ param user string = 'tradeadmin'
 
 @secure()
 @description('Administrator password.')
-param password string = '${uniqueString(context.resource.id)}Aa!1'
+#disable-next-line secure-parameter-default
+param password string = uniqueString(context.resource.id)
 
 @description('Azure region for PostgreSQL resources.')
 param location string = 'eastus'
@@ -127,13 +145,40 @@ Notes for coaches:
 
 ## Stage 2 - Publish the New Recipe (Unique Tag)
 
-Use a unique tag so this trial does not disturb shared `latest` tags.
+Use a unique tag so this trial does not disturb shared `latest` tags. Publish to your team's Azure Container Registry (ACR), not public registries.
+
+### Set ACR name parameter
+
+```bash
+export ACR_NAME="azureazureacr1"  # Replace with your ACR name
+```
+
+### Authenticate to ACR (Docker-free method)
+
+```bash
+export TOKEN=$(az acr login -n "$ACR_NAME" --expose-token -o tsv --query accessToken)
+mkdir -p ~/.docker
+export AUTH=$(printf '00000000-0000-0000-0000-000000000000:%s' "$TOKEN" | base64 | tr -d '\n')
+cat > ~/.docker/config.json <<EOF
+{
+  "auths": {
+    "${ACR_NAME}.azurecr.io": {
+      "auth": "${AUTH}"
+    }
+  }
+}
+EOF
+```
+
+### Publish to your ACR
 
 ```bash
 rad bicep publish \
   --file radius/recipes/postgres/azure-postgresql-flexible-server.bicep \
-  --target br:ghcr.io/microsoft/adaptive-apps/recipes/postgres-azure-flex:solution-055
+  --target "br:${ACR_NAME}.azurecr.io/recipes/postgres-azure-flex:solution-055"
 ```
+
+> **Note:** If `rad bicep publish` fails with "Forbidden: You don't have permission to push to ghcr.io", you attempted to push to a public registry. Use your team's ACR instead (steps above). Public Microsoft namespaces on ghcr.io are read-only for team members.
 
 ---
 
@@ -142,14 +187,16 @@ rad bicep publish \
 Switch to the Azure workspace and register the recipe for PostgreSQL only in that environment:
 
 ```bash
-rad workspace switch ws-azure-prod
+rad workspace switch "$RADIUS_WORKSPACE"
 
 rad recipe register default \
   --environment env-azure-prod \
   --resource-type Radius.Resources/postgreSqlDatabases \
   --template-kind bicep \
-  --template-path ghcr.io/microsoft/adaptive-apps/recipes/postgres-azure-flex:solution-055
+  --template-path "${ACR_NAME}.azurecr.io/recipes/postgres-azure-flex:solution-055"
 ```
+
+> Replace `${ACR_NAME}` with your actual ACR name (e.g., `azureazureacr1`)
 
 Validate:
 
@@ -167,7 +214,7 @@ Redeploy app without changing `radius/app.bicep`:
 
 ```bash
 rad deploy radius/app.bicep \
-  --group rg-trading \
+  --group "$RADIUS_GROUP" \
   --environment env-azure-prod \
   --parameters imageRegistry=ghcr.io/microsoft/adaptive-apps \
   --parameters imageTag=latest \
@@ -194,7 +241,7 @@ Expected result characteristics:
 Also validate in Azure:
 
 ```bash
-az postgres flexible-server list -g <azure-resource-group> -o table
+az postgres flexible-server list -g "$RESOURCE_GROUP" -o table
 ```
 
 ---
@@ -208,7 +255,7 @@ rad recipe register default \
   --environment env-azure-prod \
   --resource-type Radius.Resources/postgreSqlDatabases \
   --template-kind bicep \
-  --template-path ghcr.io/microsoft/adaptive-apps/recipes/postgres:latest
+  --template-path "${ACR_NAME}.azurecr.io/recipes/postgres:latest"
 ```
 
 Then redeploy the app.
