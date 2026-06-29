@@ -123,7 +123,10 @@ resource db 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2023-12-01-prev
 }
 
 output result object = {
-  resources: []
+  resources: [
+    pg.id
+    db.id
+  ]
   values: {
     host: pg.properties.fullyQualifiedDomainName
     port: 5432
@@ -141,6 +144,28 @@ Notes for coaches:
 
 - Keep output shape aligned with the `Radius.Resources/postgreSqlDatabases` contract.
 - The application model in `radius/app.bicep` should not require any changes.
+- Include created Azure resource IDs in `result.resources` so Radius can track lifecycle and teardown correctly.
+
+### Networking and policy tag (manual platform step)
+
+In many enterprise tenants, PostgreSQL Flexible Server with `publicNetworkAccess: Enabled` is blocked unless a policy-exception tag exists.
+
+Before deploying the Azure PostgreSQL recipe, ask the platform owner to apply the approved exception tag manually on the target scope (resource group or resource), for example:
+
+```bash
+az tag create \
+  --resource-id "/subscriptions/$AZURE_SUBSCRIPTION/resourceGroups/$RESOURCE_GROUP" \
+  --tags AllowPublicAccess=true
+```
+
+Then verify the tag:
+
+```bash
+az tag list --resource-id "/subscriptions/$AZURE_SUBSCRIPTION/resourceGroups/$RESOURCE_GROUP"
+```
+
+> Use your organization's required key/value instead of `AllowPublicAccess=true`.
+> This step is intentionally manual because governance policy ownership is platform/security controlled.
 
 ---
 
@@ -416,12 +441,12 @@ you may be hitting a private OCI registry credential propagation/resolver limita
 
 ---
 
-## Optional Follow-Up (After Validation)
+## Productized Baseline (Applied in this branch)
 
-Once validated by the team, you can productize this by:
+This branch applies the split-environment baseline directly:
 
-1. Adding the new recipe to `.github/workflows/publish-recipes.yml` with a stable tag.
-2. Updating `radius/aks-env.bicep` to point `postgreSqlDatabases` to that Azure tag.
-3. Keeping `radius/local-env.bicep` on the local container recipe.
+1. `.github/workflows/publish-recipes.yml` publishes the Azure PostgreSQL recipe with stable tag `recipes/postgres-azure-flex:latest`.
+2. `radius/aks-env.bicep` maps `Radius.Resources/postgreSqlDatabases` to `postgres-azure-flex:latest`.
+3. `radius/local-env.bicep` remains on `postgres:latest` for the local container implementation.
 
 This keeps local and Azure implementations intentionally different while preserving the same app model.
