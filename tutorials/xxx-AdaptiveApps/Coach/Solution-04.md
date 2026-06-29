@@ -114,7 +114,7 @@ kubectl port-forward svc/dashboard -n radius-system 7007:80
 
 Then open `http://localhost:7007` in a browser.
 
-> If your team used the sample AKS preparation values from [`prepare-aks.md`](../../common/prepare-aks.md), use that workspace and environment instead (for example `aks-trading` and `trading`).
+> If your team intentionally used different workspace or environment names, translate the commands consistently. The recommended Challenge 02 path uses `ws-local-prod` / `env-local-prod`, `ws-azure-prod` / `env-azure-prod`, and `rg-trading`.
 
 Navigate to **Environments** → `env-azure-prod` → **Recipes**. The list is empty — no recipes have been registered yet.
 
@@ -443,7 +443,7 @@ rad recipe list --environment "$ENVIRONMENT_NAME"
 
 The repository ships two environment Bicep files that define environments *and* register all recipes in a single deployment. This is the recommended pattern for a platform team: environment config and recipe registration are infrastructure-as-code, not manual CLI steps. To import the recipes the commands differ per environment type.
 
-> **Naming note:** These commands use the Challenge 2 teaching names — group `rg-trading` with environments `env-local-prod` and `env-azure-prod`. The shipped `aks-env.bicep` defaults its `environmentName` (and Kubernetes `namespace`) parameter to `trading`, so the AKS command passes `--parameters environmentName=env-azure-prod` to align the Radius environment with the teaching names. If your team instead followed the sample values in [`prepare-aks.md`](../../common/prepare-aks.md) (`RADIUS_GROUP=trading`, `RADIUS_WORKSPACE=aks-trading`, environment `trading`), use those names consistently in every command below instead.
+> **Naming note:** These commands use the Challenge 02 teaching names — group `rg-trading` with environments `env-local-prod` and `env-azure-prod`. The shipped `aks-env.bicep` defaults its `environmentName` and Kubernetes `namespace` parameters to `trading`, so the AKS command passes both as `env-azure-prod` to align the Radius environment and workload namespace with the rest of the guide.
 
 In the optional two-AKS workshop fallback, run `local-env.bicep` against the AKS cluster that represents the logical local/edge environment, then run `aks-env.bicep` against the Azure AKS cluster. The physical platform can be AKS in both cases; the teaching distinction is the Radius environment and recipe mapping.
 
@@ -482,6 +482,7 @@ rad deploy radius/aks-env.bicep \
     --group rg-trading \
     --environment env-azure-prod \
     --parameters environmentName=env-azure-prod \
+    --parameters namespace=env-azure-prod \
     --parameters azureSubscriptionId=$AZURE_SUBSCRIPTION \
     --parameters azureResourceGroup=$RESOURCE_GROUP
 ```
@@ -493,6 +494,7 @@ rad deploy radius/aks-env.bicep `
     --group rg-trading `
     --environment env-azure-prod `
     --parameters environmentName=env-azure-prod `
+    --parameters namespace=env-azure-prod `
     --parameters azureSubscriptionId=$AZURE_SUBSCRIPTION `
     --parameters azureResourceGroup=$RESOURCE_GROUP
 ```

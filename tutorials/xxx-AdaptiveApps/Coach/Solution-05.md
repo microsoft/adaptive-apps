@@ -78,17 +78,17 @@ The cleanest demo uses the workspaces established in Challenge 2: `ws-local-prod
 
 ### Stage 1 - Confirm the Challenge 04 end state
 
-Start by confirming that the team is really continuing from Challenge 04 rather than rebuilding it. They should be able to show the database recipe registration (`Radius.Resources/postgreSqlDatabases`) and explain the `context` and `result` contract. The example below is based on the "local" environment, replace when needed.
+Start by confirming that the team is really continuing from Challenge 04 rather than rebuilding it. They should be able to show the database recipe registration (`Radius.Resources/postgreSqlDatabases`) and explain the `context` and `result` contract. The example below uses the canonical local/edge logical environment names from Challenges 02-04.
 
 ```bash
 rad workspace switch ws-local-prod
 rad group switch rg-trading
 
-rad environment show env-local-prod
+rad env show env-local-prod
 rad recipe list --environment env-local-prod
 ```
 
-The exact names may differ if the team used the AKS preparation sample path (`aks-trading` / `trading`) or another agreed naming convention, but they should not be unknown at this point. The important checks are:
+If a team deliberately chose different names, have them translate every command consistently. The recommended path for this hack is `ws-local-prod` / `env-local-prod`, `ws-azure-prod` / `env-azure-prod`, and `rg-trading`.
 
 | Check | Expected outcome |
 |---|---|
@@ -126,7 +126,7 @@ Use the parity checklist explicitly for the first environment.
 ```bash
 rad workspace switch ws-local-prod
 rad group switch rg-trading
-rad environment show env-local-prod
+rad env show env-local-prod
 ```
 
 #### Step 2 - Set/verify credentials and RBAC (only where needed)
@@ -139,23 +139,21 @@ For this local-first deployment path, no additional Azure credential or RBAC set
 rad recipe list --environment env-local-prod
 ```
 
-First make sure the rad resource types are bundled:
+First make sure the Radius resource types have been imported into the active control plane:
 
 **Bash:**
 
 ```bash
-cd radius
-rad bicep publish-extension --from-file radius/resource-types/types.yaml --target types.tgz
+rad resource-type list
 ```
 
 **PowerShell:**
 
 ```powershell
-cd radius
-rad bicep publish-extension --from-file resource-types/types.yaml --target types.tgz
+rad resource-type list
 ```
 
-Use the same application file the team will later deploy elsewhere. The command below uses the sample group and environment names; substitute the team's names if Challenge 04 used different ones.
+Use the same application file the team will later deploy elsewhere. The command below uses the canonical group and environment names from the earlier challenges.
 
 #### Step 4 - Deploy the same app model with first-environment parameters
 
@@ -276,7 +274,7 @@ rad group switch rg-trading
 ```
 
 ```bash
-rad environment show env-azure-prod
+rad env show env-azure-prod
 ```
 
 #### Step 2 - Set/verify credentials and RBAC (only where needed)
@@ -389,7 +387,7 @@ If teams see `Error: unknown flag: --client-id`, they likely ran `rad credential
 Ensure the second environment has equivalent recipe mappings. The database capability should still be `Radius.Resources/postgreSqlDatabases`; the recipe implementation differs per environment — a PostgreSQL container locally and Azure Database for PostgreSQL Flexible Server on AKS.
 
 ```bash
-rad environment show env-azure-prod
+rad env show env-azure-prod
 rad recipe list --environment env-azure-prod
 ```
 
@@ -471,16 +469,16 @@ The helper federates a managed identity to a Kubernetes service account in a spe
 **Bash:**
 
 ```bash
-rad environment show env-azure-prod --output json | jq -r '.properties.compute.namespace'
+rad env show env-azure-prod --output json | jq -r '.properties.compute.namespace'
 ```
 
 **PowerShell:**
 
 ```powershell
-(rad environment show env-azure-prod --output json | ConvertFrom-Json).properties.compute.namespace
+(rad env show env-azure-prod --output json | ConvertFrom-Json).properties.compute.namespace
 ```
 
-With the shipped `aks-env.bicep` defaults this namespace is `trading` (it matches the environment name in that sample); the Challenge 2 teaching path configures it as `env-azure-prod`. Use whatever your team configured for `<environment-namespace>` below. The service account name is the value the application model binds to — `default` unless the team changed `workloadIdentityServiceAccountName`.
+The Challenge 02 teaching path configures this namespace as `env-azure-prod`. If a team intentionally changed the environment namespace, use the value returned by the command above instead. The service account name is the value the application model binds to — `default` unless the team changed `workloadIdentityServiceAccountName`.
 
 Then run the helper once for each workload:
 
@@ -492,7 +490,7 @@ Then run the helper once for each workload:
     $RESOURCE_GROUP \
     $AZURE_SUBSCRIPTION \
     "$AKS_OIDC_ISSUER" \
-    <environment-namespace> \
+    env-azure-prod \
     default
 
 ./tutorials/getting-started/assets/app-wi-setup.sh \
@@ -500,7 +498,7 @@ Then run the helper once for each workload:
     $RESOURCE_GROUP \
     $AZURE_SUBSCRIPTION \
     "$AKS_OIDC_ISSUER" \
-    <environment-namespace> \
+    env-azure-prod \
     default
 ```
 
@@ -512,7 +510,7 @@ Then run the helper once for each workload:
     $RESOURCE_GROUP `
     $AZURE_SUBSCRIPTION `
     "$AKS_OIDC_ISSUER" `
-    <environment-namespace> `
+    env-azure-prod `
     default
 
 & ./tutorials/getting-started/assets/app-wi-setup.sh `
@@ -520,7 +518,7 @@ Then run the helper once for each workload:
     $RESOURCE_GROUP `
     $AZURE_SUBSCRIPTION `
     "$AKS_OIDC_ISSUER" `
-    <environment-namespace> `
+    env-azure-prod `
     default
 ```
 
@@ -635,7 +633,7 @@ Validate the second deployment:
 ```bash
 rad app graph -a adaptive-apps
 rad resource list -a adaptive-apps
-kubectl get pods -n <environment-namespace>   # e.g. trading (aks-env.bicep default) or env-azure-prod (Challenge 2 path)
+kubectl get pods -n env-azure-prod
 ```
 
 If the deployment is on AKS, also verify the Azure resources were created in the configured Azure resource group:
@@ -700,7 +698,7 @@ The app graph should look familiar because the Radius application resources are 
 | Area | First environment | Second environment |
 |---|---|---|
 | Application model | Same file | Same file |
-| Kubernetes namespace | Usually `env-local-prod` | `trading` with `aks-env.bicep` defaults, or `env-azure-prod` on the Challenge 2 path |
+| Kubernetes namespace | `env-local-prod` | `env-azure-prod` |
 | Database backend | PostgreSQL container recipe (`postgres:latest`) | Azure Database for PostgreSQL Flexible Server recipe (`postgres-azure-flex:latest`) |
 | MQTT backend | Local broker or first-environment recipe | Azure Event Grid MQTT endpoint or second-environment broker recipe |
 | Workload identity | Local/no-op or first-environment identity recipe | Azure workload identity values |
