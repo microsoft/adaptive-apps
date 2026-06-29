@@ -184,7 +184,7 @@ Validate the app model and backing resources:
 
 ```bash
 rad app graph -a adaptive-apps
-rad resource list -a adaptive-apps
+rad resource list Applications.Core/containers -a adaptive-apps
 kubectl get pods -n env-local-prod
 ```
 
@@ -581,7 +581,7 @@ Validate the second deployment:
 
 ```bash
 rad app graph -a adaptive-apps
-rad resource list -a adaptive-apps
+rad resource list Applications.Core/containers -a adaptive-apps
 kubectl get pods -n <environment-namespace>   # e.g. trading (aks-env.bicep default) or env-azure-prod (Challenge 2 path)
 ```
 
@@ -627,7 +627,7 @@ Have teams compare the application graph and the backing platform resources in b
 ```bash
 rad workspace switch ws-local-prod
 rad app graph -a adaptive-apps
-rad resource list -a adaptive-apps
+rad resource list Applications.Core/containers -a adaptive-apps
 rad recipe list --environment env-local-prod
 ```
 
@@ -636,7 +636,7 @@ rad recipe list --environment env-local-prod
 ```bash
 rad workspace switch ws-azure-prod
 rad app graph -a adaptive-apps
-rad resource list -a adaptive-apps
+rad resource list Applications.Core/containers -a adaptive-apps
 rad recipe list --environment env-azure-prod
 ```
 
