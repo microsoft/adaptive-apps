@@ -4,13 +4,13 @@
 
 ## Objective
 
-This extension guide documents the transition path for adding an Azure PostgreSQL implementation for `Radius.Resources/postgreSqlDatabases` in `env-azure-prod`. The current branch has already productized this baseline: the Azure environment maps PostgreSQL to `postgres-azure-flex:latest`, while the local environment stays on the container recipe.
+This extension guide documents the transition path for adding an Azure PostgreSQL implementation for `Radius.Resources/postgreSqlDatabases` in a target Radius environment. The recommended Challenge 05 target is `env-azure-prod`, and the current branch has already productized this baseline: the Azure environment maps PostgreSQL to `postgres-azure-flex:latest`, while the local environment stays on the container recipe.
 
 The pattern is:
 
 1. Add a new Azure PostgreSQL recipe file.
 2. Publish it to an OCI tag.
-3. Register it only in `env-azure-prod`.
+3. Register it only in the target environment, normally `env-azure-prod`.
 4. Redeploy the app unchanged.
 5. Keep rollback command ready.
 
@@ -21,7 +21,7 @@ This preserves the current default behavior for local environments while making 
 ## Non-Breaking Principle
 
 - Do **not** change the current `radius/local-env.bicep` recipe mapping.
-- For experiments, override recipe mapping at environment level using `rad recipe register` for `env-azure-prod` only.
+- For experiments, override recipe mapping at environment level using `rad recipe register` for the target environment only.
 - For the productized branch baseline, `radius/aks-env.bicep` maps `Radius.Resources/postgreSqlDatabases` to `postgres-azure-flex:latest` directly so Challenge 04 and Challenge 05 use the Azure-backed recipe by default.
 
 ---
@@ -32,8 +32,10 @@ Before starting, set these environment variables in your terminal. Replace the p
 
 ```bash
 export ACR_NAME="<your-team-acr-name>"
-export AKS_CLUSTER="<your-aks-cluster-name>"
+export TARGET_KUBERNETES_CONTEXT="<target-kubernetes-context>"
+export RADIUS_APP_NAME="${TARGET_KUBERNETES_CONTEXT}-radius-app"
 export RADIUS_WORKSPACE="ws-azure-prod"
+export RADIUS_ENVIRONMENT="env-azure-prod"
 export RADIUS_GROUP="rg-trading"
 export RADIUS_TEST_GROUP="rg-trading-psql"
 export RESOURCE_GROUP="<your-azure-resource-group>"
@@ -42,7 +44,7 @@ export AZURE_SUBSCRIPTION="<your-subscription-id>"
 
 These parameters are used throughout the guide. Adjust them to match your environment.
 
-`AKS_CLUSTER` is also used to find the Radius Entra application created by `tutorials/getting-started/assets/wi-helper.sh` during AKS preparation. That helper names the app `${AKS_CLUSTER}-radius-app`.
+`TARGET_KUBERNETES_CONTEXT` is the kubeconfig context for the cluster that hosts the target Radius workspace. This can be AKS, Arc-enabled Kubernetes, Azure Local, or another Kubernetes cluster where Radius is installed. `RADIUS_APP_NAME` is used to find the Radius Entra application created during workload identity setup. The AKS helper names it `${TARGET_KUBERNETES_CONTEXT}-radius-app`; override `RADIUS_APP_NAME` if your team used a different app name.
 
 `ACR_NAME` is the Azure Container Registry used as the team's private OCI registry for recipe publishing. It is either:
 
@@ -231,16 +233,16 @@ rad bicep publish \
 
 ---
 
-## Stage 3 - Register Recipe Override in env-azure-prod
+## Stage 3 - Register Recipe Override in the Target Environment
 
-Switch to the Azure workspace and register the recipe for PostgreSQL only in that environment:
+Switch to the target workspace and register the recipe for PostgreSQL only in that environment:
 
 ```bash
 rad workspace switch "$RADIUS_WORKSPACE"
 rad group switch "$RADIUS_GROUP"
 
 rad recipe register default \
-  --environment env-azure-prod \
+  --environment "$RADIUS_ENVIRONMENT" \
   --resource-type Radius.Resources/postgreSqlDatabases \
   --template-kind bicep \
   --template-path "$ACR_NAME.azurecr.io/recipes/postgres-azure-flex:solution-055"
@@ -255,17 +257,17 @@ rad workspace switch "$RADIUS_WORKSPACE"
 export ACTIVE_CONTEXT=$(kubectl config current-context)
 echo "Active Kubernetes context: ${ACTIVE_CONTEXT}"
 
-if [ "$ACTIVE_CONTEXT" != "$AKS_CLUSTER" ]; then
-  echo "Expected kubectl context ${AKS_CLUSTER}, but active context is ${ACTIVE_CONTEXT}. Switch to the Azure AKS workspace/context before registering credentials."
+if [ "$ACTIVE_CONTEXT" != "$TARGET_KUBERNETES_CONTEXT" ]; then
+  echo "Expected kubectl context ${TARGET_KUBERNETES_CONTEXT}, but active context is ${ACTIVE_CONTEXT}. Switch to the target Radius workspace/context before registering credentials."
   exit 1
 fi
 
 export RADIUS_APP_ID=$(az ad app list \
-  --display-name "${AKS_CLUSTER}-radius-app" \
+  --display-name "$RADIUS_APP_NAME" \
   --query "[0].appId" -o tsv)
 
 if [ -z "$RADIUS_APP_ID" ]; then
-  echo "Could not find Entra app ${AKS_CLUSTER}-radius-app. Recheck AKS_CLUSTER or rerun the AKS workload identity setup from prepare-aks.md."
+  echo "Could not find Entra app ${RADIUS_APP_NAME}. Recheck RADIUS_APP_NAME or rerun the target cluster workload identity setup."
   exit 1
 fi
 
@@ -298,11 +300,11 @@ kubectl rollout restart deployment/bicep-de -n radius-system
 kubectl rollout status deployment/bicep-de -n radius-system --timeout=2m
 
 rad recipe show default \
-  --environment env-azure-prod \
+  --environment "$RADIUS_ENVIRONMENT" \
   --resource-type Radius.Resources/postgreSqlDatabases
 ```
 
-The `rad credential register` output must reference the Azure AKS workspace context, for example `Kubernetes (context=aks-azure-prod)`. If it references `aks-local-prod`, switch to `ws-azure-prod` and rerun the block.
+The `rad credential register` output must reference the target workspace context, for example `Kubernetes (context=aks-azure-prod)` for the optional two-AKS path. If it references a different cluster, switch to the target workspace and rerun the block.
 
 If `rad recipe show` or later deploy steps fail with auth errors, see [Appendix: Troubleshooting](#appendix-troubleshooting).
 
@@ -314,7 +316,7 @@ ${ACR_NAME}.azurecr.io/recipes/postgres-azure-flex:solution-055
 
 ---
 
-## Stage 4 - Redeploy App to env-azure-prod
+## Stage 4 - Redeploy App to the Target Environment
 
 Deploy into a fresh Radius group so existing resources do not mask the recipe change.
 
@@ -327,7 +329,7 @@ Then deploy app without changing `radius/app.bicep`:
 ```bash
 rad deploy radius/app.bicep \
   --group "$RADIUS_TEST_GROUP" \
-  --environment env-azure-prod \
+  --environment "$RADIUS_ENVIRONMENT" \
   --parameters imageRegistry=ghcr.io/microsoft/adaptive-apps \
   --parameters imageTag=latest \
   --parameters authUsername=admin \
@@ -365,11 +367,11 @@ az postgres flexible-server list -g "$RESOURCE_GROUP" -o table
 
 ## Rollback (Return to Existing Source Behavior)
 
-If needed, switch `env-azure-prod` back to current default PostgreSQL recipe:
+If needed, switch the target environment back to the current default PostgreSQL recipe:
 
 ```bash
 rad recipe register default \
-  --environment env-azure-prod \
+  --environment "$RADIUS_ENVIRONMENT" \
   --resource-type Radius.Resources/postgreSqlDatabases \
   --template-kind bicep \
   --template-path "${ACR_NAME}.azurecr.io/recipes/postgres:latest"
@@ -397,7 +399,7 @@ The command must include the authentication mode (`sp` or `wi`):
 
 ```bash
 export RADIUS_APP_ID=$(az ad app list \
-  --display-name "${AKS_CLUSTER}-radius-app" \
+  --display-name "$RADIUS_APP_NAME" \
   --query "[0].appId" -o tsv)
 export TENANTID=$(az account show --query tenantId -o tsv)
 ```
@@ -452,8 +454,8 @@ rad workspace switch "$RADIUS_WORKSPACE"
 export ACTIVE_CONTEXT=$(kubectl config current-context)
 echo "Active Kubernetes context: ${ACTIVE_CONTEXT}"
 
-if [ "$ACTIVE_CONTEXT" != "$AKS_CLUSTER" ]; then
-  echo "Expected kubectl context ${AKS_CLUSTER}, but active context is ${ACTIVE_CONTEXT}. Switch to the Azure AKS workspace/context before refreshing credentials."
+if [ "$ACTIVE_CONTEXT" != "$TARGET_KUBERNETES_CONTEXT" ]; then
+  echo "Expected kubectl context ${TARGET_KUBERNETES_CONTEXT}, but active context is ${ACTIVE_CONTEXT}. Switch to the target Radius workspace/context before refreshing credentials."
   exit 1
 fi
 
