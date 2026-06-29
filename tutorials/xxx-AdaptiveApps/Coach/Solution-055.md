@@ -171,6 +171,14 @@ cat > ~/.docker/config.json <<EOF
 EOF
 ```
 
+The Azure CLI warning about refresh tokens is expected. For OCI tooling (including recipe publish flows), this token is used as the password in Docker auth config with username `00000000-0000-0000-0000-000000000000`.
+
+If you prefer explicit login instead of writing config manually:
+
+```bash
+docker login "$ACR_NAME.azurecr.io" -u 00000000-0000-0000-0000-000000000000 -p "$TOKEN"
+```
+
 ### Publish to your ACR
 
 ```bash
@@ -203,10 +211,35 @@ rad recipe register default \
 Validate:
 
 ```bash
+export RADIUS_APP_ID="0e342b46-16d7-4c12-9e08-a6872d789444"
+export RADIUS_SP_OBJECT_ID=$(az ad sp show --id "$RADIUS_APP_ID" --query id -o tsv)
+export ACR_ID=$(az acr show -n "$ACR_NAME" -g "$RESOURCE_GROUP" --subscription "$AZURE_SUBSCRIPTION" --query id -o tsv)
+
+az role assignment create \
+  --subscription "$AZURE_SUBSCRIPTION" \
+  --assignee-object-id "$RADIUS_SP_OBJECT_ID" \
+  --assignee-principal-type ServicePrincipal \
+  --role AcrPull \
+  --scope "$ACR_ID"
+
+# Allow RBAC propagation before validating recipe resolution.
+# If assignment already exists, Azure returns a conflict and this is safe to ignore.
+
+# Verify the role assignment was created
+az account set --subscription "$AZURE_SUBSCRIPTION"
+az role assignment list \
+  --subscription "$AZURE_SUBSCRIPTION" \
+  --assignee-object-id "$RADIUS_SP_OBJECT_ID" \
+  --scope "$ACR_ID" \
+  --query "[].{role:roleDefinitionName,scope:scope}" -o table
+
+# Now retry recipe show (wait 2-5 minutes if this is the first attempt)
 rad recipe show default \
   --environment env-azure-prod \
   --resource-type Radius.Resources/postgreSqlDatabases
 ```
+
+If `rad recipe show` or later deploy steps fail with auth errors, see [Appendix: Troubleshooting](#appendix-troubleshooting).
 
 Confirm that `templatePath` is exactly:
 
@@ -239,6 +272,8 @@ rad deploy radius/app.bicep \
 Why this matters: recipe registration affects new provisioning. Reusing an existing app/group can keep previously provisioned resources and make it look like the override did not work.
 
 If your environment requires workload-identity params, pass them exactly as in Solution-05.
+
+If deployment fails with `RecipeDownloadFailed` or `AuthenticationFailed`, use [Appendix: Troubleshooting](#appendix-troubleshooting) before retrying.
 
 ---
 
@@ -276,6 +311,108 @@ rad recipe register default \
 ```
 
 Then redeploy the app.
+
+---
+
+## Appendix: Troubleshooting
+
+Use this section when Stage 3 or Stage 4 fails due to credential or registry access errors.
+
+### A. Common error patterns
+
+- `Credential lifetime exceeds the max value allowed as per assigned policy ...`
+- `Credential type not allowed as per assigned policy ...`
+- `ClientSecretCredential authentication failed`
+- `RecipeDownloadFailed ... response status code 401: unauthorized ... azurecr.io`
+- `AADSTS7000215: Invalid client secret provided`
+
+### B. Correct Radius credential registration syntax
+
+The command must include the authentication mode (`sp` or `wi`):
+
+```bash
+rad credential register azure sp \
+  --client-id "$RADIUS_APP_ID" \
+  --client-secret "<secret-value>" \
+  --tenant-id "$TENANTID"
+```
+
+For workload identity mode:
+
+```bash
+rad credential register azure wi \
+  --client-id "$RADIUS_APP_ID" \
+  --tenant-id "$TENANTID"
+```
+
+### C. Validate secret correctness before redeploy
+
+Always validate the secret value directly with Azure first:
+
+```bash
+az login --service-principal \
+  -u "$RADIUS_APP_ID" \
+  -p "<secret-value>" \
+  --tenant "$TENANTID"
+```
+
+If this fails with `AADSTS7000215`, the value is wrong (often secret ID copied instead of secret value, or truncated copy). Create a new secret in portal and copy the full **Value** field.
+
+### D. Confirm Radius stored the expected credential
+
+```bash
+rad credential list -o json
+
+kubectl get secret azure-azurecloud-default -n radius-system \
+  -o jsonpath='{.data.ucp_secret}' | base64 -d
+```
+
+Expected payload shape:
+
+- `kind` = `ServicePrincipal`
+- `servicePrincipal.clientId` = your Radius app ID
+- `servicePrincipal.tenantId` = your tenant
+
+### E. Force control-plane refresh after credential update
+
+```bash
+kubectl rollout restart deployment/bicep-de -n radius-system
+kubectl rollout status deployment/bicep-de -n radius-system --timeout=2m
+```
+
+Then retry deployment.
+
+### F. Verify ACR RBAC at correct scope
+
+```bash
+az role assignment list \
+  --subscription "$AZURE_SUBSCRIPTION" \
+  --assignee-object-id "$RADIUS_SP_OBJECT_ID" \
+  --scope "$ACR_ID" \
+  --query "[].{role:roleDefinitionName,scope:scope}" -o table
+```
+
+Expected role: `AcrPull` on the registry resource ID (not only at resource-group root).
+
+### G. Tenant policy constraints
+
+If tenant policy blocks one or both auth modes:
+
+- Workload identity path can fail when AKS OIDC issuer is not allowed by policy.
+- Client secret path can fail when credential type/lifetime is restricted by policy.
+
+In this case, create a portal-issued secret that complies with policy and validate it using step C.
+
+### H. Known limitation note (Radius v0.58)
+
+If all of the following are true:
+
+- service principal login succeeds,
+- Radius credential secret is updated,
+- `AcrPull` assignment is present,
+- but recipe pull still returns ACR 401,
+
+you may be hitting a private OCI registry credential propagation/resolver limitation in this Radius version. Capture logs and escalate with your Radius/Azure platform owners, or validate with a newer Radius release.
 
 ---
 
