@@ -441,7 +441,7 @@ The repository ships two environment Bicep files that define environments *and* 
 
 > **Naming note:** These commands use the Challenge 2 teaching names — group `rg-trading` with environments `env-local-prod` and `env-azure-prod`. The shipped `aks-env.bicep` defaults its `environmentName` (and Kubernetes `namespace`) parameter to `trading`, so the AKS command passes `--parameters environmentName=env-azure-prod` to align the Radius environment with the teaching names. If your team instead followed the sample values in [`prepare-aks.md`](../../common/prepare-aks.md) (`RADIUS_GROUP=trading`, `RADIUS_WORKSPACE=aks-trading`, environment `trading`), use those names consistently in every command below instead.
 
-#### Local / Azure Local environment (only when you local)
+#### Azure Local environment (apply for local for env-local-Prod)
 
 **Bash:**
 
@@ -467,7 +467,7 @@ This command deploys `local-env.bicep`, which creates the `env-local-prod` envir
 | `Radius.Resources/governance` | `governance-opa:latest` | Open Policy Agent (Kubernetes) |
 | `Radius.Resources/agentGuardrails` | `agent-guardrails-agt:latest` | Agent Governance Toolkit sidecar support |
 
-#### AKS / Azure environment (only for Azure)
+#### AKS / Azure environment (apply for Azure env-azure-prod)
 
 **Bash:**
 
