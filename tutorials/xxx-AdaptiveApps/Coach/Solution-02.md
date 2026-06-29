@@ -200,6 +200,26 @@ If you are deploying to multiple sites (e.g., Azure + Azure Local + Azure Local 
 
 For a workshop without Azure Local or another non-AKS cluster, the same federated model can optionally be practiced with **two AKS clusters**. Treat one AKS cluster as the logical local/edge environment (`ws-local-prod` / `env-local-prod`) and the other as the Azure environment (`ws-azure-prod` / `env-azure-prod`). Be explicit with teams that this is an optional lab convenience: both physical clusters are AKS, but the portability boundary is still taught through separate Radius control planes, environments, and recipe mappings.
 
+#### Optional two-AKS execution flow
+
+When using two AKS clusters, run [`common/prepareRadius-aks.md`](../../common/prepareRadius-aks.md) twice — once per cluster/context. The important distinction is the logical role you assign before creating the workspace and environment:
+
+| Run | Active `kubectl` context | `RADIUS_WORKSPACE` | `RADIUS_ENVIRONMENT` | Azure provider / credential registration |
+|---|---|---|---|---|
+| 1 | `aks-local-prod` context | `ws-local-prod` | `env-local-prod` | Optional; skip if this environment will only use local/container recipes |
+| 2 | `aks-azure-prod` context | `ws-azure-prod` | `env-azure-prod` | Required for Azure-backed recipes |
+
+The coach flow is:
+
+1. Switch `kubectl` to the first AKS cluster.
+2. Install Radius on that cluster. Only one team member does this per shared cluster.
+3. Create a `rad` workspace that points at the active context.
+4. Create the environment and `rg-trading` resource group for that logical role.
+5. Repeat the same process for the second AKS cluster with the other workspace/environment names.
+6. Have every team member create or switch to both local workspaces on their workstation so their `rad` CLI can target either control plane.
+
+For the local/edge-like AKS stand-in, do not call it Azure Local. It is simply an AKS-hosted Radius control plane that uses `ws-local-prod` / `env-local-prod` naming so later challenges can compare it with `ws-azure-prod` / `env-azure-prod`.
+
 Each site will have:
 - Its own Radius control plane
 - Its own environment and resource group
