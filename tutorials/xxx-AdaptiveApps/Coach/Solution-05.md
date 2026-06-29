@@ -287,16 +287,21 @@ Use the command variant that matches your identity model and Radius CLI version:
 **Bash:**
 
 ```bash
+export RADIUS_APP_ID=<appId>
+export TENANTID=<tenantId>
+```
+
+```bash
 # Workload identity (recommended for AKS). No client secret required.
 rad credential register azure wi \
-    --client-id <appId> \
-    --tenant-id <tenant>
+    --client-id $APP_ID \
+    --tenant-id TENANTID
 
 # Service principal (use only when workload identity is unavailable).
 rad credential register azure sp \
-    --client-id <appId> \
+    --client-id $APP_ID \
     --client-secret <password> \
-    --tenant-id <tenant>
+    --tenant-id $TENANTID
 ```
 
 **PowerShell:**
@@ -304,14 +309,14 @@ rad credential register azure sp \
 ```powershell
 # Workload identity (recommended for AKS). No client secret required.
 rad credential register azure wi `
-    --client-id <appId> `
-    --tenant-id <tenant>
+    --client-id $APP_ID `
+    --tenant-id $TENANTID
 
 # Service principal (use only when workload identity is unavailable).
 rad credential register azure sp `
-    --client-id <appId> `
+    --client-id $APP_ID `
     --client-secret <password> `
-    --tenant-id <tenant>
+    --tenant-id $TENANTID
 ```
 
 Verify registration:
