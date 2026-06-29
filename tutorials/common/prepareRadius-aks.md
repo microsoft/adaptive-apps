@@ -64,9 +64,6 @@ rad env switch env-azure-prod
 Store your subscription ID and resource group name, then:
 
 ```bash
-export AZURE_SUBSCRIPTION="<your-subscription-id>"
-export RESOURCE_GROUP="<your-azure-resource-group>"
-
 rad env update env-azure-prod \
     --azure-subscription-id "$AZURE_SUBSCRIPTION" \
     --azure-resource-group "$RESOURCE_GROUP"
