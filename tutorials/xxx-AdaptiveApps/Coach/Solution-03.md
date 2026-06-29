@@ -142,7 +142,7 @@ The repository ships a `types.yaml` file that defines all the portable resource 
 rad resource-type create -f radius/resource-types/types.yaml
 ```
 
-> **Federated / two-cluster note:** Resource types are stored in the active Radius control plane. If the team has separate workspaces for `ws-local-prod` and `ws-azure-prod` (including the two-AKS workshop fallback), repeat this import in each workspace before moving on to recipes.
+> **Federated / optional two-cluster note:** Resource types are stored in the active Radius control plane. If the team has separate workspaces for `ws-local-prod` and `ws-azure-prod` (including the optional two-AKS workshop fallback), repeat this import in each workspace before moving on to recipes.
 
 This registers the following types under the `Radius.Resources` namespace:
 

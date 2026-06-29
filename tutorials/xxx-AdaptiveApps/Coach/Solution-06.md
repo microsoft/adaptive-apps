@@ -11,7 +11,7 @@ Challenge 06 moves from "portable infrastructure" to "portable identity". Teams 
 
 The architectural pattern remains stable: the frontend authenticates through OIDC, Keycloak is the broker, and upstream identity differs by environment.
 
-If the workshop uses the two-AKS fallback and no AD DS is available, keep the same learning objective by using a coach-approved substitute for the local upstream identity provider: Keycloak local users, a second Entra application/tenant, or another lightweight OIDC/LDAP provider. Do not describe that path as Azure Local; describe it as a lab stand-in for environment-specific identity plumbing.
+If the workshop uses the optional two-AKS fallback and no AD DS is available, keep the same learning objective by using a coach-approved substitute for the local upstream identity provider: Keycloak local users, a second Entra application/tenant, or another lightweight OIDC/LDAP provider. Do not describe that path as Azure Local; describe it as a lab stand-in for environment-specific identity plumbing.
 
 ### Intended learning outcomes
 
@@ -89,7 +89,7 @@ Acceptable variations:
 - Different Keycloak IdP display names and mapper naming.
 - Different workspace/group naming, if used consistently.
 - Different test users, as long as authentication path is verifiable end-to-end.
-- For the two-AKS fallback, a local identity substitute instead of AD DS, if coaches explicitly call out the limitation.
+- For the optional two-AKS fallback, a local identity substitute instead of AD DS, if coaches explicitly call out the limitation.
 
 ## Optional Demo and Discussion Points
 

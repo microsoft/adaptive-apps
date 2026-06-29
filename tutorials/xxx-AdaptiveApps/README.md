@@ -10,7 +10,7 @@ Across the challenges you take on the role of a **platform engineering** team. Y
 
 In this hack you will learn how a platform team uses Radius to deliver portable, policy-driven application platforms across cloud, on-premises, and edge environments. You will:
 
-1. Prepare one or more Kubernetes target platforms and install the Radius control plane. For workshop convenience, two AKS clusters can be used as separate logical environments when Azure Local or another edge cluster is not available.
+1. Prepare one or more Kubernetes target platforms and install the Radius control plane. As an optional workshop convenience, two AKS clusters can be used as separate logical environments when Azure Local or another edge cluster is not available.
 2. Define platform abstractions — portable Radius resource types and the recipes that implement them.
 3. Deploy a single application model across multiple environments with minimal, environment-only configuration changes.
 4. Adapt cross-cutting concerns — identity providers, workload identity and secure service communication, and AI services — without changing the application.
@@ -47,7 +47,7 @@ In this hack you will learn how a platform team uses Radius to deliver portable,
 ## Prerequisites
 
 - An Azure subscription with **Owner** access (to create resource groups and role assignments)
-- A CNCF-conformant Kubernetes cluster you can target (Azure Kubernetes Service is recommended; kind/k3d, Arc-enabled Kubernetes, or Azure Local also work). For the portability challenge, two target environments are recommended; a second AKS cluster can be used as a lab stand-in for local/edge when needed.
+- A CNCF-conformant Kubernetes cluster you can target (Azure Kubernetes Service is recommended; kind/k3d, Arc-enabled Kubernetes, or Azure Local also work). For the portability challenge, a second target environment is optional but useful; a second AKS cluster can be used as a lab stand-in for local/edge when needed.
 - [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli)
 - [kubectl](https://kubernetes.io/docs/tasks/tools/)
 - [Helm](https://helm.sh/docs/intro/install/)

@@ -9,6 +9,8 @@
 
 ## 1. Define a few environment variables for consistency
 
+Choose the values for the AKS cluster you are preparing:
+
 ```bash
 export AZURE_SUBSCRIPTION=<your Azure subscrption id>
 export RESOURCE_GROUP=<Azure resource group>
@@ -16,6 +18,24 @@ export AZURE_LOCATION=<Azure region, i.e. westus2>
 export AKS_CLUSTER=<AKS cluster name>
 export RADIUS_WORKSPACE=aks-trading
 export RADIUS_GROUP=trading
+export RADIUS_ENVIRONMENT=trading
+```
+
+### Optional workshop fallback: two AKS clusters
+
+If this AKS cluster is one of two clusters used for the optional MicroHack portability fallback, run this guide once for each logical environment with distinct names:
+
+| Logical role | Suggested variables |
+|---|---|
+| Local / edge-like stand-in | `AKS_CLUSTER=aks-local-prod`, `RADIUS_WORKSPACE=ws-local-prod`, `RADIUS_GROUP=rg-trading`, `RADIUS_ENVIRONMENT=env-local-prod` |
+| Azure / cloud environment | `AKS_CLUSTER=aks-azure-prod`, `RADIUS_WORKSPACE=ws-azure-prod`, `RADIUS_GROUP=rg-trading`, `RADIUS_ENVIRONMENT=env-azure-prod` |
+
+This optional lab shortcut is for events without Azure Local, Arc-enabled Kubernetes, k3d, or another second cluster type. It does **not** make AKS equivalent to Azure Local; it simply gives the team two separate Kubernetes clusters, kube contexts, Radius workspaces, and Radius environments for the portability exercises.
+
+Before creating the second cluster, confirm quota for both AKS clusters in the target region and keep the `kubectl` contexts distinct:
+
+```bash
+kubectl config get-contexts
 ```
 
 ## 2. Prepare an Azure Kubernetes Service (AKS) cluster
@@ -51,7 +71,14 @@ export RADIUS_GROUP=trading
     ```
     > **NOTE:** The above command merges AKS cluster config into your local `kubectl` config. Run it from where you plan to use `kubectl` command.
 
-##. Register Azure credentials 
+    If you choose the optional two-AKS fallback, verify that the active context matches the cluster you just prepared before continuing:
+
+    ```bash
+    kubectl config current-context
+    kubectl get nodes
+    ```
+
+## 3. Register Azure credentials
 
 1. You need the AKS OIDC issuer URL (also needed later for the app deploy):
     ```bash
@@ -69,5 +96,8 @@ export RADIUS_GROUP=trading
     >**NOTE:** See https://docs.radapp.io/guides/operations/providers/azure-provider/howto-azure-provider-wi/ for more information
 
     ```bash
-    cd 
+    cd tutorials/getting-started/assets
+    ./wi-helper.sh "$AKS_CLUSTER" "$RESOURCE_GROUP" "$AZURE_SUBSCRIPTION" "$AKS_OIDC_ISSUER"
     ```
+
+For the optional two-AKS workshop fallback, run the workload identity helper for each AKS cluster. Each cluster gets its own Radius workload identity and OIDC issuer, so do not reuse the `AKS_OIDC_ISSUER` value from the other cluster.

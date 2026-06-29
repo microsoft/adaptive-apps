@@ -4,7 +4,7 @@
 
 ## Pre-requisites
 
-- Completion of [Challenge 01](./Challenge-01.md): at least one healthy Kubernetes environment is available. A second environment is strongly recommended for this challenge.
+- Completion of [Challenge 01](./Challenge-01.md): at least one healthy Kubernetes environment is available. A second environment is optional but recommended for the full portability comparison.
 - Completion of [Challenge 02](./Challenge-02.md): Radius is installed, and your workstation has a workspace, environment, and resource group configured.
 - Completion of [Challenge 03](./Challenge-03.md): the portable `Radius.Resources/*` resource types have been registered.
 - Completion of [Challenge 04](./Challenge-04.md): recipes are registered for at least one environment.
@@ -58,7 +58,7 @@ Use the Radius application model in `radius/app.bicep` and an environment that a
 ### Work through these as a team
 
 - Decide which two environments you are targeting, and how you will keep your `kubectl` context and `rad` workspace aligned so you never deploy to the wrong place.
-- If your team uses two AKS clusters because no Azure Local or edge cluster is available, call that out explicitly. It is a workshop shortcut for demonstrating two Radius environments, not a claim that AKS is Azure Local.
+- If your team optionally uses two AKS clusters because no Azure Local or edge cluster is available, call that out explicitly. It is a workshop shortcut for demonstrating two Radius environments, not a claim that AKS is Azure Local.
 - Confirm what each environment already provides before you deploy anything, so a missing recipe is not discovered halfway through.
 - Demonstrate the same application model reaching both environments by changing only the target and parameters.
 - Investigate which capabilities are backed differently in the second environment, and trace where that difference is actually expressed.

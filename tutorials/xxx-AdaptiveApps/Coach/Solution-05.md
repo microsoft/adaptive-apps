@@ -9,7 +9,7 @@
 - Expected time: **45-75 minutes** if both environments were prepared in earlier challenges. Add time if a second cluster, Azure credentials, or the Azure resource group still need to be provisioned.
 - Biggest coaching risk: teams try to make the second deployment work by editing the application model. Redirect them to the environment, recipe registration, workspace, group, and parameter layer.
 - Treat the database resource as the continuity proof from Challenge 04. The application asks for `Radius.Resources/postgreSqlDatabases`; the environment chooses the recipe implementation (a PostgreSQL container locally, Azure Database for PostgreSQL on AKS).
-- If the workshop has no Azure Local, Arc, k3d, or other Kubernetes target, two AKS clusters are an acceptable lab fallback. Make teams state the limitation clearly: this proves Radius environment portability and recipe substitution, not Azure Local runtime fidelity.
+- If the workshop has no Azure Local, Arc, k3d, or other Kubernetes target, two AKS clusters are an acceptable optional lab fallback. Make teams state the limitation clearly: this proves Radius environment portability and recipe substitution, not Azure Local runtime fidelity.
 - Be explicit about the boundary between a portability demonstration and full runtime parity. Azure Event Grid MQTT returns a namespace endpoint, but end-to-end publish/subscribe also needs clients, topic spaces, and permission bindings.
 
 ## Key Concepts - Portability After Recipes

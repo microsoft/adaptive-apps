@@ -15,7 +15,7 @@
 
 ## Solution Guide
 
-This challenge focuses on provisioning the target platforms. Walk teams through the stages below in order; do not let them start Challenge 2 until at least one cluster and all supporting resources are healthy and available. If the team will complete Challenge 5 during the hack, strongly prefer preparing two environments now.
+This challenge focuses on provisioning the target platforms. Walk teams through the stages below in order; do not let them start Challenge 2 until at least one cluster and all supporting resources are healthy and available. If the team will complete Challenge 5 during the hack, preparing a second environment now is optional but useful.
 
 #### Prepare the Environment(s)
 
@@ -29,14 +29,14 @@ Pick **one or multiple** environments and follow the linked guide. Each leaves y
 | Azure Arc-enabled cluster | [`common/prepare-arc.md`](../../common/prepare-arc.md) |
 | Azure Local | [`common/prepare-azure-local.md`](../../common/prepare-azure-local.md) |
 
-If no Azure Local, Arc-enabled, k3d, or other Kubernetes target is available, coaches may use **two AKS clusters** for workshop purposes:
+If no Azure Local, Arc-enabled, k3d, or other Kubernetes target is available, coaches may optionally use **two AKS clusters** for workshop purposes:
 
 | Logical environment | Physical cluster | Later Radius workspace | Later Radius environment |
 |---|---|---|---|
 | Local / edge-like | AKS cluster #1 | `ws-local-prod` | `env-local-prod` |
 | Azure / cloud | AKS cluster #2 | `ws-azure-prod` | `env-azure-prod` |
 
-This fallback is not architecturally equivalent to Azure Local. It is a practical way to preserve the portability learning objective: the same application model is deployed to two Radius environments while the environment and recipe layer owns the platform-specific behavior.
+This optional fallback is not architecturally equivalent to Azure Local. It is a practical way to preserve the portability learning objective: the same application model is deployed to two Radius environments while the environment and recipe layer owns the platform-specific behavior.
 
 The AKS installation with the WI_helper script might fail "(MissingSubscription) The request did not have a subscription or a valid tenant level resource provider.
 Code: MissingSubscription
@@ -60,7 +60,7 @@ helm install $RELEASE charts/adaptive-apps \
   -n $NAMESPACE --create-namespace
 ```
 
-For AKS, use the managed Istio override form from getting-started. This applies to both AKS clusters when using the two-AKS fallback, including the cluster that represents the logical local environment.
+For AKS, use the managed Istio override form from getting-started. This applies to both AKS clusters when using the optional two-AKS fallback, including the cluster that represents the logical local environment.
 
 ```bash
 export AKS_CONTEXT="<aks-context-name>"
