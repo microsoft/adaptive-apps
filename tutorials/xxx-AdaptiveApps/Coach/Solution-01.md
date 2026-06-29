@@ -42,7 +42,10 @@ Before moving to Challenge 02, ensure the portfolio baseline is installed with H
 Set the same variables used in getting-started and install the chart:
 
 ```bash
-export PORTFOLIO=min          # or: core | ent | min-ai | core-ai | ent-ai
+#for env-Azure-prod use core
+#for env-Local-prod use core-ai
+# or: core | ent | min-ai | core-ai | ent-ai
+export PORTFOLIO=core          
 export RELEASE=$PORTFOLIO
 export NAMESPACE=$PORTFOLIO
 ```
