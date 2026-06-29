@@ -45,7 +45,8 @@ Set the same variables used in getting-started and install the chart:
 export PORTFOLIO=min          # or: core | ent | min-ai | core-ai | ent-ai
 export RELEASE=$PORTFOLIO
 export NAMESPACE=$PORTFOLIO
-
+```
+```bash
 helm install $RELEASE charts/adaptive-apps \
   -f charts/adaptive-apps/profiles/$PORTFOLIO.yaml \
   -n $NAMESPACE --create-namespace
