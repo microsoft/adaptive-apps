@@ -92,7 +92,7 @@ output result object = {
 
 ## Solution Guide
 
-### Stage 1 — Create an Azure SQL Server recipe via the Radius dashboard
+### Stage 1 — Create an Azure SQL Server recipe via the Radius dashboard (optional)
 
 This step teaches teams to write a recipe by hand, so they understand the `context` object, the AVM pattern, and the `result` output before working with pre-built recipes.
 
