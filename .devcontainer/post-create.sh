@@ -23,6 +23,29 @@ if ! grep -q 'export PATH="$HOME/.local/bin:$PATH"' "$HOME/.bashrc"; then
 fi
 export PATH="$HOME/.local/bin:$PATH"
 
+if ! command -v jq >/dev/null 2>&1; then
+  sudo apt-get update
+  sudo apt-get install -y jq
+fi
+
+# kubectl
+if ! command -v kubectl >/dev/null 2>&1; then
+  KUBECTL_VERSION="$(curl -fsSL https://dl.k8s.io/release/stable.txt)"
+  curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${YQ_ARCH}/kubectl" -o "$HOME/.local/bin/kubectl"
+  chmod +x "$HOME/.local/bin/kubectl"
+fi
+
+# Helm
+if ! command -v helm >/dev/null 2>&1; then
+  HELM_ARCH="$YQ_ARCH"
+  HELM_VERSION="$(curl -fsSL https://api.github.com/repos/helm/helm/releases/latest | jq -r .tag_name)"
+  TMP_DIR="$(mktemp -d)"
+  curl -fsSL "https://get.helm.sh/helm-${HELM_VERSION}-linux-${HELM_ARCH}.tar.gz" -o "$TMP_DIR/helm.tgz"
+  tar -xzf "$TMP_DIR/helm.tgz" -C "$TMP_DIR"
+  install -m 0755 "$TMP_DIR/linux-${HELM_ARCH}/helm" "$HOME/.local/bin/helm"
+  rm -rf "$TMP_DIR"
+fi
+
 # Radius CLI (rad)
 if ! command -v rad >/dev/null 2>&1; then
   wget -q "https://raw.githubusercontent.com/radius-project/radius/main/deploy/install.sh" -O - | /bin/bash
