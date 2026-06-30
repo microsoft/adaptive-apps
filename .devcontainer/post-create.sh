@@ -37,9 +37,13 @@ if ! command -v yq >/dev/null 2>&1; then
   chmod +x "$HOME/.local/bin/yq"
 fi
 
-# k3d for local k3s workflows
-if ! command -v k3d >/dev/null 2>&1; then
-  curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+# k3d for local k3s workflows (only when Docker is available)
+if command -v docker >/dev/null 2>&1; then
+  if ! command -v k3d >/dev/null 2>&1; then
+    curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+  fi
+else
+  echo "Skipping k3d install: docker CLI/socket not available in this container runtime."
 fi
 
 # Bicep CLI via Azure CLI (arch-aware target)
