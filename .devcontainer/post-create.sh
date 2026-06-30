@@ -1,6 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+retry() {
+  local attempts=$1
+  shift
+  local count=1
+  until "$@"; do
+    if [[ $count -ge $attempts ]]; then
+      return 1
+    fi
+    count=$((count + 1))
+    sleep 2
+  done
+}
+
 ARCH="$(uname -m)"
 case "$ARCH" in
   x86_64)
@@ -24,23 +37,27 @@ fi
 export PATH="$HOME/.local/bin:$PATH"
 
 if ! command -v jq >/dev/null 2>&1; then
-  sudo apt-get update
-  sudo apt-get install -y jq
+  retry 3 sudo apt-get update
+  retry 3 sudo apt-get install -y jq
 fi
 
 # kubectl
 if ! command -v kubectl >/dev/null 2>&1; then
-  KUBECTL_VERSION="$(curl -fsSL https://dl.k8s.io/release/stable.txt)"
-  curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${YQ_ARCH}/kubectl" -o "$HOME/.local/bin/kubectl"
+  KUBECTL_VERSION="$(retry 3 curl -fsSL https://dl.k8s.io/release/stable.txt)"
+  retry 3 curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${YQ_ARCH}/kubectl" -o "$HOME/.local/bin/kubectl"
   chmod +x "$HOME/.local/bin/kubectl"
 fi
 
 # Helm
 if ! command -v helm >/dev/null 2>&1; then
   HELM_ARCH="$YQ_ARCH"
-  HELM_VERSION="$(curl -fsSL https://api.github.com/repos/helm/helm/releases/latest | jq -r .tag_name)"
+  HELM_VERSION="$(curl -fsSL https://api.github.com/repos/helm/helm/releases/latest | jq -r .tag_name || true)"
+  if [[ -z "${HELM_VERSION}" || "${HELM_VERSION}" == "null" ]]; then
+    HELM_VERSION="v3.16.4"
+    echo "Helm latest lookup failed; falling back to ${HELM_VERSION}."
+  fi
   TMP_DIR="$(mktemp -d)"
-  curl -fsSL "https://get.helm.sh/helm-${HELM_VERSION}-linux-${HELM_ARCH}.tar.gz" -o "$TMP_DIR/helm.tgz"
+  retry 3 curl -fsSL "https://get.helm.sh/helm-${HELM_VERSION}-linux-${HELM_ARCH}.tar.gz" -o "$TMP_DIR/helm.tgz"
   tar -xzf "$TMP_DIR/helm.tgz" -C "$TMP_DIR"
   install -m 0755 "$TMP_DIR/linux-${HELM_ARCH}/helm" "$HOME/.local/bin/helm"
   rm -rf "$TMP_DIR"
@@ -56,7 +73,7 @@ fi
 
 # yq for YAML processing used in scripting/tutorials
 if ! command -v yq >/dev/null 2>&1; then
-  curl -fsSL "https://github.com/mikefarah/yq/releases/latest/download/yq_linux_${YQ_ARCH}" -o "$HOME/.local/bin/yq"
+  retry 3 curl -fsSL "https://github.com/mikefarah/yq/releases/latest/download/yq_linux_${YQ_ARCH}" -o "$HOME/.local/bin/yq"
   chmod +x "$HOME/.local/bin/yq"
 fi
 
@@ -71,7 +88,7 @@ fi
 
 # Bicep CLI via Azure CLI (arch-aware target)
 if command -v az >/dev/null 2>&1; then
-  az bicep install --target-platform "$BICEP_PLATFORM"
+  retry 3 az bicep install --target-platform "$BICEP_PLATFORM"
   if [[ -x "$HOME/.azure/bin/bicep" ]]; then
     ln -sf "$HOME/.azure/bin/bicep" "$HOME/.local/bin/bicep"
   fi
