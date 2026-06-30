@@ -2,98 +2,111 @@
 
 [< Previous Challenge](./Challenge-05.md) - **[Home](../README.md)** - [Next Challenge >](./Challenge-07.md)
 
-***This is a template for a single challenge. The italicized text provides hints & examples of what should or should NOT go in each section.  You should remove all italicized & sample text and replace with your content.***
+## Challenge Metadata
 
-## Pre-requisites (Optional)
+- Difficulty Level: Intermediate to Advanced
+- Estimated Time: 60-90 minutes
+- Target Audience: Platform engineers and application engineers integrating identity across multiple environments
+- Prerequisites:
+	- Completion of [Challenge 05](./Challenge-05.md)
+	- App deployed in both target environments with stable routing to the frontend
+	- Operational Keycloak instance(s) reachable for each target environment
+	- Access to at least one cloud identity provider path and one local or alternate identity path
+- Learning Objectives:
+	- Apply the identity-broker pattern so app authentication remains stable across environments
+	- Configure a reusable OIDC client contract for the frontend
+	- Integrate environment-specific upstream identity providers without rewriting the app model
+	- Validate and troubleshoot identity flow boundaries from frontend to broker to upstream IdP
 
-*Your hack's "Challenge 0" should cover pre-requisites for the entire hack, and thus this section is optional and may be omitted.  If you wish to spell out specific previous challenges that must be completed before starting this challenge, you may do so here.*
+## Scenario
 
-## Introduction
+Security and compliance stakeholders require identity modernization for the trading application. The frontend experience must remain consistent while each environment aligns with its own identity authority and operational constraints.
 
-*This section should provide an overview of the technologies or tasks that will be needed to complete the this challenge.  This includes the technical context for the challenge, as well as any new "lessons" the attendees should learn before completing the challenge.*
+Your team must deliver a brokered authentication approach where the application continues to use one OIDC integration pattern, while upstream identity differs per environment. In one environment, enterprise cloud identity is expected. In another, local or edge-compatible identity is required.
 
-*Optionally, the coach or event host is encouraged to present a mini-lesson (with a PPT or video) to set up the context & introduction to each challenge. A summary of the content of that mini-lesson is a good candidate for this Introduction section*
+This matters because identity coupling can break portability even when infrastructure is portable. A successful outcome proves that environment-specific identity plumbing can change without forcing application rewrites.
 
-*For example:*
+## Challenge Goals
 
-When setting up an IoT device, it is important to understand how 'thingamajigs' work. Thingamajigs are a key part of every IoT device and ensure they are able to communicate properly with edge servers. Thingamajigs require IP addresses to be assigned to them by a server and thus must have unique MAC addresses. In this challenge, you will get hands on with a thingamajig and learn how one is configured.
+1. Establish a stable frontend OIDC client contract through Keycloak.
+2. Configure different upstream identity integrations per environment while preserving the same app-facing authentication flow.
+3. Demonstrate successful sign-in behavior in both environments and explain the portability boundary.
 
-## Description
+## Requirements and Constraints
 
-*This section should clearly state the goals of the challenge and any high-level instructions you want the students to follow. You may provide a list of specifications required to meet the goals. If this is more than 2-3 paragraphs, it is likely you are not doing it right.*
+- Keep the frontend OIDC contract stable across environments.
+- Upstream identity integrations may differ by environment, but login flow ownership boundaries must be explicit.
+- Environment-specific identity configuration must not require changes to core application model logic.
+- Authentication validation must include both positive sign-in proof and targeted troubleshooting reasoning.
+- If using a workshop stand-in for local identity, document the limitation clearly and still demonstrate the same architectural pattern.
 
-***NOTE:** Do NOT use ordered lists as that is an indicator of 'step-by-step' instructions. Instead, use bullet lists to list out goals and/or specifications.*
+## Tasks
 
-***NOTE:** You may use Markdown sub-headers to organize key sections of your challenge description.*
+### Task 1 - Define Identity Architecture and Ownership
 
-*Optionally, you may provide resource files such as a sample application, code snippets, or templates as learning aids for the students. These files are stored in the hack's `Student/Resources` folder. It is the coach's responsibility to package these resources into a Resources.zip file and provide it to the students at the start of the hack.*
+Map the end-to-end authentication flow for both environments. Identify which settings are app-owned, which are broker-owned, and which are upstream provider-owned.
 
-***NOTE:** Do NOT provide direct links to files or folders in the What The Hack repository from the student guide. Instead, you should refer to the Resource.zip file provided by the coach.*
+### Task 2 - Configure the Brokered OIDC Contract
 
-***NOTE:** As an exception, you may provide a GitHub 'raw' link to an individual file such as a PDF or Office document, so long as it does not open the contents of the file in the What The Hack repo on the GitHub website.*
+Implement and validate the Keycloak OIDC client configuration the frontend will consume. Confirm the contract is reusable in both environments.
 
-***NOTE:** Any direct links to the What The Hack repo will be flagged for review during the review process by the WTH V-Team, including exception cases.*
+### Task 3 - Integrate Environment-Specific Upstream Identity
 
-*Sample challenge text for the IoT Hack Of The Century:*
+Configure upstream federation per environment (cloud enterprise identity for one target and local/alternate identity for the other). Ensure the broker can route authentication correctly.
 
-In this challenge, you will properly configure the thingamajig for your IoT device so that it can communicate with the mother ship.
+### Task 4 - Validate Login Portability and Troubleshooting Model
 
-You can find a sample `thingamajig.config` file in the `/ChallengeXX` folder of the Resources.zip file provided by your coach. This is a good starting reference, but you will need to discover how to set exact settings.
-
-Please configure the thingamajig with the following specifications:
-- Use dynamic IP addresses
-- Only trust the following whitelisted servers: "mothership", "IoTQueenBee" 
-- Deny access to "IoTProxyShip"
-
-You can view an architectural diagram of an IoT thingamajig here: [Thingamajig.PDF](/Student/Resources/Architecture.PDF?raw=true).
+Execute sign-in validation in both environments and produce a short diagnostic framework your team can use when authentication fails.
 
 ## Success Criteria
 
-*Success criteria goes here. The success criteria should be a list of checks so a student knows they have completed the challenge successfully. These should be things that can be demonstrated to a coach.* 
+You are done when all of the following are true:
 
-*The success criteria should not be a list of instructions.*
+- The frontend uses a stable OIDC integration pattern in both environments.
+- Broker configuration for the application client is present and functionally validated.
+- Each environment can authenticate through its intended upstream identity path.
+- The team can explain what changed between environments and what remained invariant.
+- The team can isolate failures by layer (frontend client config, broker config, upstream provider configuration, user assignment/connectivity).
 
-*Success criteria should always start with language like: "Validate XXX..." or "Verify YYY..." or "Show ZZZ..." or "Demonstrate you understand VVV..."*
+## Hints (Progressive Disclosure)
 
-*Sample success criteria for the IoT sample challenge:*
+### Task 1 Hints
 
-To complete this challenge successfully, you should be able to:
-- Verify that the IoT device boots properly after its thingamajig is configured.
-- Verify that the thingamajig can connect to the mothership.
-- Demonstrate that the thingamajic will not connect to the IoTProxyShip
+- Hint 1: Draw the auth sequence before changing any settings.
+- Hint 2: Keep app integration concerns separate from federation concerns.
+- Hint 3: If ownership is unclear, label each configuration value as app, broker, or upstream.
+
+### Task 2 Hints
+
+- Hint 1: OIDC client correctness is foundational; validate it before federation debugging.
+- Hint 2: Redirect and issuer-related mismatches often masquerade as upstream login failures.
+- Hint 3: Reuse one client contract deliberately and avoid per-environment app-client drift unless justified.
+
+### Task 3 Hints
+
+- Hint 1: Treat each environment's upstream provider as an implementation detail behind the broker.
+- Hint 2: Validate provider-side assignments/mappings in addition to broker-side configuration.
+- Hint 3: For LDAP-style paths, verify connectivity and trust settings before user sync assumptions.
+
+### Task 4 Hints
+
+- Hint 1: Validate end-to-end with real users or test identities for each environment path.
+- Hint 2: Capture both successful flow evidence and one failed-case troubleshooting path.
+- Hint 3: Use a layered checklist so future incidents can be triaged quickly.
 
 ## Learning Resources
 
-_List of relevant links and online articles that should give the attendees the knowledge needed to complete the challenge._
+- Identity and OIDC foundations:
+	- [OpenID Connect core concepts](https://openid.net/developers/how-connect-works/)
+	- [Keycloak identity brokering](https://www.keycloak.org/docs/latest/server_admin/#_identity_broker)
+- Environment-specific integration references:
+	- [Microsoft Entra SAML-based app federation](https://learn.microsoft.com/entra/identity/enterprise-apps/add-application-portal-setup-sso)
+	- [Keycloak LDAP user federation](https://www.keycloak.org/docs/latest/server_admin/#_ldap)
+- Workshop context assets:
+	- [Authentication documentation folder](../../docs/authentication/README.md)
+	- [Azure sample architecture image](../sampleazure.png)
+	- [Local sample architecture image](../samplelocal.png)
 
-*Think of this list as giving the students a head start on some easy Internet searches. However, try not to include documentation links that are the literal step-by-step answer of the challenge's scenario.*
+## Optional Stretch
 
-***Note:** Use descriptive text for each link instead of just URLs.*
-
-*Sample IoT resource links:*
-
-- [What is a Thingamajig?](https://www.bing.com/search?q=what+is+a+thingamajig)
-- [10 Tips for Never Forgetting Your Thingamajic](https://www.youtube.com/watch?v=dQw4w9WgXcQ)
-- [IoT & Thingamajigs: Together Forever](https://www.youtube.com/watch?v=yPYZpwSpKmA)
-
-## Tips
-
-*This section is optional and may be omitted.*
-
-*Add tips and hints here to give students food for thought. Sample IoT tips:*
-
-- IoTDevices can fail from a broken heart if they are not together with their thingamajig. Your device will display a broken heart emoji on its screen if this happens.
-- An IoTDevice can have one or more thingamajigs attached which allow them to connect to multiple networks.
-
-## Advanced Challenges (Optional)
-
-*If you want, you may provide additional goals to this challenge for folks who are eager.*
-
-*This section is optional and may be omitted.*
-
-*Sample IoT advanced challenges:*
-
-Too comfortable?  Eager to do more?  Try these additional challenges!
-
-- Observe what happens if your IoTDevice is separated from its thingamajig.
-- Configure your IoTDevice to connect to BOTH the mothership and IoTQueenBee at the same time.
+If you finish early, compare token claims across both environment login paths and document how claim normalization could simplify app-level authorization logic.

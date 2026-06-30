@@ -1,0 +1,9 @@
+{
+  "name": "radius-ucp",
+  "issuer": "https://swedencentral.oic.prod-aks.azure.com/16b3c013-d300-468d-ac64-7eda0820b6d3/a73f32b6-30ef-4ae6-b32a-52107523b8d4/",
+  "subject": "system:serviceaccount:radius-system:ucp",
+  "description": "Kubernetes service account federated credential for ucp",
+  "audiences": [
+    "api://AzureADTokenExchange"
+  ]
+}

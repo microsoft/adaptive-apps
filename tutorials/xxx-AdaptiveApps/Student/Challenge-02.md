@@ -2,63 +2,113 @@
 
 [< Previous Challenge](./Challenge-01.md) - **[Home](../README.md)** - [Next Challenge >](./Challenge-03.md)
 
-## Pre-requisites
+## Challenge Metadata
 
-- Completion of [Challenge 01](./Challenge-01.md): a healthy Kubernetes cluster is available and `kubectl get nodes` shows all nodes `Ready`.
-- ACR, Key Vault, and Storage account are provisioned and role assignments are in place.
+- Difficulty Level: Intermediate
+- Estimated Time: 30-45 minutes per environment
+- Target Audience: Platform engineers and app teams operating shared Kubernetes environments
+- Prerequisites:
+	- Completion of [Challenge 01](./Challenge-01.md)
+	- Access to at least one prepared Kubernetes environment
+	- Working tools on each workstation: `kubectl`, `rad`, and optional `helm`
+	- Permissions to install platform components on the target cluster(s)
+- Learning Objectives:
+	- Compare Radius control plane deployment models and justify a team decision
+	- Establish a working Radius control plane and local team workspaces
+	- Validate environment and resource-group readiness for upcoming application deployment
+	- Build operational understanding of Radius components through dashboard exploration
 
-## Introduction
+## Scenario
 
-[Radius](https://radapp.io) is an open-source, cloud-native application platform that lets developers describe their entire application — containers, databases, message brokers, identities, and the cloud resources they depend on — as a single, portable model. Platform engineers use Radius to define reusable *environments* and *recipes* that automatically provision the right infrastructure, apply organizational policy, and keep developers focused on their code rather than the cloud plumbing underneath.
+Your organization is preparing a multi-environment trading platform rollout and needs a consistent application platform layer before development teams can ship workloads.
 
-In this challenge you install the **Radius control plane** onto the cluster you prepared in Challenge 1, configure the `rad` CLI on every team member's workstation to point at that control plane, and then explore the Radius application model before moving on to building abstractions.
+Platform leadership has asked your team to onboard Radius now, but with an architectural decision that will affect resilience, governance, and day-2 operations. The team must determine whether to centralize control or federate by site, then prove the chosen model is operationally ready.
 
-## Description
+This decision matters: an incorrect control-plane strategy can increase outage blast radius or slow cross-site delivery. Your outcome should balance reliability, operational simplicity, and workshop time constraints.
 
-Your team has been asked to get a working Radius installation ready and to understand its core concepts before authoring any recipes or deploying any applications.
+## Challenge Goals
 
-As a team, deploy and explore Radius so that the following are true:
+1. Select and justify a Radius control-plane model suitable for your environment(s).
+2. Make Radius operational for your team, including workspace, environment, and resource-group readiness.
+3. Demonstrate understanding of the deployed Radius platform by validating components and exploring the dashboard.
 
-- The `rad` CLI is installed on each team member's workstation and `rad version` reports a valid CLI version.
-- The Radius control plane is installed into the cluster (in its own namespace) and all of its pods are `Running` / `Ready`.
-- A Radius **workspace** is configured on each workstation so that the `rad` CLI targets the shared control plane.
-- A default Radius **environment** exists in the control plane, is listed as the active environment for your workspace, and has the Azure cloud provider registered against the subscription and resource group from Challenge 1.
-- Your team can explain, in its own words, what the Radius control plane is, which components are running, and how the `rad` CLI, workspace, environments, and the application model relate to each other.
-- Your team has opened the Radius **dashboard** and can navigate it to inspect the environment and resource groups.
+## Requirements and Constraints
 
-> **NOTE:** Do not author recipes or deploy applications yet — that is Challenge 3 and onwards. The goal here is a verified Radius installation and a shared understanding of the application model.
+- Work as one team and agree on naming conventions for workspaces, environments, and resource groups.
+- Support one or more target environments (AKS, k3s/k3d, Arc-enabled Kubernetes, Azure Local) based on your challenge strategy.
+- Keep the setup repeatable so any teammate can target the same control plane safely.
+- Treat this challenge as platform enablement only: recipe authoring and application deployment come later.
+- If targeting multiple sites, your approach must account for connectivity assumptions and failure isolation.
+
+## Tasks
+
+### Task 1 - Decide the Control-Plane Strategy
+
+Evaluate centralized versus federated control-plane approaches for your team scenario. Select one model and document why it best fits your operational and resilience needs.
+
+### Task 2 - Enable Radius on the Chosen Environment(s)
+
+Implement Radius installation and team access for your selected model. Ensure each participant can target the intended control plane from their own workstation.
+
+### Task 3 - Configure Team Scope
+
+Create and validate the workspace and environment boundaries your team will use in upcoming challenges. Confirm resource-group organization supports your domain/team structure.
+
+### Task 4 - Explore and Explain the Platform
+
+Use CLI and dashboard validation to inspect the deployed Radius components and hierarchy. Prepare a brief team explanation of how control plane, workspace, environment, and group scopes interact.
 
 ## Success Criteria
 
-To complete this challenge successfully, you should be able to:
+You are done when all of the following are true:
 
-- Run `rad version` on each workstation and see a valid CLI version and a matching control plane version.
-- Show that `kubectl get pods -n radius-system` returns all Radius pods as `Running` / `Ready`.
-- Show that `rad workspace list` displays a workspace pointing at your cluster, marked as current.
-- Show that `rad env list` returns at least one environment, marked as the default.
-- Open the Radius dashboard and point out the environment and any registered cloud providers.
-- Describe the role of each major Radius component (UCP, applications-rp, controller, dashboard) and why it matters.
+- The team can articulate why the chosen deployment model is appropriate for the scenario.
+- Radius is healthy and observable in the target environment(s), with control-plane components available.
+- Each team member can target the expected workspace and see the expected environment/group scope.
+- The team can demonstrate dashboard access and identify key Radius platform components.
+- The team confirms no application deployment work has started yet.
+
+## Hints (Progressive Disclosure)
+
+### Task 1 Hints
+
+- Hint 1: Start from failure domains and connectivity assumptions, not just installation simplicity.
+- Hint 2: Federated models improve site autonomy; centralized models can simplify governance.
+- Hint 3: For multi-site or intermittently connected environments, evaluate whether a single shared control plane is acceptable risk.
+
+### Task 2 Hints
+
+- Hint 1: Validate the active Kubernetes context before any installation action.
+- Hint 2: On shared clusters, one install operation can serve the whole team while each person configures local targeting.
+- Hint 3: Initial startup can take several minutes; check runtime health before re-running install commands.
+
+### Task 3 Hints
+
+- Hint 1: Use a consistent naming pattern so scopes are easy to recognize in CLI output.
+- Hint 2: Workspace scope is local to each workstation, while environments/groups are platform objects.
+- Hint 3: Multi-site teams should avoid ambiguous names that hide which site is being targeted.
+
+### Task 4 Hints
+
+- Hint 1: Validate from both CLI and dashboard views; each reveals different operational details.
+- Hint 2: Focus your explanation on component responsibilities and scope boundaries.
+- Hint 3: A short architecture summary prepared now will accelerate Challenge 03 collaboration.
 
 ## Learning Resources
 
-- [What is Radius?](https://docs.radapp.io/concepts/) — overview of Radius concepts, including the control plane, environments, and recipes.
-- [Install the rad CLI](https://docs.radapp.io/installation/) — how to obtain and verify the Radius command-line tool on Windows, macOS, and Linux.
-- [Install Radius on a Kubernetes cluster](https://docs.radapp.io/guides/operations/kubernetes/install/) — supported cluster types, required permissions, and installation options.
-- [Radius workspaces](https://docs.radapp.io/guides/operations/workspaces/overview/) — what a workspace is and how it connects the `rad` CLI to a control plane.
-- [Radius environments overview](https://docs.radapp.io/guides/deploy-apps/environments/overview/) — how environments relate to the control plane and why they matter for later challenges.
-- [Radius dashboard](https://docs.radapp.io/guides/tooling/dashboard/) — how to open and use the built-in Radius UI.
+- Radius concepts and architecture:
+	- [What is Radius?](https://docs.radapp.io/concepts/)
+	- [Install Radius on Kubernetes](https://docs.radapp.io/guides/operations/kubernetes/install/)
+- Team operations:
+	- [Radius workspaces overview](https://docs.radapp.io/guides/operations/workspaces/overview/)
+	- [Radius environments overview](https://docs.radapp.io/guides/deploy-apps/environments/overview/)
+	- [Radius dashboard](https://docs.radapp.io/guides/tooling/dashboard/)
+- Environment-specific workshop guides:
+	- [Prepare Radius on AKS](../../common/prepareRadius-aks.md)
+	- [Prepare Radius on k3s](../../common/prepareRadius-k3s.md)
+	- [Prepare Radius on Arc](../../common/prepareRadius-arc.md)
+	- [Prepare Radius on Azure Local](../../common/prepareRadius-azure-local.md)
 
-## Tips
+## Optional Stretch
 
-- The account that runs `rad install kubernetes` needs `cluster-admin` permissions on the cluster. Use `az aks get-credentials --admin` on AKS to get admin credentials if needed.
-- Only **one** team member needs to run `rad install kubernetes` — it installs into the shared cluster. Every other team member only needs to configure their local workspace.
-- If `rad install kubernetes` seems to hang, check `kubectl get pods -n radius-system` — image pulls on a fresh cluster can take a few minutes before everything becomes `Ready`.
-- Run `rad init --full` as an interactive alternative to the individual `rad workspace create` / `rad group create` / `rad env create` commands if you prefer a guided setup.
-
-## Advanced Challenges (Optional)
-
-Finished early? Try one or more of the following:
-
-- Explore the Radius dashboard (`rad dashboard`) and use it to inspect the workspace and environment visually.
-- Write a short runbook for your team explaining how to **upgrade** or **uninstall** Radius cleanly, including what happens to existing environments and applications.
-- Investigate the Radius CRDs installed in the cluster (`kubectl get crds | grep radapp.io`) and describe what each one represents.
+If you finish early, evaluate a second control-plane topology for comparison and document trade-offs in operability, resilience, and team workflow.
