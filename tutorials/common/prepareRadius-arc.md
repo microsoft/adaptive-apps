@@ -26,6 +26,14 @@ rad install kubernetes
 
 This deploys the Radius control plane (applications-rp, controller, bicep-de, UCP, dashboard, etc.) into the `radius-system` namespace.
 
+If this fails with `response status code 403: denied` while downloading the Radius Helm chart from `ghcr.io`, clear stale GitHub Container Registry credentials and retry:
+
+```bash
+helm registry logout ghcr.io || true
+docker logout ghcr.io || true
+rad install kubernetes
+```
+
 ### 1.3 Verify all Radius pods are healthy
 
 ```bash
@@ -55,7 +63,7 @@ rad group switch rg-trading
 ### 2.3 Create environment
 
 ```bash
-rad env create env-local-prod --group rg-trading --namespace prod
+rad env create env-local-prod --group rg-trading --kubernetes-namespace prod
 rad env switch env-local-prod
 ```
 

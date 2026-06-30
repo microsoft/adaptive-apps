@@ -4,7 +4,7 @@
 
 ## Pre-requisites
 
-- Completion of [Challenge 01](./Challenge-01.md): at least one healthy Kubernetes environment is available. A second environment is strongly recommended for this challenge.
+- Completion of [Challenge 01](./Challenge-01.md): at least one healthy Kubernetes environment is available. A second environment is optional but recommended for the full portability comparison.
 - Completion of [Challenge 02](./Challenge-02.md): Radius is installed, and your workstation has a workspace, environment, and resource group configured.
 - Completion of [Challenge 03](./Challenge-03.md): the portable `Radius.Resources/*` resource types have been registered.
 - Completion of [Challenge 04](./Challenge-04.md): recipes are registered for at least one environment.
@@ -21,7 +21,7 @@ By the end of this challenge you should be able to:
 
 ## Introduction
 
-Adaptive Apps has been running the trading application in a single environment. The platform team built that environment on a local or Azure Local Kubernetes cluster, and the application has been stable. Now the business wants a second environment.
+Adaptive Apps has been running the trading application in a single environment. The platform team built that environment on a local, Azure Local, Arc-enabled, or workshop-simulated local Kubernetes cluster, and the application has been stable. Now the business wants a second environment.
 
 Leadership has asked for a production environment in Azure for resilience, scale, and proximity to managed services, while the existing environment stays in place. The expectation from leadership is simple to say and harder to prove: *"It is the same application, so standing it up somewhere else should not be a rebuild."*
 
@@ -52,12 +52,13 @@ Use the Radius application model in `radius/app.bicep` and an environment that a
 - Each target environment must have the relevant `Radius.Resources/*` recipes registered before the application is deployed.
 - Only the deployment target (workspace, environment, resource group) and parameter values may differ between the two deployments.
 - The Azure-backed path relies on workload identity for the backend and frontend workloads; plan for that rather than weakening security to get a green deployment.
-- The current repository keeps PostgreSQL on the Kubernetes recipe in both the local and AKS environment files, so do not expect a managed database to appear automatically in Azure.
+- In the current repository, the local environment uses the Kubernetes PostgreSQL recipe and the Azure environment uses the Azure Database for PostgreSQL Flexible Server recipe. Your proof should show that the application model did not change when that backing implementation changed.
 - The Azure Event Grid MQTT recipe provisions the namespace endpoint only. Full publish/subscribe behavior also requires authenticated clients plus topic-space and permission-binding setup, so treat end-to-end MQTT in Azure as out of scope unless your team completes that setup deliberately.
 
 ### Work through these as a team
 
 - Decide which two environments you are targeting, and how you will keep your `kubectl` context and `rad` workspace aligned so you never deploy to the wrong place.
+- If your team optionally uses two AKS clusters because no Azure Local or edge cluster is available, call that out explicitly. It is a workshop shortcut for demonstrating two Radius environments, not a claim that AKS is Azure Local.
 - Confirm what each environment already provides before you deploy anything, so a missing recipe is not discovered halfway through.
 - Demonstrate the same application model reaching both environments by changing only the target and parameters.
 - Investigate which capabilities are backed differently in the second environment, and trace where that difference is actually expressed.

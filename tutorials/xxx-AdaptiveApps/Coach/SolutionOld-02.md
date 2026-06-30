@@ -198,7 +198,7 @@ rad group create rg-hr
 Create the environment:
 
 ```bash
-rad env create env-azure-prod --group rg-finance --namespace prod
+rad env create env-azure-prod --group rg-finance --kubernetes-namespace prod
 rad env switch env-azure-prod
 rad group switch rg-finance
 ```
@@ -243,7 +243,7 @@ Create the same domain resource groups, then create the environment. Use namespa
 rad group create rg-finance
 rad group create rg-hr
 rad group switch rg-finance
-rad env create env-local-prod --group rg-finance --namespace prod-local
+rad env create env-local-prod --group rg-finance --kubernetes-namespace prod-local
 rad env switch env-local-prod
 ```
 
@@ -394,7 +394,7 @@ rad group create rg-finance
 rad group create rg-hr
 rad group switch rg-finance
 
-rad env create env-azure-prod --group rg-finance --namespace prod
+rad env create env-azure-prod --group rg-finance --kubernetes-namespace prod
 rad env switch env-azure-prod
 
 rad env update env-azure-prod \
@@ -424,7 +424,7 @@ rad group create rg-finance
 rad group create rg-hr
 rad group switch rg-finance
 
-rad env create env-local-prod --group rg-finance --namespace prod-local
+rad env create env-local-prod --group rg-finance --kubernetes-namespace prod-local
 rad env switch env-local-prod
 
 echo "Verifying Azure Local prod..."

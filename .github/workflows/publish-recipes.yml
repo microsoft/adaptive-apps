@@ -25,6 +25,8 @@ jobs:
         include:
           - file: radius/recipes/postgres/kubernetes-trading-postgres.bicep
             tag: recipes/postgres:latest
+          - file: radius/recipes/postgres/azure-postgresql-flexible-server.bicep
+            tag: recipes/postgres-azure-flex:latest
           - file: radius/recipes/mqtt/kubernetes-mosquitto.bicep
             tag: recipes/mqtt:latest
           - file: radius/recipes/mqtt/azure-event-grid.bicep

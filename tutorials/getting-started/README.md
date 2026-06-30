@@ -15,12 +15,14 @@ This tutorial walks you through the step of deploying an Adaptive Apps portfolio
 
 ## 1. Choose your portfolio
 
-Pick a portfolio and export it. **Every subsequent step references `$PORTFOLIO`** — re-export it in any new terminal you open.
+Pick one portfolio (`min`, `core`, `ent`, `min-ai`, `core-ai`, or `ent-ai`) and export it. **Every subsequent step references `$PORTFOLIO`** — re-export it in any new terminal you open.
 
 ```bash
-export PORTFOLIO=min          # or: core | ent | min-ai | core-ai | ent-ai
-export RELEASE=$PORTFOLIO     # Helm release name; defaults to the portfolio
-export NAMESPACE=$PORTFOLIO   # Kubernetes namespace for the portfolio
+cd "$(git rev-parse --show-toplevel)"
+
+export PORTFOLIO=min
+export RELEASE=$PORTFOLIO
+export NAMESPACE=$PORTFOLIO
 ```
 
 If your target is AKS, define a few more environment variables:
@@ -148,11 +150,13 @@ proceeding.
 
 #### 2.2.2 Install the portfolio chart
 
-Use `helm install` to install the chart, parametrized by a profile
-file that turns on the right capabilities for `$PORTFOLIO`:
+Run **one** of the following commands for your target platform. `helm upgrade --install`
+installs the chart the first time and updates the same release on later runs.
+
+For local, Azure Local, Arc-enabled, or other non-AKS clusters:
 
 ```bash
-helm install $RELEASE charts/adaptive-apps \
+helm upgrade --install $RELEASE charts/adaptive-apps \
   -f charts/adaptive-apps/profiles/$PORTFOLIO.yaml \
   -n $NAMESPACE --create-namespace
 ```
@@ -161,7 +165,7 @@ On AKS, add the managed-Istio overrides (the chart must *not* install Istio;
 the AKS add-on owns it):
 
 ```bash
-helm install $RELEASE charts/adaptive-apps \
+helm upgrade --install $RELEASE charts/adaptive-apps \
   -f charts/adaptive-apps/profiles/$PORTFOLIO.yaml \
   --set features.istio.install=false \
   --set istio.namespace=aks-istio-system \

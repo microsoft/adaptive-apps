@@ -11,6 +11,8 @@ Challenge 06 moves from "portable infrastructure" to "portable identity". Teams 
 
 The architectural pattern remains stable: the frontend authenticates through OIDC, Keycloak is the broker, and upstream identity differs by environment.
 
+If the workshop uses the optional two-AKS fallback and no AD DS is available, keep the same learning objective by using a coach-approved substitute for the local upstream identity provider: Keycloak local users, a second Entra application/tenant, or another lightweight OIDC/LDAP provider. Do not describe that path as Azure Local; describe it as a lab stand-in for environment-specific identity plumbing.
+
 ### Intended learning outcomes
 
 - Understand how Keycloak acts as an identity broker while preserving a stable app OIDC contract.
@@ -87,6 +89,7 @@ Acceptable variations:
 - Different Keycloak IdP display names and mapper naming.
 - Different workspace/group naming, if used consistently.
 - Different test users, as long as authentication path is verifiable end-to-end.
+- For the optional two-AKS fallback, a local identity substitute instead of AD DS, if coaches explicitly call out the limitation.
 
 ## Optional Demo and Discussion Points
 
@@ -117,11 +120,11 @@ Coach framing: the boxes and arrows change at the identity-provider edge, not at
 ```bash
 rad workspace switch ws-local-prod
 rad group switch rg-trading
-rad environment show env-local-prod
+rad env show env-local-prod
 
 rad workspace switch ws-azure-prod
 rad group switch rg-trading
-rad environment show env-azure-prod
+rad env show env-azure-prod
 ```
 
 ### Stage 2 - Create an OIDC client in Keycloak
@@ -129,7 +132,11 @@ rad environment show env-azure-prod
 Open Keycloak and create the OIDC client the sample app will use:
 
 ```bash
-kubectl port-forward -n $NAMESPACE svc/$RELEASE-keycloak 8080:8080
+export PORTFOLIO=min
+export KEYCLOAK_RELEASE=$PORTFOLIO
+export KEYCLOAK_NAMESPACE=$PORTFOLIO
+
+kubectl port-forward -n "$KEYCLOAK_NAMESPACE" "svc/${KEYCLOAK_RELEASE}-keycloak" 8080:8080
 ```
 
 In another terminal, open <http://localhost:8080>, log in as `admin` / `admin`
@@ -150,7 +157,7 @@ Export the OIDC environment variables:
 ```bash
 export OIDC_CLIENT_ID=adaptive-apps
 export OIDC_CLIENT_SECRET=<paste-from-credentials-tab>
-export OIDC_ISSUER=http://$RELEASE-keycloak.$NAMESPACE.svc.cluster.local:8080/realms/master
+export OIDC_ISSUER=http://${KEYCLOAK_RELEASE}-keycloak.${KEYCLOAK_NAMESPACE}.svc.cluster.local:8080/realms/master
 export OIDC_AUTH_ENDPOINT=$OIDC_ISSUER/protocol/openid-connect/auth
 export OIDC_TOKEN_ENDPOINT=$OIDC_ISSUER/protocol/openid-connect/token
 export OIDC_USERINFO_ENDPOINT=$OIDC_ISSUER/protocol/openid-connect/userinfo
@@ -158,6 +165,8 @@ export OIDC_BROWSER_AUTH_ENDPOINT=http://localhost:8080/realms/master/protocol/o
 ```
 
 > Repeat this section for each environment's Keycloak instance if teams run separate clusters/namespaces.
+
+> **Two-AKS fallback:** If there is no AD DS for `env-local-prod`, keep the frontend OIDC client contract identical and configure a simpler local upstream provider (for example Keycloak local users or a second Entra-backed IdP). The point is to prove environment-specific identity plumbing without changing the app.
 
 ### Stage 3 - Configure `env-azure-prod` for Entra federation
 

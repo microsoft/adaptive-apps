@@ -179,8 +179,6 @@ Expected output:
 
 ### 1.4 Install Radius into the Azure Local cluster
 
-### 1.5 Install Radius into the Azure Local cluster
-
 With the Azure Local cluster as the current `kubectl` context:
 
 ```powershell
@@ -189,7 +187,15 @@ rad install kubernetes
 
 This deploys the Radius control plane (applications-rp, controller, bicep-de, UCP, dashboard, etc.) into the `radius-system` namespace.
 
-### 1.6 Verify all Radius pods are healthy
+If this fails with `response status code 403: denied` while downloading the Radius Helm chart from `ghcr.io`, clear stale GitHub Container Registry credentials and retry:
+
+```powershell
+helm registry logout ghcr.io
+docker logout ghcr.io
+rad install kubernetes
+```
+
+### 1.5 Verify all Radius pods are healthy
 
 ```powershell
 kubectl get pods -n radius-system

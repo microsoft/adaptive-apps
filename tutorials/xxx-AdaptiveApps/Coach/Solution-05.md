@@ -9,6 +9,7 @@
 - Expected time: **45-75 minutes** if both environments were prepared in earlier challenges. Add time if a second cluster, Azure credentials, or the Azure resource group still need to be provisioned.
 - Biggest coaching risk: teams try to make the second deployment work by editing the application model. Redirect them to the environment, recipe registration, workspace, group, and parameter layer.
 - Treat the database resource as the continuity proof from Challenge 04. The application asks for `Radius.Resources/postgreSqlDatabases`; the environment chooses the recipe implementation (a PostgreSQL container locally, Azure Database for PostgreSQL on AKS).
+- If the workshop has no Azure Local, Arc, k3d, or other Kubernetes target, two AKS clusters are an acceptable optional lab fallback. Make teams state the limitation clearly: this proves Radius environment portability and recipe substitution, not Azure Local runtime fidelity.
 - Be explicit about the boundary between a portability demonstration and full runtime parity. Azure Event Grid MQTT returns a namespace endpoint, but end-to-end publish/subscribe also needs clients, topic spaces, and permission bindings.
 
 ## Key Concepts - Portability After Recipes
@@ -63,7 +64,7 @@ The answer should keep pointing back to the same principle: the application asks
 
 ### Targeting discipline
 
-The cleanest demo uses the workspaces established in Challenge 2: `ws-local-prod` for `env-local-prod` and `ws-azure-prod` for `env-azure-prod`. A one-cluster fallback can still demonstrate the pattern with two Radius environments or groups, but coaches should make teams name that limitation. The important teaching point is that `rad` workspace/group/environment and `kubectl` context are separate sources of truth and can drift.
+The cleanest demo uses the workspaces established in Challenge 2: `ws-local-prod` for `env-local-prod` and `ws-azure-prod` for `env-azure-prod`. If both workspaces point to AKS clusters, label `ws-local-prod` as a workshop stand-in for the local/edge environment rather than calling it Azure Local. A one-cluster fallback can still demonstrate the pattern with two Radius environments or groups, but coaches should make teams name that limitation. The important teaching point is that `rad` workspace/group/environment and `kubectl` context are separate sources of truth and can drift.
 
 ### Known portability gaps to discuss
 
@@ -77,17 +78,24 @@ The cleanest demo uses the workspaces established in Challenge 2: `ws-local-prod
 
 ### Stage 1 - Confirm the Challenge 04 end state
 
-Start by confirming that the team is really continuing from Challenge 04 rather than rebuilding it. They should be able to show the database recipe registration (`Radius.Resources/postgreSqlDatabases`) and explain the `context` and `result` contract. The example below is based on the "local" environment, replace when needed.
+Start by confirming that the team is really continuing from Challenge 04 rather than rebuilding it. They should be able to show the database recipe registration (`Radius.Resources/postgreSqlDatabases`) and explain the `context` and `result` contract. The example below uses the canonical local/edge logical environment names from Challenges 02-04.
 
 ```bash
-rad workspace switch ws-local-prod
-rad group switch rg-trading
+export RADIUS_LOCAL_WORKSPACE="ws-local-prod"
+export RADIUS_LOCAL_ENVIRONMENT="env-local-prod"
+export RADIUS_WORKSPACE="ws-azure-prod"
+export RADIUS_ENVIRONMENT="env-azure-prod"
+export RADIUS_NAMESPACE="${RADIUS_ENVIRONMENT}"
+export RADIUS_GROUP="rg-trading"
 
-rad environment show env-local-prod
-rad recipe list --environment env-local-prod
+rad workspace switch "$RADIUS_LOCAL_WORKSPACE"
+rad group switch "$RADIUS_GROUP"
+
+rad env show "$RADIUS_LOCAL_ENVIRONMENT"
+rad recipe list --environment "$RADIUS_LOCAL_ENVIRONMENT"
 ```
 
-The exact names may differ if the team used the AKS preparation sample path (`aks-trading` / `trading`) or another agreed naming convention, but they should not be unknown at this point. The important checks are:
+If a team deliberately chose different names, have them translate every command consistently. The recommended path for this hack is `ws-local-prod` / `env-local-prod`, `ws-azure-prod` / `env-azure-prod`, and `rg-trading`.
 
 | Check | Expected outcome |
 |---|---|
@@ -96,7 +104,7 @@ The exact names may differ if the team used the AKS preparation sample path (`ak
 | Workload identity recipe | `Radius.Resources/workloadIdentities` is registered or intentionally handled for the first environment. |
 | Optional AI recipe | `Radius.Resources/aiModels` is registered if the team will test AI portability. |
 
-If `Radius.Resources/postgreSqlDatabases` is missing, send the team back to Challenge 04. Challenge 05 depends on the environment having the recipe mapping in place.
+If any recipe for a resource type the app declares is missing, send the team back to Challenge 04. Challenge 05 depends on each target environment having its recipe mappings in place before deploying the app.
 
 #### What to discuss
 
@@ -106,32 +114,76 @@ If `Radius.Resources/postgreSqlDatabases` is missing, send the team back to Chal
 
 ---
 
-### Stage 2 - Deploy the app to the first environment
+### Parity checklist for both environments
 
-First make sure the rad resource types are bundled:
+Use the same teaching sequence in each environment, with only environment-specific values changing:
+
+1. Target workspace/group/environment.
+2. Set or verify credentials and RBAC (only where needed).
+3. Verify required recipes for required resource types.
+4. Deploy the same application model with environment-specific parameters.
+5. Validate graph, resources, and runtime reachability.
+
+### Stage 2 - Deploy the app to the first environment (ws-local-prod)
+
+Use the parity checklist explicitly for the environment ws-local-prod, for ws-azure-prod go to the second environment,
+
+#### Step 1 - Target workspace/group/environment (first environment)
+
+```bash
+rad workspace switch "$RADIUS_LOCAL_WORKSPACE"
+rad group switch "$RADIUS_GROUP"
+rad env show "$RADIUS_LOCAL_ENVIRONMENT"
+```
+
+#### Step 2 - Set/verify credentials and RBAC (only where needed)
+
+For this local-first deployment path, no additional Azure credential or RBAC setup is required before deployment.
+
+#### Step 3 - Verify required recipes for required resource types
+
+```bash
+rad recipe list --environment "$RADIUS_LOCAL_ENVIRONMENT"
+```
+
+First make sure the Radius resource types have been imported into the active control plane:
 
 **Bash:**
 
 ```bash
-cd radius
-rad bicep publish-extension --from-file radius/resource-types/types.yaml --target types.tgz
+rad resource-type list
+```
+
+Also make sure the local Bicep extension package exists. `radius/app.bicep` imports `radius/types.tgz`, and that generated file is intentionally ignored by Git:
+
+```bash
+rad bicep publish-extension \
+    --from-file radius/resource-types/types.yaml \
+    --target radius/types.tgz
 ```
 
 **PowerShell:**
 
 ```powershell
-cd radius
-rad bicep publish-extension --from-file resource-types/types.yaml --target types.tgz
+rad resource-type list
 ```
 
-Use the same application file the team will later deploy elsewhere. The command below uses the sample group and environment names; substitute the team's names if Challenge 04 used different ones.
+```powershell
+rad bicep publish-extension `
+    --from-file radius/resource-types/types.yaml `
+    --target radius/types.tgz
+```
+
+Use the same application file the team will later deploy elsewhere. The command below uses the canonical group and environment names from the earlier challenges.
+
+#### Step 4 - Deploy the same app model with first-environment parameters
 
 **Bash:**
 
 ```bash
 rad deploy radius/app.bicep \
-    --group rg-trading \
-    --environment env-local-prod \
+    --group "$RADIUS_GROUP" \
+    --environment "$RADIUS_LOCAL_ENVIRONMENT" \
     --parameters imageRegistry=ghcr.io/microsoft/adaptive-apps \
     --parameters imageTag=latest \
     --parameters authUsername=admin \
@@ -142,8 +194,8 @@ rad deploy radius/app.bicep \
 
 ```powershell
 rad deploy radius/app.bicep `
-    --group rg-trading `
-    --environment env-local-prod `
+    --group "$RADIUS_GROUP" `
+    --environment "$RADIUS_LOCAL_ENVIRONMENT" `
     --parameters imageRegistry=ghcr.io/microsoft/adaptive-apps `
     --parameters imageTag=latest `
     --parameters authUsername=admin `
@@ -156,8 +208,8 @@ If the team is validating AI portability, enable the recipe-backed AI resource:
 
 ```bash
 rad deploy radius/app.bicep \
-    --group rg-trading \
-    --environment env-local-prod \
+    --group "$RADIUS_GROUP" \
+    --environment "$RADIUS_LOCAL_ENVIRONMENT" \
     --parameters imageRegistry=ghcr.io/microsoft/adaptive-apps \
     --parameters imageTag=latest \
     --parameters authUsername=admin \
@@ -170,8 +222,8 @@ rad deploy radius/app.bicep \
 
 ```powershell
 rad deploy radius/app.bicep `
-    --group rg-trading `
-    --environment env-local-prod `
+    --group "$RADIUS_GROUP" `
+    --environment "$RADIUS_LOCAL_ENVIRONMENT" `
     --parameters imageRegistry=ghcr.io/microsoft/adaptive-apps `
     --parameters imageTag=latest `
     --parameters authUsername=admin `
@@ -179,6 +231,8 @@ rad deploy radius/app.bicep `
     --parameters aiProvider=local `
     --parameters aiModel=qwen2.5-coder-7b-instruct
 ```
+
+#### Step 5 - Validate graph/resources/runtime
 
 Validate the app model and backing resources:
 
@@ -233,41 +287,56 @@ Open `http://localhost:3000` and sign in with the `authUsername` and `authPasswo
 
 ---
 
-### Stage 3 - Confirm or prepare the second environment
+### Stage 3 - Confirm or prepare the second environment (ws-azure-prod)
+
+Apply the same parity checklist for the second environment (ws-azure-prod). This stage covers Steps 1-3; Stage 4 continues with Steps 4-5.
 
 The second environment should already have a Kubernetes cluster and Radius control plane from Challenges 1 and 2. Challenge 4 should have given teams enough recipe knowledge to register the same required resource types in this environment.
+
+#### Step 1 - Target workspace/group/environment (second environment)
 
 Switch to the second workspace established in Challenge 2 and verify the Radius group exists:
 
 ```bash
-rad workspace switch ws-azure-prod
+rad workspace switch "$RADIUS_WORKSPACE"
 rad group list
 ```
 
-If `rg-trading` is not listed, create it. Then switch to it:
+If `RADIUS_GROUP` is not listed, create it. Then switch to it:
 
 ```bash
-rad group create rg-trading
-rad group switch rg-trading
+rad group create "$RADIUS_GROUP"
+rad group switch "$RADIUS_GROUP"
 ```
 
-Register Azure credentials with the Radius control plane if the environment's recipes need Azure provider scope and credentials.
+```bash
+rad env show "$RADIUS_ENVIRONMENT"
+```
+
+#### Step 2 - Set/verify credentials and RBAC (only where needed)
+
+Register Azure credentials with the Radius control plane if the environment's recipes need Azure provider scope and credentials. The client ID can be found in the console output from earlier commands or by searching for {AKS_CLUSTER}-radius-app.
 
 Use the command variant that matches your identity model and Radius CLI version:
 
 **Bash:**
 
 ```bash
+export RADIUS_APP_ID=<appId>
+export TENANTID=<tenantId>
+```
+
+```bash
 # Workload identity (recommended for AKS). No client secret required.
 rad credential register azure wi \
-    --client-id <appId> \
-    --tenant-id <tenant>
+    --client-id $RADIUS_APP_ID \
+    --tenant-id TENANTID
 
 # Service principal (use only when workload identity is unavailable).
 rad credential register azure sp \
-    --client-id <appId> \
+    --client-id $RADIUS_APP_ID \
     --client-secret <password> \
-    --tenant-id <tenant>
+    --tenant-id $TENANTID
 ```
 
 **PowerShell:**
@@ -275,14 +344,14 @@ rad credential register azure sp \
 ```powershell
 # Workload identity (recommended for AKS). No client secret required.
 rad credential register azure wi `
-    --client-id <appId> `
-    --tenant-id <tenant>
+    --client-id $RADIUS_APP_ID `
+    --tenant-id $TENANTID
 
 # Service principal (use only when workload identity is unavailable).
 rad credential register azure sp `
-    --client-id <appId> `
+    --client-id $RADIUS_APP_ID `
     --client-secret <password> `
-    --tenant-id <tenant>
+    --tenant-id $TENANTID
 ```
 
 Verify registration:
@@ -297,11 +366,7 @@ This is required for recipes such as `mqtt-azure-event-grid` to create Azure res
 **Bash:**
 
 ```bash
-export AZURE_SUBSCRIPTION=<subscription-id>
-export RESOURCE_GROUP=<azure-resource-group>
-
 # Use the same appId passed to `rad credential register azure wi --client-id ...`
-export RADIUS_APP_ID=<radius-workload-identity-appId>
 export RADIUS_SP_OBJECT_ID=$(az ad sp show --id "$RADIUS_APP_ID" --query id -o tsv)
 
 # Prevent MissingSubscription by setting and passing subscription explicitly.
@@ -354,11 +419,13 @@ If teams see `(MissingSubscription) The request did not have a subscription...`,
 
 If teams see `Error: unknown flag: --client-id`, they likely ran `rad credential register azure` without `wi` or `sp`. In current CLI versions, `--client-id` is valid only under `azure wi` or `azure sp`.
 
+#### Step 3 - Verify required recipes for required resource types
+
 Ensure the second environment has equivalent recipe mappings. The database capability should still be `Radius.Resources/postgreSqlDatabases`; the recipe implementation differs per environment — a PostgreSQL container locally and Azure Database for PostgreSQL Flexible Server on AKS.
 
 ```bash
-rad environment show env-azure-prod
-rad recipe list --environment env-azure-prod
+rad env show "$RADIUS_ENVIRONMENT"
+rad recipe list --environment "$RADIUS_ENVIRONMENT"
 ```
 
 Expected recipe readiness:
@@ -378,7 +445,11 @@ If a team asks why the second environment can use a different recipe or environm
 
 ---
 
-### Stage 4 - Deploy the same app to the second environment
+### Stage 4 - Continue parity checklist on second environment (deploy + validate)
+
+This stage completes Step 4 and Step 5 for the second environment.
+
+#### Step 4 - Deploy the same app model with second-environment parameters
 
 Run the same application file against the second workspace and environment. The file path remains `radius/app.bicep`.
 
@@ -394,16 +465,19 @@ First get the AKS OIDC issuer URL and tenant ID:
 
 If you have completed the previous solutions these are stored in variables, check if populated:
 ```bash
+echo $AKS_CLUSTER
 echo $AKS_OIDC_ISSUER
+echo $RESOURCE_GROUP
 echo $TENANT_ID
 ```
 
 If exist skip the following step:
 
 ```bash
+export AKS_CLUSTER=aks-azure-prod
 export AKS_OIDC_ISSUER=$(az aks show \
-    --name <aks-cluster-name> \
-    --resource-group <aks-resource-group> \
+    --name "$AKS_CLUSTER" \
+    --resource-group "$RESOURCE_GROUP" \
     --query oidcIssuerProfile.issuerUrl \
     --output tsv)
 
@@ -414,16 +488,19 @@ export TENANT_ID=$(az account show --query tenantId --output tsv)
 
 If you have completed the previous solutions these are stored in variables, check if populated:
 ```powershell
+echo $env:AKS_CLUSTER
 echo $env:AKS_OIDC_ISSUER
+echo $env:RESOURCE_GROUP
 echo $env:TENANT_ID
 ```
 
 If exist skip the following step:
 
 ```powershell
+$AKS_CLUSTER = "aks-azure-prod"
 $AKS_OIDC_ISSUER = az aks show `
-    --name <aks-cluster-name> `
-    --resource-group <aks-resource-group> `
+    --name "$AKS_CLUSTER" `
+    --resource-group "$RESOURCE_GROUP" `
     --query oidcIssuerProfile.issuerUrl `
     --output tsv
 
@@ -435,16 +512,18 @@ The helper federates a managed identity to a Kubernetes service account in a spe
 **Bash:**
 
 ```bash
-rad environment show <environment-name> --output json | jq -r '.properties.compute.namespace'
+export RADIUS_NAMESPACE=$(rad env show "$RADIUS_ENVIRONMENT" --output json | jq -r '.properties.compute.namespace')
+echo "$RADIUS_NAMESPACE"
 ```
 
 **PowerShell:**
 
 ```powershell
-(rad environment show <environment-name> --output json | ConvertFrom-Json).properties.compute.namespace
+$RADIUS_NAMESPACE = (rad env show "$RADIUS_ENVIRONMENT" --output json | ConvertFrom-Json).properties.compute.namespace
+echo $RADIUS_NAMESPACE
 ```
 
-With the shipped `aks-env.bicep` defaults this namespace is `trading` (it matches the environment name in that sample); the Challenge 2 teaching path configures it as `env-azure-prod`. Use whatever your team configured for `<environment-namespace>` below. The service account name is the value the application model binds to — `default` unless the team changed `workloadIdentityServiceAccountName`.
+The Challenge 02 teaching path configures this namespace as `env-azure-prod`. If a team intentionally changed the environment namespace, use the value returned by the command above instead. The service account name is the value the application model binds to — `default` unless the team changed `workloadIdentityServiceAccountName`.
 
 Then run the helper once for each workload:
 
@@ -456,7 +535,7 @@ Then run the helper once for each workload:
     $RESOURCE_GROUP \
     $AZURE_SUBSCRIPTION \
     "$AKS_OIDC_ISSUER" \
-    <environment-namespace> \
+    "$RADIUS_NAMESPACE" \
     default
 
 ./tutorials/getting-started/assets/app-wi-setup.sh \
@@ -464,7 +543,7 @@ Then run the helper once for each workload:
     $RESOURCE_GROUP \
     $AZURE_SUBSCRIPTION \
     "$AKS_OIDC_ISSUER" \
-    <environment-namespace> \
+    "$RADIUS_NAMESPACE" \
     default
 ```
 
@@ -476,7 +555,7 @@ Then run the helper once for each workload:
     $RESOURCE_GROUP `
     $AZURE_SUBSCRIPTION `
     "$AKS_OIDC_ISSUER" `
-    <environment-namespace> `
+    "$RADIUS_NAMESPACE" `
     default
 
 & ./tutorials/getting-started/assets/app-wi-setup.sh `
@@ -484,7 +563,7 @@ Then run the helper once for each workload:
     $RESOURCE_GROUP `
     $AZURE_SUBSCRIPTION `
     "$AKS_OIDC_ISSUER" `
-    <environment-namespace> `
+    "$RADIUS_NAMESPACE" `
     default
 ```
 
@@ -504,8 +583,8 @@ For example:
 
 ```bash
 rad deploy radius/app.bicep \
-    --group rg-trading \
-    --environment env-azure-prod \
+    --group "$RADIUS_GROUP" \
+    --environment "$RADIUS_ENVIRONMENT" \
     --parameters imageRegistry=ghcr.io/microsoft/adaptive-apps \
     --parameters imageTag=latest \
     --parameters authUsername=admin \
@@ -519,8 +598,8 @@ rad deploy radius/app.bicep \
 
 ```powershell
 rad deploy radius/app.bicep `
-    --group rg-trading `
-    --environment env-azure-prod `
+    --group "$RADIUS_GROUP" `
+    --environment "$RADIUS_ENVIRONMENT" `
     --parameters imageRegistry=ghcr.io/microsoft/adaptive-apps `
     --parameters imageTag=latest `
     --parameters authUsername=admin `
@@ -536,8 +615,8 @@ For a second environment that does not require Azure workload identity parameter
 
 ```bash
 rad deploy radius/app.bicep \
-    --group rg-trading \
-    --environment env-azure-prod \
+    --group "$RADIUS_GROUP" \
+    --environment "$RADIUS_ENVIRONMENT" \
     --parameters imageRegistry=ghcr.io/microsoft/adaptive-apps \
     --parameters imageTag=latest \
     --parameters authUsername=admin \
@@ -548,8 +627,8 @@ rad deploy radius/app.bicep \
 
 ```powershell
 rad deploy radius/app.bicep `
-    --group rg-trading `
-    --environment env-azure-prod `
+    --group "$RADIUS_GROUP" `
+    --environment "$RADIUS_ENVIRONMENT" `
     --parameters imageRegistry=ghcr.io/microsoft/adaptive-apps `
     --parameters imageTag=latest `
     --parameters authUsername=admin `
@@ -562,8 +641,8 @@ For AI-enabled Azure deployments, keep `aiProvider=local` if the application mod
 
 ```bash
 rad deploy radius/app.bicep \
-    --group rg-trading \
-    --environment env-azure-prod \
+    --group "$RADIUS_GROUP" \
+    --environment "$RADIUS_ENVIRONMENT" \
     --parameters imageRegistry=ghcr.io/microsoft/adaptive-apps \
     --parameters imageTag=latest \
     --parameters authUsername=admin \
@@ -579,8 +658,8 @@ rad deploy radius/app.bicep \
 
 ```powershell
 rad deploy radius/app.bicep `
-    --group rg-trading `
-    --environment env-azure-prod `
+    --group "$RADIUS_GROUP" `
+    --environment "$RADIUS_ENVIRONMENT" `
     --parameters imageRegistry=ghcr.io/microsoft/adaptive-apps `
     --parameters imageTag=latest `
     --parameters authUsername=admin `
@@ -591,6 +670,8 @@ rad deploy radius/app.bicep `
     --parameters aiProvider=local `
     --parameters aiModel=gpt-4o
 ```
+
+#### Step 5 - Validate graph/resources/runtime
 
 Validate the second deployment:
 
@@ -619,8 +700,8 @@ If the deployment is on AKS, also verify the Azure resources were created in the
 
 ```bash
 az resource list \
-    --subscription <subscription-id> \
-    --resource-group <resource-group> \
+    --subscription "$AZURE_SUBSCRIPTION" \
+    --resource-group "$RESOURCE_GROUP" \
     --output table
 ```
 
@@ -655,8 +736,10 @@ Have teams compare the application graph and the backing platform resources in b
 **First workspace:**
 
 ```bash
-rad workspace switch ws-local-prod
+rad workspace switch "$RADIUS_LOCAL_WORKSPACE"
 rad app graph -a adaptive-apps
+rad resource list -a adaptive-apps
+rad recipe list --environment "$RADIUS_LOCAL_ENVIRONMENT"
 rad resource list Applications.Core/containers -a adaptive-apps
 rad recipe list --environment env-local-prod
 ```
@@ -664,8 +747,10 @@ rad recipe list --environment env-local-prod
 **Second workspace:**
 
 ```bash
-rad workspace switch ws-azure-prod
+rad workspace switch "$RADIUS_WORKSPACE"
 rad app graph -a adaptive-apps
+rad resource list -a adaptive-apps
+rad recipe list --environment "$RADIUS_ENVIRONMENT"
 rad resource list Applications.Core/containers -a adaptive-apps
 rad recipe list --environment env-azure-prod
 ```
@@ -677,8 +762,8 @@ The app graph should look familiar because the Radius application resources are 
 | Area | First environment | Second environment |
 |---|---|---|
 | Application model | Same file | Same file |
-| Kubernetes namespace | Usually `env-local-prod` | `trading` with `aks-env.bicep` defaults, or `env-azure-prod` on the Challenge 2 path |
-| Database backend | PostgreSQL container recipe (`postgres:latest`) | Azure Database for PostgreSQL Flexible Server recipe (AVM) |
+| Kubernetes namespace | `env-local-prod` | `env-azure-prod` |
+| Database backend | PostgreSQL container recipe (`postgres:latest`) | Azure Database for PostgreSQL Flexible Server recipe (`postgres-azure-flex:latest`) |
 | MQTT backend | Local broker or first-environment recipe | Azure Event Grid MQTT endpoint or second-environment broker recipe |
 | Workload identity | Local/no-op or first-environment identity recipe | Azure workload identity values |
 | AI backend, if enabled | Kaito / local OpenAI-compatible endpoint | Azure OpenAI through the recipe |
@@ -721,19 +806,15 @@ This error occurs for `Radius.Resources/workloadIdentities`, `Radius.Resources/m
 
 **Root cause:** Challenge 04 Stage 2 has not been completed. The environment exists, but no recipes have been registered for the resource types the application is trying to deploy.
 
-**Solution:** Return to Challenge 04 and complete **Stage 2 — Register the pre-built recipes**. Run:
+**Solution:** Return to Challenge 04 and complete **Stage 2 — Register the pre-built recipes** for the environment that failed.
 
-**Bash:**
+For the local/edge environment, run:
 
 ```bash
-rad deploy radius/local-env.bicep --group rg-trading --environment env-local-prod
+rad deploy radius/local-env.bicep --group "$RADIUS_GROUP" --environment "$RADIUS_LOCAL_ENVIRONMENT"
 ```
 
-**PowerShell:**
-
-```powershell
-rad deploy radius/local-env.bicep --group rg-trading --environment env-local-prod
-```
+For the Azure environment, run `radius/aks-env.bicep` with the same `RADIUS_ENVIRONMENT`, `RADIUS_NAMESPACE`, `AZURE_SUBSCRIPTION`, and `RESOURCE_GROUP` values used when the environment was created.
 
 This registers all required recipes (`postgreSqlDatabases`, `mqttBrokers`, `workloadIdentities`, etc.) in the environment. Then retry `rad deploy radius/app.bicep ...`.
 
@@ -756,7 +837,7 @@ The `rad` workspace chooses the Radius control plane; the Kubernetes context is 
 rad recipe list --environment <environment-name>
 ```
 
-If `Radius.Resources/postgreSqlDatabases` is missing, return to Challenge 04 and deploy `local-env.bicep` / `aks-env.bicep` (Stage 2) to register the database recipe before deploying the app.
+If a required resource type is missing, return to Challenge 04 and deploy `local-env.bicep` / `aks-env.bicep` (Stage 2) to register the full baseline recipe set before deploying the app.
 
 **Base deployment still shows AI resources after removing AI parameters**
 

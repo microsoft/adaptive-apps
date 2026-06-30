@@ -78,7 +78,7 @@ resource aksEnv 'Applications.Core/environments@2023-10-01-preview' = {
       'Radius.Resources/postgreSqlDatabases': {
         default: {
           templateKind: 'bicep'
-          templatePath: '${recipeRegistry}/postgres:latest'
+          templatePath: '${recipeRegistry}/postgres-azure-flex:latest'
         }
       }
       // ── MQTT broker — Azure Event Grid MQTT endpoint ───────────────────

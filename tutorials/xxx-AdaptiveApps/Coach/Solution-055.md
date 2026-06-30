@@ -4,43 +4,80 @@
 
 ## Objective
 
-This extension guide adds an Azure PostgreSQL implementation for `Radius.Resources/postgreSqlDatabases` in `env-azure-prod` **without changing the default source path used by existing environments**.
+This extension guide documents the transition path for adding an Azure PostgreSQL implementation for `Radius.Resources/postgreSqlDatabases` in a target Radius environment. The recommended Challenge 05 target is `env-azure-prod`, and the current branch has already productized this baseline: the Azure environment maps PostgreSQL to `postgres-azure-flex:latest`, while the local environment stays on the container recipe.
 
 The pattern is:
 
 1. Add a new Azure PostgreSQL recipe file.
 2. Publish it to an OCI tag.
-3. Register it only in `env-azure-prod`.
+3. Register it only in the target environment, normally `env-azure-prod`.
 4. Redeploy the app unchanged.
 5. Keep rollback command ready.
 
-This preserves the current default behavior for local environments and existing docs.
+This preserves the current default behavior for local environments while making the Azure-backed environment use Azure Database for PostgreSQL Flexible Server.
 
 ---
 
 ## Non-Breaking Principle
 
 - Do **not** change the current `radius/local-env.bicep` recipe mapping.
-- Do **not** change the current `radius/aks-env.bicep` mapping yet.
-- Override recipe mapping at environment level using `rad recipe register` for `env-azure-prod` only.
+- For experiments, override recipe mapping at environment level using `rad recipe register` for the target environment only.
+- For the productized branch baseline, `radius/aks-env.bicep` maps `Radius.Resources/postgreSqlDatabases` to `postgres-azure-flex:latest` directly so Challenge 04 and Challenge 05 use the Azure-backed recipe by default.
 
 ---
 
 ## Setup Parameters
 
-Before starting, set these environment variables in your terminal:
+Before starting, set these environment variables in your terminal. Replace the placeholder values with the environment your team prepared in earlier challenges.
 
 ```bash
-export ACR_NAME="azureazureacr1"                    # Your team's ACR name
-export AKS_CLUSTER="AKSCLUSTERAdaptiveAppsAzure1"   # Your AKS cluster name
-export RADIUS_WORKSPACE="ws-azure-prod"             # Your Radius workspace name
-export RADIUS_GROUP="rg-trading"                    # Your Radius group name
-export RADIUS_TEST_GROUP="rg-trading-psql"          # Fresh group to force reprovision with new recipe
-export RESOURCE_GROUP="adaptive-apps-azure1"        # Your Azure resource group
-export AZURE_SUBSCRIPTION="8b5cfe5f-9d86-49f5-a9bf-d87f40f58a63"  # Your subscription ID
+export ACR_NAME="<your-team-acr-name>"
+export AKS_CLUSTER="aks-azure-prod"
+export KUBERNETES_CONTEXT="${AKS_CLUSTER}"
+export RADIUS_APP_NAME="${AKS_CLUSTER}-radius-app"
+export RADIUS_WORKSPACE="ws-azure-prod"
+export RADIUS_ENVIRONMENT="env-azure-prod"
+export RADIUS_NAMESPACE="${RADIUS_ENVIRONMENT}"
+export RADIUS_GROUP="rg-trading"
+export RADIUS_ENVIRONMENT_ID="/planes/radius/local/resourceGroups/${RADIUS_GROUP}/providers/Applications.Core/environments/${RADIUS_ENVIRONMENT}"
+export RADIUS_APP_GROUP="${RADIUS_GROUP}-psql"
+export RECIPE_REGISTRY="ghcr.io/microsoft/adaptive-apps/recipes"
+export RESOURCE_GROUP="<your-azure-resource-group>"
+export AZURE_SUBSCRIPTION="<your-subscription-id>"
 ```
 
 These parameters are used throughout the guide. Adjust them to match your environment.
+
+If you are continuing from an earlier draft of this guide, stop using `RADIUS_TEST_GROUP`. It has been replaced by `RADIUS_APP_GROUP`. When deploying into `RADIUS_APP_GROUP`, always pass `RADIUS_ENVIRONMENT_ID` rather than the short environment name, because the environment itself lives in `RADIUS_GROUP`.
+
+For AKS targets, reuse `AKS_CLUSTER` from [`prepare-aks.md`](../../common/prepare-aks.md). In the standard two-AKS workshop path, the Azure/cloud target uses `AKS_CLUSTER=aks-azure-prod`, `KUBERNETES_CONTEXT=aks-azure-prod`, and `RADIUS_WORKSPACE=ws-azure-prod`.
+
+For non-AKS targets, set `KUBERNETES_CONTEXT` to the kubeconfig context that hosts the target Radius workspace and set `RADIUS_APP_NAME` to the Entra application created during workload identity setup. The AKS helper names that app `${AKS_CLUSTER}-radius-app`; other setup paths may use a different name.
+
+`ACR_NAME` is the Azure Container Registry used as the team's private OCI registry for recipe publishing. It is either:
+
+- the ACR created during Azure Local preparation, or
+- the ACR the team created in Challenge 04 before publishing recipe Bicep modules.
+
+Use the registry resource name only, not the login server. For example, use `swewesbackacr`, not `swewesbackacr.azurecr.io`.
+
+If you pasted the login server by mistake, normalize it before continuing:
+
+```bash
+case "$ACR_NAME" in
+  *.azurecr.io)
+    export ACR_NAME="${ACR_NAME%.azurecr.io}"
+    ;;
+esac
+
+echo "Using ACR_NAME=${ACR_NAME}"
+```
+
+For AKS-only teams, Challenge 01 may not have created an ACR. If you do not know the registry name, list registries in the resource group or create one by following the ACR setup step in [Solution-04.md](./Solution-04.md):
+
+```bash
+az acr list --resource-group "$RESOURCE_GROUP" --query "[].name" -o table
+```
 
 ---
 
@@ -123,7 +160,10 @@ resource db 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2023-12-01-prev
 }
 
 output result object = {
-  resources: []
+  resources: [
+    pg.id
+    db.id
+  ]
   values: {
     host: pg.properties.fullyQualifiedDomainName
     port: 5432
@@ -141,6 +181,28 @@ Notes for coaches:
 
 - Keep output shape aligned with the `Radius.Resources/postgreSqlDatabases` contract.
 - The application model in `radius/app.bicep` should not require any changes.
+- Include created Azure resource IDs in `result.resources` so Radius can track lifecycle and teardown correctly.
+
+### Networking and policy tag (manual platform step)
+
+In many enterprise tenants, PostgreSQL Flexible Server with `publicNetworkAccess: Enabled` is blocked unless a policy-exception tag exists.
+
+Before deploying the Azure PostgreSQL recipe, ask the platform owner to apply the approved exception tag manually on the target scope (resource group or resource), for example:
+
+```bash
+az tag create \
+  --resource-id "/subscriptions/$AZURE_SUBSCRIPTION/resourceGroups/$RESOURCE_GROUP" \
+  --tags AllowPublicAccess=true
+```
+
+Then verify the tag:
+
+```bash
+az tag list --resource-id "/subscriptions/$AZURE_SUBSCRIPTION/resourceGroups/$RESOURCE_GROUP"
+```
+
+> Use your organization's required key/value instead of `AllowPublicAccess=true`.
+> This step is intentionally manual because governance policy ownership is platform/security controlled.
 
 ---
 
@@ -151,8 +213,10 @@ Use a unique tag so this trial does not disturb shared `latest` tags. Publish to
 ### Set ACR name parameter
 
 ```bash
-export ACR_NAME="azureazureacr1"  # Replace with your ACR name
+export ACR_NAME="<your-team-acr-name>"
 ```
+
+Use the same ACR that was created or selected for recipe publishing in Challenge 04.
 
 ### Authenticate to ACR (Docker-free method)
 
@@ -191,55 +255,129 @@ rad bicep publish \
 
 ---
 
-## Stage 3 - Register Recipe Override in env-azure-prod
+## Stage 3 - Register Recipe Override in the Target Environment
 
-Switch to the Azure workspace and register the recipe for PostgreSQL only in that environment:
+First make sure the target Azure environment has the full baseline recipe set from Challenge 04. This is what registers `mqttBrokers`, `workloadIdentities`, `aiModels`, `governance`, and `agentGuardrails`; this extension only overrides the PostgreSQL recipe.
 
 ```bash
-rad workspace switch "$RADIUS_WORKSPACE"
-rad group switch "$RADIUS_GROUP"
-
-rad recipe register default \
-  --environment env-azure-prod \
-  --resource-type Radius.Resources/postgreSqlDatabases \
-  --template-kind bicep \
-  --template-path "$ACR_NAME.azurecr.io/recipes/postgres-azure-flex:solution-055"
+if [ -z "$KUBERNETES_CONTEXT" ] || [ "$KUBERNETES_CONTEXT" = "<target-kubernetes-context>" ]; then
+  echo "Set KUBERNETES_CONTEXT to the kubeconfig context for the target Radius workspace. Available contexts:"
+  kubectl config get-contexts -o name
+else
+  kubectl config use-context "$KUBERNETES_CONTEXT" &&
+  rad workspace switch "$RADIUS_WORKSPACE" &&
+  rad group switch "$RADIUS_GROUP" &&
+  rad deploy radius/aks-env.bicep \
+    --group "$RADIUS_GROUP" \
+    --environment "$RADIUS_ENVIRONMENT" \
+    --parameters environmentName="$RADIUS_ENVIRONMENT" \
+    --parameters namespace="$RADIUS_NAMESPACE" \
+    --parameters recipeRegistry="$RECIPE_REGISTRY" \
+    --parameters azureSubscriptionId="$AZURE_SUBSCRIPTION" \
+    --parameters azureResourceGroup="$RESOURCE_GROUP"
+fi
 ```
 
-> Replace `${ACR_NAME}` with your actual ACR name (e.g., `azureazureacr1`)
+Then register the PostgreSQL override in that same environment:
+
+```bash
+if [ -z "$KUBERNETES_CONTEXT" ] || [ "$KUBERNETES_CONTEXT" = "<target-kubernetes-context>" ]; then
+  echo "Set KUBERNETES_CONTEXT to the kubeconfig context for the target Radius workspace. Available contexts:"
+  kubectl config get-contexts -o name
+else
+  kubectl config use-context "$KUBERNETES_CONTEXT" &&
+  rad workspace switch "$RADIUS_WORKSPACE" &&
+  rad group switch "$RADIUS_GROUP" &&
+  rad recipe register default \
+    --environment "$RADIUS_ENVIRONMENT_ID" \
+    --resource-type Radius.Resources/postgreSqlDatabases \
+    --template-kind bicep \
+    --template-path "$ACR_NAME.azurecr.io/recipes/postgres-azure-flex:solution-055"
+fi
+```
+
+> Replace `${ACR_NAME}` with your actual team ACR name.
 
 Validate:
 
 ```bash
-export RADIUS_APP_ID="0e342b46-16d7-4c12-9e08-a6872d789444"
-export RADIUS_SP_OBJECT_ID=$(az ad sp show --id "$RADIUS_APP_ID" --query id -o tsv)
-export ACR_ID=$(az acr show -n "$ACR_NAME" -g "$RESOURCE_GROUP" --subscription "$AZURE_SUBSCRIPTION" --query id -o tsv)
+if [ -z "$KUBERNETES_CONTEXT" ] || [ "$KUBERNETES_CONTEXT" = "<target-kubernetes-context>" ]; then
+  echo "Set KUBERNETES_CONTEXT to the kubeconfig context for the target Radius workspace. Available contexts:"
+  kubectl config get-contexts -o name
+else
+  kubectl config use-context "$KUBERNETES_CONTEXT" &&
+  rad workspace switch "$RADIUS_WORKSPACE"
 
-az role assignment create \
-  --subscription "$AZURE_SUBSCRIPTION" \
-  --assignee-object-id "$RADIUS_SP_OBJECT_ID" \
-  --assignee-principal-type ServicePrincipal \
-  --role AcrPull \
-  --scope "$ACR_ID"
+  export ACTIVE_CONTEXT=$(kubectl config current-context)
+  echo "Active Kubernetes context: ${ACTIVE_CONTEXT}"
 
-# Allow RBAC propagation before validating recipe resolution.
-# If assignment already exists, Azure returns a conflict and this is safe to ignore.
+  if [ "$ACTIVE_CONTEXT" != "$KUBERNETES_CONTEXT" ]; then
+    echo "Expected kubectl context ${KUBERNETES_CONTEXT}, but active context is ${ACTIVE_CONTEXT}. Switch to the target Radius workspace/context before registering credentials."
+  else
+    export RADIUS_APP_ID=$(az ad app list \
+      --display-name "$RADIUS_APP_NAME" \
+      --query "[0].appId" -o tsv)
 
-# Verify the role assignment was created
-az account set --subscription "$AZURE_SUBSCRIPTION"
-az role assignment list \
-  --subscription "$AZURE_SUBSCRIPTION" \
-  --assignee-object-id "$RADIUS_SP_OBJECT_ID" \
-  --scope "$ACR_ID" \
-  --query "[].{role:roleDefinitionName,scope:scope}" -o table
+    if [ -z "$RADIUS_APP_ID" ]; then
+      echo "Could not find Entra app ${RADIUS_APP_NAME}. Recheck RADIUS_APP_NAME or rerun the target cluster workload identity setup."
+    else
+      case "$ACR_NAME" in
+        *.azurecr.io)
+          export ACR_NAME="${ACR_NAME%.azurecr.io}"
+          ;;
+      esac
 
-# Now retry recipe show (wait 2-5 minutes if this is the first attempt)
-rad recipe show default \
-  --environment env-azure-prod \
-  --resource-type Radius.Resources/postgreSqlDatabases
+      if [ -z "$ACR_NAME" ] || [ "$ACR_NAME" = "<your-team-acr-name>" ]; then
+        echo "Set ACR_NAME to your registry resource name, for example swewesbackacr. Do not include .azurecr.io."
+      else
+        export RADIUS_SP_OBJECT_ID=$(az ad sp show --id "$RADIUS_APP_ID" --query id -o tsv)
+        export ACR_ID=$(az acr show -n "$ACR_NAME" -g "$RESOURCE_GROUP" --subscription "$AZURE_SUBSCRIPTION" --query id -o tsv)
+
+        if [ -z "$ACR_ID" ]; then
+          echo "Could not resolve ACR_ID for ACR_NAME=${ACR_NAME}. Check ACR_NAME, RESOURCE_GROUP, and AZURE_SUBSCRIPTION before retrying."
+        else
+          az role assignment create \
+            --subscription "$AZURE_SUBSCRIPTION" \
+            --assignee-object-id "$RADIUS_SP_OBJECT_ID" \
+            --assignee-principal-type ServicePrincipal \
+            --role AcrPull \
+            --scope "$ACR_ID"
+
+          echo "If the role assignment already exists, Azure returns a conflict and that is safe to ignore."
+
+          az account set --subscription "$AZURE_SUBSCRIPTION"
+          az role assignment list \
+            --subscription "$AZURE_SUBSCRIPTION" \
+            --assignee-object-id "$RADIUS_SP_OBJECT_ID" \
+            --scope "$ACR_ID" \
+            --query "[].{role:roleDefinitionName,scope:scope}" -o table
+
+          export TENANT_ID=$(az account show --query tenantId -o tsv)
+          rad credential register azure wi \
+            --client-id "$RADIUS_APP_ID" \
+            --tenant-id "$TENANT_ID"
+          rad credential show azure
+
+          kubectl rollout restart deployment/bicep-de -n radius-system
+          kubectl rollout status deployment/bicep-de -n radius-system --timeout=2m
+
+          rad recipe show default \
+            --environment "$RADIUS_ENVIRONMENT_ID" \
+            --resource-type Radius.Resources/postgreSqlDatabases
+
+          rad recipe list --environment "$RADIUS_ENVIRONMENT_ID"
+        fi
+      fi
+    fi
+  fi
+fi
 ```
 
+The `rad credential register` output must reference the target workspace context, for example `Kubernetes (context=aks-azure-prod)` for the optional two-AKS path. If it references a different cluster, switch to the target workspace and rerun the block.
+
 If `rad recipe show` or later deploy steps fail with auth errors, see [Appendix: Troubleshooting](#appendix-troubleshooting).
+
+Before moving on, confirm the recipe list includes at least `Radius.Resources/postgreSqlDatabases`, `Radius.Resources/mqttBrokers`, and `Radius.Resources/workloadIdentities`. If `mqttBrokers` or `workloadIdentities` are missing, rerun the baseline `radius/aks-env.bicep` deployment above, then rerun the PostgreSQL override because the baseline deployment can restore the default PostgreSQL recipe.
 
 Confirm that `templatePath` is exactly:
 
@@ -249,20 +387,32 @@ ${ACR_NAME}.azurecr.io/recipes/postgres-azure-flex:solution-055
 
 ---
 
-## Stage 4 - Redeploy App to env-azure-prod
+## Stage 4 - Redeploy App to the Target Environment
 
-Deploy into a fresh Radius group so existing resources do not mask the recipe change.
+Deploy into a fresh Radius group so existing resources do not mask the recipe change. Because the environment lives in `RADIUS_GROUP` and the test app lives in `RADIUS_APP_GROUP`, pass the full environment ID during deployment.
 
 ```bash
-rad group switch "$RADIUS_TEST_GROUP"
+if ! rad group show "$RADIUS_APP_GROUP" >/dev/null 2>&1; then
+  rad group create "$RADIUS_APP_GROUP"
+fi
+
+rad group switch "$RADIUS_APP_GROUP"
 ```
 
 Then deploy app without changing `radius/app.bicep`:
 
+If this workstation has not generated the local Radius Bicep extension yet, create it first:
+
+```bash
+rad bicep publish-extension \
+  --from-file radius/resource-types/types.yaml \
+  --target radius/types.tgz
+```
+
 ```bash
 rad deploy radius/app.bicep \
-  --group "$RADIUS_TEST_GROUP" \
-  --environment env-azure-prod \
+  --group "$RADIUS_APP_GROUP" \
+  --environment "$RADIUS_ENVIRONMENT_ID" \
   --parameters imageRegistry=ghcr.io/microsoft/adaptive-apps \
   --parameters imageTag=latest \
   --parameters authUsername=admin \
@@ -273,7 +423,7 @@ Why this matters: recipe registration affects new provisioning. Reusing an exist
 
 If your environment requires workload-identity params, pass them exactly as in Solution-05.
 
-If deployment fails with `RecipeDownloadFailed` or `AuthenticationFailed`, use [Appendix: Troubleshooting](#appendix-troubleshooting) before retrying.
+If deployment fails with `RecipeNotFoundFailure`, the target environment is missing one or more baseline recipes. Return to Stage 3, deploy `radius/aks-env.bicep`, and rerun the PostgreSQL override before retrying. If deployment fails with `RecipeDownloadFailed` or `AuthenticationFailed`, use [Appendix: Troubleshooting](#appendix-troubleshooting) before retrying.
 
 ---
 
@@ -300,14 +450,14 @@ az postgres flexible-server list -g "$RESOURCE_GROUP" -o table
 
 ## Rollback (Return to Existing Source Behavior)
 
-If needed, switch `env-azure-prod` back to current default PostgreSQL recipe:
+If needed, switch the target environment back to the current default PostgreSQL recipe:
 
 ```bash
 rad recipe register default \
-  --environment env-azure-prod \
+  --environment "$RADIUS_ENVIRONMENT_ID" \
   --resource-type Radius.Resources/postgreSqlDatabases \
   --template-kind bicep \
-  --template-path "${ACR_NAME}.azurecr.io/recipes/postgres:latest"
+  --template-path "${RECIPE_REGISTRY}/postgres-azure-flex:latest"
 ```
 
 Then redeploy the app.
@@ -331,10 +481,17 @@ Use this section when Stage 3 or Stage 4 fails due to credential or registry acc
 The command must include the authentication mode (`sp` or `wi`):
 
 ```bash
+export RADIUS_APP_ID=$(az ad app list \
+  --display-name "$RADIUS_APP_NAME" \
+  --query "[0].appId" -o tsv)
+export TENANT_ID=$(az account show --query tenantId -o tsv)
+```
+
+```bash
 rad credential register azure sp \
   --client-id "$RADIUS_APP_ID" \
   --client-secret "<secret-value>" \
-  --tenant-id "$TENANTID"
+  --tenant-id "$TENANT_ID"
 ```
 
 For workload identity mode:
@@ -342,7 +499,7 @@ For workload identity mode:
 ```bash
 rad credential register azure wi \
   --client-id "$RADIUS_APP_ID" \
-  --tenant-id "$TENANTID"
+  --tenant-id "$TENANT_ID"
 ```
 
 ### C. Validate secret correctness before redeploy
@@ -353,7 +510,7 @@ Always validate the secret value directly with Azure first:
 az login --service-principal \
   -u "$RADIUS_APP_ID" \
   -p "<secret-value>" \
-  --tenant "$TENANTID"
+  --tenant "$TENANT_ID"
 ```
 
 If this fails with `AADSTS7000215`, the value is wrong (often secret ID copied instead of secret value, or truncated copy). Create a new secret in portal and copy the full **Value** field.
@@ -376,25 +533,106 @@ Expected payload shape:
 ### E. Force control-plane refresh after credential update
 
 ```bash
-kubectl rollout restart deployment/bicep-de -n radius-system
-kubectl rollout status deployment/bicep-de -n radius-system --timeout=2m
+if [ -z "$KUBERNETES_CONTEXT" ] || [ "$KUBERNETES_CONTEXT" = "<target-kubernetes-context>" ]; then
+  echo "Set KUBERNETES_CONTEXT to the kubeconfig context for the target Radius workspace. Available contexts:"
+  kubectl config get-contexts -o name
+else
+  kubectl config use-context "$KUBERNETES_CONTEXT" &&
+  rad workspace switch "$RADIUS_WORKSPACE"
+
+  export ACTIVE_CONTEXT=$(kubectl config current-context)
+  echo "Active Kubernetes context: ${ACTIVE_CONTEXT}"
+
+  if [ "$ACTIVE_CONTEXT" != "$KUBERNETES_CONTEXT" ]; then
+    echo "Expected kubectl context ${KUBERNETES_CONTEXT}, but active context is ${ACTIVE_CONTEXT}. Switch to the target Radius workspace/context before refreshing credentials."
+  else
+    export TENANT_ID=$(az account show --query tenantId -o tsv)
+
+    rad credential register azure wi \
+      --client-id "$RADIUS_APP_ID" \
+      --tenant-id "$TENANT_ID"
+    rad credential show azure
+
+    kubectl rollout restart deployment/bicep-de -n radius-system
+    kubectl rollout status deployment/bicep-de -n radius-system --timeout=2m
+  fi
+fi
 ```
 
-Then retry deployment.
+Then retry `rad recipe show` or deployment. If `rad recipe show` still returns `RecipeLanguageFailure` with ACR `401`, confirm both the credential and ACR RBAC are using the same app ID/object ID, then verify that Radius was installed with Azure workload identity enabled.
 
 ### F. Verify ACR RBAC at correct scope
 
 ```bash
-az role assignment list \
-  --subscription "$AZURE_SUBSCRIPTION" \
-  --assignee-object-id "$RADIUS_SP_OBJECT_ID" \
-  --scope "$ACR_ID" \
-  --query "[].{role:roleDefinitionName,scope:scope}" -o table
+case "$ACR_NAME" in
+  *.azurecr.io)
+    export ACR_NAME="${ACR_NAME%.azurecr.io}"
+    ;;
+esac
+
+export ACR_ID=$(az acr show -n "$ACR_NAME" -g "$RESOURCE_GROUP" --subscription "$AZURE_SUBSCRIPTION" --query id -o tsv)
+
+if [ -z "$ACR_ID" ]; then
+  echo "Could not resolve ACR_ID for ACR_NAME=${ACR_NAME}. Check ACR_NAME, RESOURCE_GROUP, and AZURE_SUBSCRIPTION before retrying."
+else
+  az role assignment list \
+    --subscription "$AZURE_SUBSCRIPTION" \
+    --assignee-object-id "$RADIUS_SP_OBJECT_ID" \
+    --scope "$ACR_ID" \
+    --query "[].{role:roleDefinitionName,scope:scope}" -o table
+fi
 ```
 
 Expected role: `AcrPull` on the registry resource ID (not only at resource-group root).
 
-### G. Tenant policy constraints
+### G. Verify Radius workload identity wiring
+
+`rad credential register azure wi` only stores the Azure credential. The Radius control plane also must have been installed with Azure workload identity enabled so pods such as `bicep-de` can use that credential to fetch private Bicep modules from ACR.
+
+Check the `bicep-de` service account and federated credential:
+
+```bash
+kubectl get serviceaccount bicep-de -n radius-system \
+  -o jsonpath='{.metadata.annotations.azure\.workload\.identity/client-id}{"\n"}'
+
+az ad app federated-credential list \
+  --id "$RADIUS_APP_ID" \
+  --query "[?name=='radius-bicep-de'].{name:name,issuer:issuer,subject:subject}" \
+  -o table
+```
+
+Expected:
+
+- the service account annotation matches `$RADIUS_APP_ID`
+- the federated credential subject is `system:serviceaccount:radius-system:bicep-de`
+- the federated credential issuer matches this AKS cluster's OIDC issuer, not the other cluster in a two-AKS workshop
+
+If the service account annotation is empty or wrong, reinstall the Radius control plane with workload identity enabled, then re-register the credential:
+
+```bash
+rad install kubernetes --reinstall \
+  --set rp.publicEndpointOverride=localhost:8081 \
+  --set global.azureWorkloadIdentity.enabled=true
+
+export TENANT_ID=$(az account show --query tenantId -o tsv)
+
+rad credential register azure wi \
+  --client-id "$RADIUS_APP_ID" \
+  --tenant-id "$TENANT_ID"
+
+kubectl rollout restart deployment/bicep-de -n radius-system
+kubectl rollout status deployment/bicep-de -n radius-system --timeout=2m
+```
+
+Then retry:
+
+```bash
+rad recipe show default \
+  --environment "$RADIUS_ENVIRONMENT_ID" \
+  --resource-type Radius.Resources/postgreSqlDatabases
+```
+
+### H. Tenant policy constraints
 
 If tenant policy blocks one or both auth modes:
 
@@ -403,7 +641,7 @@ If tenant policy blocks one or both auth modes:
 
 In this case, create a portal-issued secret that complies with policy and validate it using step C.
 
-### H. Known limitation note (Radius v0.58)
+### I. Known limitation note (Radius v0.58)
 
 If all of the following are true:
 
@@ -416,12 +654,12 @@ you may be hitting a private OCI registry credential propagation/resolver limita
 
 ---
 
-## Optional Follow-Up (After Validation)
+## Productized Baseline (Applied in this branch)
 
-Once validated by the team, you can productize this by:
+This branch applies the split-environment baseline directly:
 
-1. Adding the new recipe to `.github/workflows/publish-recipes.yml` with a stable tag.
-2. Updating `radius/aks-env.bicep` to point `postgreSqlDatabases` to that Azure tag.
-3. Keeping `radius/local-env.bicep` on the local container recipe.
+1. `.github/workflows/publish-recipes.yml` publishes the Azure PostgreSQL recipe with stable tag `recipes/postgres-azure-flex:latest`.
+2. `radius/aks-env.bicep` maps `Radius.Resources/postgreSqlDatabases` to `postgres-azure-flex:latest`.
+3. `radius/local-env.bicep` remains on `postgres:latest` for the local container implementation.
 
 This keeps local and Azure implementations intentionally different while preserving the same app model.

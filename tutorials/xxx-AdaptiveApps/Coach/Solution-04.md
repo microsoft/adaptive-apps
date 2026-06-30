@@ -8,7 +8,7 @@
 - The two steps mirror Challenge 3: first build one recipe manually (Azure SQL) so the concept is fully understood, then register the full set of pre-built recipes in one command so teams have a working environment.
 - Expected time: **60–90 minutes**. The manual SQL recipe takes 30–40 minutes. Registering and validating the pre-built recipes takes 15–20 minutes.
 - Biggest coaching risk: teams start writing recipe logic before they understand the `context` object. Spend time on the `context` parameter — it is the bridge between Radius and the Bicep file.
-- Do not let teams skip Azure Verified Modules (AVM). AVM is how the platform team avoids reinventing security defaults, naming, diagnostics, and tagging. If a team writes raw `Microsoft.Sql/servers` instead of reaching for AVM, redirect them.
+- Do not let teams skip Azure Verified Modules (AVM) in the manual Azure SQL exercise. AVM is how the platform team avoids reinventing security defaults, naming, diagnostics, and tagging. If a team writes raw `Microsoft.Sql/servers` instead of reaching for AVM in Stage 1, redirect them.
 
 ## Key Concepts — Recipes
 
@@ -55,7 +55,7 @@ Every recipe receives a single `context` parameter injected by Radius. It contai
 
 A recipe calling raw ARM resource types works, but it misses security defaults, naming conventions, diagnostics, RBAC, and tagging that every Azure resource should have. **Azure Verified Modules (AVM)** are Microsoft-curated Bicep modules that encode these defaults and are tested against the Well-Architected Framework.
 
-The pattern for every Azure recipe in this hack:
+The preferred pattern for Azure recipes that have a suitable AVM:
 
 ```
 Recipe Bicep file  →  calls AVM module  →  provisions Azure resource
@@ -63,7 +63,7 @@ Recipe Bicep file  →  calls AVM module  →  provisions Azure resource
 ```
 
 The recipe owns: parameter shaping, `context` unpacking, output mapping to Radius `result`.
-AVM owns: security defaults, naming, RBAC, diagnostics, compliance tags.
+AVM owns: security defaults, naming, RBAC, diagnostics, compliance tags. Some shipped workshop recipes are intentionally lighter-weight for hack reliability; call that out when comparing "demo-ready" versus "production-ready" recipe quality.
 
 Browse available AVM modules at **https://aka.ms/avm**.
 
@@ -114,7 +114,7 @@ kubectl port-forward svc/dashboard -n radius-system 7007:80
 
 Then open `http://localhost:7007` in a browser.
 
-> If your team used the sample AKS preparation values from [`prepare-aks.md`](../../common/prepare-aks.md), use that workspace and environment instead (for example `aks-trading` and `trading`).
+> If your team intentionally used different workspace or environment names, translate the commands consistently. The recommended Challenge 02 path uses `ws-local-prod` / `env-local-prod`, `ws-azure-prod` / `env-azure-prod`, and `rg-trading`.
 
 Navigate to **Environments** → `env-azure-prod` → **Recipes**. The list is empty — no recipes have been registered yet.
 
@@ -267,6 +267,8 @@ cat > ~/.docker/config.json <<EOF
 EOF
 ```
 
+The Azure CLI warning about refresh tokens is expected. Do not use the returned value as a raw registry API bearer token; use it as the password in Docker/OCI auth config with username `00000000-0000-0000-0000-000000000000`, as shown above.
+
 **PowerShell:**
 
 ```powershell
@@ -379,6 +381,8 @@ cat > ~/.docker/config.json <<EOF
 EOF
 ```
 
+The Azure CLI warning about refresh tokens is expected. Do not use the returned value as a raw registry API bearer token; use it as the password in Docker/OCI auth config with username `00000000-0000-0000-0000-000000000000`, as shown above.
+
 Then rerun publish and register commands.
 
 Also verify RBAC: the signed-in identity needs at least `AcrPush` on the target registry.
@@ -399,9 +403,9 @@ Then register the recipe:
 **Bash:**
 
 ```bash
-export ENVIRONMENT_NAME="env-local-prod"  # Use your actual environment name
+export RADIUS_ENVIRONMENT="env-local-prod"
 rad recipe register default \
-    --environment "$ENVIRONMENT_NAME" \
+    --environment "$RADIUS_ENVIRONMENT" \
     --resource-type Radius.Resources/sqlDatabases \
     --template-kind bicep \
     --template-path ${ACR_NAME}.azurecr.io/recipes/sql-server:1.0.0
@@ -410,9 +414,9 @@ rad recipe register default \
 **PowerShell:**
 
 ```powershell
-$ENVIRONMENT_NAME = "env-local-prod"  # Use your actual environment name
+$RADIUS_ENVIRONMENT = "env-local-prod"
 rad recipe register default `
-    --environment "$ENVIRONMENT_NAME" `
+    --environment "$RADIUS_ENVIRONMENT" `
     --resource-type Radius.Resources/sqlDatabases `
     --template-kind bicep `
     --template-path "$($ACR_NAME).azurecr.io/recipes/sql-server:1.0.0"
@@ -423,7 +427,7 @@ Verify in the dashboard: navigate to **Environments** → select your environmen
 Verify via CLI:
 
 ```bash
-rad recipe list --environment "$ENVIRONMENT_NAME"
+rad recipe list --environment "$RADIUS_ENVIRONMENT"
 ```
 
 #### What to discuss
@@ -437,9 +441,37 @@ rad recipe list --environment "$ENVIRONMENT_NAME"
 
 ### Stage 2 — Register the pre-built recipes for the portable app
 
-The repository ships two environment Bicep files that define environments *and* register all recipes in a single deployment. This is the recommended pattern for a platform team: environment config and recipe registration are infrastructure-as-code, not manual CLI steps. To import the recipies the commands differ per environment type.
+The repository ships two environment Bicep files that define environments *and* register all recipes in a single deployment. This is the recommended pattern for a platform team: environment config and recipe registration are infrastructure-as-code, not manual CLI steps. To import the recipes the commands differ per environment type.
 
-> **Naming note:** These commands use the Challenge 2 teaching names — group `rg-trading` with environments `env-local-prod` and `env-azure-prod`. The shipped `aks-env.bicep` defaults its `environmentName` (and Kubernetes `namespace`) parameter to `trading`, so the AKS command passes `--parameters environmentName=env-azure-prod` to align the Radius environment with the teaching names. If your team instead followed the sample values in [`prepare-aks.md`](../../common/prepare-aks.md) (`RADIUS_GROUP=trading`, `RADIUS_WORKSPACE=aks-trading`, environment `trading`), use those names consistently in every command below instead.
+> **Naming note:** These commands use the Challenge 02 teaching names — group `rg-trading` with environments `env-local-prod` and `env-azure-prod`. The shipped `aks-env.bicep` defaults its `environmentName` and Kubernetes `namespace` parameters to `trading`, so the AKS command passes both as `env-azure-prod` to align the Radius environment and workload namespace with the rest of the guide.
+
+In the optional two-AKS workshop fallback, run `local-env.bicep` against the AKS cluster that represents the logical local/edge environment, then run `aks-env.bicep` against the Azure AKS cluster. The physical platform can be AKS in both cases; the teaching distinction is the Radius environment and recipe mapping.
+
+#### Local logical environment (Azure Local, k3d, Arc, or AKS-as-local for `env-local-prod`)
+
+**Bash:**
+
+```bash
+rad deploy radius/local-env.bicep --group rg-trading --environment env-local-prod
+```
+
+**PowerShell:**
+
+```powershell
+rad deploy radius/local-env.bicep --group rg-trading --environment env-local-prod
+```
+
+This command deploys `local-env.bicep`, which creates the `env-local-prod` environment and registers the following recipes against `Radius.Resources/*`:
+
+| Resource type | Recipe | Backend |
+|---|---|---|
+| `Radius.Resources/postgreSqlDatabases` | `postgres:latest` | PostgreSQL 16 container (Kubernetes) |
+| `Radius.Resources/mqttBrokers` | `mqtt:latest` | Eclipse Mosquitto container (Kubernetes) |
+| `Radius.Resources/idProviders` | `idp-keycloak:latest` | Keycloak OIDC container (Kubernetes) |
+| `Radius.Resources/workloadIdentities` | `workload-identity-local:latest` | Kubernetes service account (no-op) |
+| `Radius.Resources/aiModels` | `ai-agent-kaito:latest` | Kaito in-cluster LLM (Kubernetes GPU) |
+| `Radius.Resources/governance` | `governance-opa:latest` | Open Policy Agent (Kubernetes) |
+| `Radius.Resources/agentGuardrails` | `agent-guardrails-agt:latest` | Agent Governance Toolkit sidecar support |
 
 #### AKS / Azure environment (apply for Azure env-azure-prod)
 
@@ -450,6 +482,7 @@ rad deploy radius/aks-env.bicep \
     --group rg-trading \
     --environment env-azure-prod \
     --parameters environmentName=env-azure-prod \
+    --parameters namespace=env-azure-prod \
     --parameters azureSubscriptionId=$AZURE_SUBSCRIPTION \
     --parameters azureResourceGroup=$RESOURCE_GROUP
 ```
@@ -461,6 +494,7 @@ rad deploy radius/aks-env.bicep `
     --group rg-trading `
     --environment env-azure-prod `
     --parameters environmentName=env-azure-prod `
+    --parameters namespace=env-azure-prod `
     --parameters azureSubscriptionId=$AZURE_SUBSCRIPTION `
     --parameters azureResourceGroup=$RESOURCE_GROUP
 ```
@@ -469,7 +503,7 @@ This registers a parallel set of Azure-backed recipes against the same resource 
 
 | Resource type | Recipe | Backend |
 |---|---|---|
-| `Radius.Resources/postgreSqlDatabases` | `postgres:latest` | Azure Database for PostgreSQL Flexible Server (AVM) |
+| `Radius.Resources/postgreSqlDatabases` | `postgres-azure-flex:latest` | Azure Database for PostgreSQL Flexible Server (AVM) |
 | `Radius.Resources/mqttBrokers` | `mqtt-azure-event-grid:latest` | Azure Event Grid MQTT namespace (AVM) |
 | `Radius.Resources/workloadIdentities` | `workload-identity-azure:latest` | AKS workload identity + federated credential |
 | `Radius.Resources/aiModels` | `ai-agent-azure-openai:latest` | Azure OpenAI account + deployment (AVM) |
@@ -524,7 +558,7 @@ rad recipe list --environment env-azure-prod
 
 #### Coaching questions
 
-- *"Both environments register a recipe for `Radius.Resources/postgreSqlDatabases`. What is different between them?"* (The template path points to a different Bicep file. The local recipe deploys a container; the AKS recipe calls AVM to provision a managed Azure service. The resource type schema — and therefore the application Bicep — is identical.)
+- *"Both environments register a recipe for `Radius.Resources/postgreSqlDatabases`. What is different between them?"* (The template path points to a different Bicep file. The local recipe deploys a container; the AKS recipe provisions a managed Azure service. The resource type schema — and therefore the application Bicep — is identical.)
 - *"Why is `rad deploy` used to register recipes instead of `rad recipe register`?"* (Using Bicep for environment + recipe registration is infrastructure-as-code. It is repeatable, reviewable, and version-controlled. `rad recipe register` is a CLI shortcut suitable for one-off experiments, not production.)
 - *"The `governance-opa:latest` recipe is the same in both environments. When would you want different governance recipes per environment?"* (When prod uses a stricter OPA policy bundle than non-prod, or when prod routes policy decisions to an external PDP rather than running OPA in-cluster.)
 - *"What is the `--group rg-trading` flag?"* (It scopes the deployment to the `rg-trading` Radius resource group — equivalent to `rad group switch rg-trading` before running `rad deploy`.)

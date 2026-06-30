@@ -5,8 +5,8 @@
 ## Notes & Guidance
 
 - The goal of this challenge is to install and configure Radius for your chosen deployment model.
-- Before starting, teams must understand the two control-plane architectures (see "Control Plane Deployment Options" section below) and decide which model fits their operational needs.
-- For most teams, the **Federated Model** (one control plane per site) provides better resilience for multi-site or disconnected scenarios.
+- Before starting, teams should understand the two control-plane architectures (see "Control Plane Deployment Options" section below). This guide follows the federated model because it best supports the portability story across environments.
+- For most multi-environment teams, the **Federated Model** (one control plane per site) provides better resilience for multi-site or disconnected scenarios.
 - The **Centralized Model** (one shared control plane) is simpler operationally but requires reliable connectivity between all sites.
 - Only one team member needs to run `rad install kubernetes` against a shared cluster. Each team member then sets up their own local workspace — that is per-workstation, not per-cluster.
 - Typical blockers to watch for:
@@ -39,7 +39,7 @@ Before installing Radius, your team must choose between two architectural models
 - Config source: Central Git repo + CI/CD promotion pipeline
 - Deployment: Each site applies artifacts independently
 - Failure behavior: Site outage is isolated; others unaffected
-- Data sync: Eventual consistency, handled separately (see [docs/data-sync/README.md](../../docs/data-sync/README.md))
+- Data sync: Eventual consistency, handled separately (see [docs/data-sync/README.md](../../../docs/data-sync/README.md))
 
 **When to choose this model:**
 - You need to operate during cloud/WAN disconnection
@@ -81,19 +81,21 @@ Before installing Radius, your team must choose between two architectural models
 | Azure + Azure Local (connected) | **Federated** (better isolation) or **Centralized** (simpler) |
 | Azure + Azure Local (intermittent connectivity) | **Federated** (only viable option) |
 | Azure + Azure Local (disconnected/air-gapped) | **Federated** (only viable option) |
+| Optional two-AKS workshop fallback | **Federated** (best preserves the learning objective) |
 | Multiple sites across WAN | **Federated** (resilience) or **Centralized** (if connectivity is guaranteed) |
 
 ---
 
 ### This Challenge: Following the Federated Model
 
-This challenge assumes you have **chosen the Federated Model** (one control plane per site). If your team wants the Centralized Model, contact the coach for guidance on step-by-step adaptation.
+This challenge follows the **Federated Model** (one control plane per site). If your team wants the Centralized Model, coaches should treat it as an advanced variation and adapt the workspace/environment setup deliberately.
 
 In the Federated Model:
 1. Each site installs its own Radius control plane on its own cluster.
-2. Each site creates its own workspaces, environments, and resource groups using the same naming conventions.
-3. Configuration is synchronized via Git and CI/CD, not via live Radius APIs.
-4. Data sync between sites is handled separately (see [docs/data-sync/README.md](../../docs/data-sync/README.md)).
+2. Each workstation creates one local `rad` workspace per control plane.
+3. Each control plane creates its own environments and resource groups using the same naming conventions.
+4. Configuration is synchronized via Git and CI/CD, not via live Radius APIs.
+5. Data sync between sites is handled separately (see [docs/data-sync/README.md](../../../docs/data-sync/README.md)).
 
 ---
 
@@ -128,7 +130,7 @@ The same application (e.g., `app.bicep`) deployed to `env-azure-prod` and `env-l
 A **Radius resource group** is a logical container for applications and other Radius resources within an environment, organized by domain or team. It is **not** an Azure resource group and has no Azure billing implications.
 
 **Key points:**
-- Create resource groups once and reuse them across environments (`rg-finance` exists in both `env-azure-prod` and `env-local-prod`)
+- Create the same resource group names in each environment or control plane (`rg-trading` exists in both `env-azure-prod` and `env-local-prod`)
 - Every Radius application must live in a resource group
 - Switching with `rad group switch` changes the scope for all subsequent `rad` commands on that workstation
 
@@ -136,27 +138,23 @@ A **Radius resource group** is a logical container for applications and other Ra
 
 #### The Complete Hierarchy
 
-```
-Radius control plane (one per site)
-│
-├── Environment: env-azure-prod
-│   ├── Resource Group: rg-finance
-│   │   ├── Application: app-finance-api
-│   │   └── Application: app-finance-web
-│   └── Resource Group: rg-trading
-│       ├── Application: app-trading-api
-│       └── Application: app-trading-web
-│
-└── Environment: env-local-prod
-    ├── Resource Group: rg-finance
-    │   ├── Application: app-finance-api
-    │   └── Application: app-finance-web
-    └── Resource Group: rg-trading
-        ├── Application: app-trading-api
-        └── Application: app-trading-web
+```text
+Workstation rad config
+|
+|-- Workspace: ws-azure-prod
+|   `-- Azure Radius control plane
+|       `-- Environment: env-azure-prod
+|           `-- Resource Group: rg-trading
+|               `-- Application: adaptive-apps
+|
+`-- Workspace: ws-local-prod
+    `-- Local/edge Radius control plane
+        `-- Environment: env-local-prod
+            `-- Resource Group: rg-trading
+                `-- Application: adaptive-apps
 ```
 
-> **In this hack:** the diagram above shows the *general* multi-application pattern a platform team would use. The reference application you deploy from Challenge 4 onward is a **single** Radius application named `adaptive-apps`, deployed into the `rg-trading` resource group in each environment. The `app-finance-*` / `app-trading-*` entries are illustrative of how many applications would be organized under the same hierarchy.
+> **In this hack:** the reference application you deploy from Challenge 4 onward is a **single** Radius application named `adaptive-apps`, deployed into the `rg-trading` resource group in each environment. The same names appear under different workspaces/control planes so teams can compare environments without changing the application model.
 
 #### Understanding Workspaces
 
@@ -177,10 +175,10 @@ Pick **one or more** target environments and follow the corresponding guide. Eac
 
 | Environment | Guide | Notes |
 |---|---|---|
-| Local k3s (via k3d) | [adaptive-apps/tutorials/common/prepareRadius-k3s.md at microhack-EU · microsoft/adaptive-apps](https://github.com/microsoft/adaptive-apps/blob/microhack-EU/tutorials/common/prepareRadius-k3s.md) | Lightweight, ideal for dev/testing |
-| Azure Kubernetes Service (AKS) | [adaptive-apps/tutorials/common/prepareRadius-aks.md at microhack-EU · microsoft/adaptive-apps](https://github.com/microsoft/adaptive-apps/blob/microhack-EU/tutorials/common/prepareRadius-aks.md) | Production-grade; integrates with ACR and Key Vault |
-| Azure Arc-enabled cluster | [adaptive-apps/tutorials/common/prepareRadius-arc.md at microhack-EU · microsoft/adaptive-apps](https://github.com/microsoft/adaptive-apps/blob/microhack-EU/tutorials/common/prepareRadius-arc.md) | On-premises, edge, or multi-cloud |
-| Azure Local | [adaptive-apps/tutorials/common/prepareRadius-azure-local.md at microhack-EU · microsoft/adaptive-apps](https://github.com/microsoft/adaptive-apps/blob/microhack-EU/tutorials/common/prepareRadius-azure-local.md) | Fully disconnected or intermittently connected |
+| Local k3s (via k3d) | [`common/prepareRadius-k3s.md`](../../common/prepareRadius-k3s.md) | Lightweight, ideal for dev/testing |
+| Azure Kubernetes Service (AKS) | [`common/prepareRadius-aks.md`](../../common/prepareRadius-aks.md) | Production-grade; integrates with ACR and Key Vault |
+| Azure Arc-enabled cluster | [`common/prepareRadius-arc.md`](../../common/prepareRadius-arc.md) | On-premises, edge, or multi-cloud |
+| Azure Local | [`common/prepareRadius-azure-local.md`](../../common/prepareRadius-azure-local.md) | Fully disconnected or intermittently connected |
 
 For each environment you choose, follow the corresponding guide **in full**. The guide includes:
 1. Radius control plane installation
@@ -195,22 +193,45 @@ For each environment you choose, follow the corresponding guide **in full**. The
 
 If you are deploying to multiple sites (e.g., Azure + Azure Local + Azure Local Disconnected), follow the guides sequentially:
 
-1. Follow [adaptive-apps/tutorials/common/prepareRadius-aks.md at microhack-EU · microsoft/adaptive-apps](https://github.com/microsoft/adaptive-apps/blob/microhack-EU/tutorials/common/prepareRadius-aks.md) to set up Azure
+1. Follow [`common/prepareRadius-aks.md`](../../common/prepareRadius-aks.md) to set up Azure
 2. Switch kubectl context to Azure Local cluster
-3. Follow [adaptive-apps/tutorials/common/prepareRadius-azure-local.md at microhack-EU · microsoft/adaptive-apps](https://github.com/microsoft/adaptive-apps/blob/microhack-EU/tutorials/common/prepareRadius-azure-local.md) to set up Azure Local
+3. Follow [`common/prepareRadius-azure-local.md`](../../common/prepareRadius-azure-local.md) to set up Azure Local
 4. Repeat for additional sites as needed
+
+For a workshop without Azure Local or another non-AKS cluster, the same federated model can optionally be practiced with **two AKS clusters**. Treat one AKS cluster as the logical local/edge environment (`ws-local-prod` / `env-local-prod`) and the other as the Azure environment (`ws-azure-prod` / `env-azure-prod`). Be explicit with teams that this is an optional lab convenience: both physical clusters are AKS, but the portability boundary is still taught through separate Radius control planes, environments, and recipe mappings.
+
+#### Optional two-AKS execution flow
+
+When using two AKS clusters, run [`common/prepareRadius-aks.md`](../../common/prepareRadius-aks.md) twice — once per cluster/context. The important distinction is the logical role you assign before creating the workspace and environment:
+
+| Run | Active `kubectl` context | `RADIUS_WORKSPACE` | `RADIUS_ENVIRONMENT` | Azure provider / credential registration |
+|---|---|---|---|---|
+| 1 | `aks-local-prod` context | `ws-local-prod` | `env-local-prod` | Optional; skip if this environment will only use local/container recipes |
+| 2 | `aks-azure-prod` context | `ws-azure-prod` | `env-azure-prod` | Required for Azure-backed recipes |
+
+The coach flow is:
+
+1. Switch `kubectl` to the first AKS cluster.
+2. Install Radius on that cluster. Only one team member does this per shared cluster.
+3. Create a `rad` workspace that points at the active context.
+4. Create the environment and `rg-trading` resource group for that logical role.
+5. Repeat the same process for the second AKS cluster with the other workspace/environment names.
+6. Have every team member create or switch to both local workspaces on their workstation so their `rad` CLI can target either control plane.
+
+For the local/edge-like AKS stand-in, do not call it Azure Local. It is simply an AKS-hosted Radius control plane that uses `ws-local-prod` / `env-local-prod` naming so later challenges can compare it with `ws-azure-prod` / `env-azure-prod`.
 
 Each site will have:
 - Its own Radius control plane
-- Its own workspaces, environments, and resource groups
+- Its own environment and resource group
+- A matching local workspace on each team member's workstation
 - The same **naming conventions** across all sites (so teams can reason about them consistently)
 
-After installation, your Git repository should contain:
+Later challenges reuse:
 - Shared recipes (in `radius/recipes/`)
 - Shared application templates (e.g., `app.bicep`)
-- Environment bootstrap scripts or manifests (one per site's environment config)
+- Environment bootstrap files (one per environment config)
 
-Then, use CI/CD to deploy these artifacts to each site independently.
+Teams will apply those artifacts independently to each Radius control plane as they move through Challenges 03-05.
 
 ---
 
@@ -227,9 +248,9 @@ Then, use CI/CD to deploy these artifacts to each site independently.
 
 1. All environments installed and validated? ✓
 2. Radius dashboard explored and understood? ✓
-3. Ready to author recipes and deploy applications?
+3. Ready to define resource types?
 
-Proceed to Challenge 03 — Recipe authoring and customization.
+Proceed to Challenge 03 — Build the Platform Abstractions.
 
 ---
 
@@ -245,6 +266,18 @@ kubectl logs <pod-name> -n radius-system
 
 Common issues: resource constraints, image pull failures, incorrect cluster configuration.
 
+### Radius Helm chart download denied by GHCR
+
+If `rad install kubernetes` fails before installing anything and shows `response status code 403: denied` for `ghcr.io`, Helm may be using stale GitHub Container Registry credentials from the local machine. Clear them and retry the same install command:
+
+```bash
+helm registry logout ghcr.io || true
+docker logout ghcr.io || true
+rad install kubernetes \
+  --set rp.publicEndpointOverride=localhost:8081 \
+  --set global.azureWorkloadIdentity.enabled=true
+```
+
 ### Workspace or environment commands failing
 
 Ensure you are using the correct `kubectl` context:
@@ -258,6 +291,21 @@ Switch contexts as needed:
 
 ```bash
 kubectl config use-context <context-name>
+```
+
+If a `rad` command fails with `dial tcp: lookup ...azmk8s.io: no such host`, the workspace usually points at a stale AKS API server from a deleted or recreated cluster. Re-fetch credentials and recreate the workspace against the current context:
+
+```bash
+export RESOURCE_GROUP=rg-swe-trading
+export AKS_CLUSTER=aks-local-prod
+export RADIUS_WORKSPACE=ws-local-prod
+
+az aks get-credentials --resource-group "$RESOURCE_GROUP" --name "$AKS_CLUSTER" --overwrite-existing
+kubectl config use-context "$AKS_CLUSTER"
+kubectl get nodes
+
+rad workspace create kubernetes "$RADIUS_WORKSPACE" --context "$(kubectl config current-context)" --force
+rad workspace switch "$RADIUS_WORKSPACE"
 ```
 
 ### Environment or resource group not visible after creation
@@ -296,14 +344,16 @@ If you have multiple AKS clusters with separate Radius control planes, each team
 kubectl config use-context <azure-aks-context>
 
 # Create and switch to Azure workspace
-rad workspace create ws-azure-prod
+rad workspace create kubernetes ws-azure-prod \
+    --context "$(kubectl config current-context)" --force
 rad workspace switch ws-azure-prod
 
 # Switch kubectl to Local AKS cluster
 kubectl config use-context <local-aks-context>
 
 # Create and switch to Local workspace
-rad workspace create ws-local-prod
+rad workspace create kubernetes ws-local-prod \
+    --context "$(kubectl config current-context)" --force
 rad workspace switch ws-local-prod
 ```
 
@@ -316,15 +366,19 @@ kubectl config current-context
 
 # Target Azure control plane
 rad workspace switch ws-azure-prod
+rad env switch env-azure-prod
+rad group switch rg-trading
 rad env list
 rad group list
-rad deployment create ...
+# Continue with the next challenge only after the target is correct.
 
 # Target Local control plane
 rad workspace switch ws-local-prod
+rad env switch env-local-prod
+rad group switch rg-trading
 rad env list
 rad group list
-rad deployment create ...
+# Continue with the next challenge only after the target is correct.
 ```
 
 **Key principle:** Every `rad` command targets the currently active workspace. Always verify your active workspace and kubectl context before operating to prevent accidental deployments to the wrong cluster.
