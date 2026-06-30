@@ -96,9 +96,32 @@ fi
 
 echo "Installed tool versions:"
 for cmd in az kubectl helm rad bicep k3d rustc cargo jq yq pwsh; do
-  if command -v "$cmd" >/dev/null 2>&1; then
-    "$cmd" --version 2>/dev/null | head -n 1 || true
-  else
+  if ! command -v "$cmd" >/dev/null 2>&1; then
     echo "$cmd: not found"
+    continue
   fi
+
+  case "$cmd" in
+    az)
+      az version --query '"azure-cli"' -o tsv 2>/dev/null | sed 's/^/azure-cli: /' || true
+      ;;
+    kubectl)
+      kubectl version --client 2>/dev/null | head -n 2 || true
+      ;;
+    helm)
+      helm version --short 2>/dev/null || true
+      ;;
+    rad)
+      rad version 2>/dev/null | head -n 4 || true
+      ;;
+    bicep)
+      bicep --version 2>/dev/null || true
+      ;;
+    k3d)
+      k3d version 2>/dev/null | head -n 1 || true
+      ;;
+    rustc|cargo|jq|yq|pwsh)
+      "$cmd" --version 2>/dev/null | head -n 1 || true
+      ;;
+  esac
 done
