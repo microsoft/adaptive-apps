@@ -45,7 +45,7 @@ Key coaching points:
 
 ## Solution Guide
 
-### Stage 1 — Create a Microsoft SQL Server resource type via the Radius dashboard
+## Stage 1 — Create a Microsoft SQL Server resource type via the Radius dashboard (optional)
 
 This step teaches teams to define a resource type schema by hand, so they understand every field before working with pre-built types.
 
@@ -139,7 +139,7 @@ Verify it appears in the dashboard under **Resource Types** and that clicking it
 
 ---
 
-### Stage 2 — Import the pre-built resource types
+## Stage 2 — Import the pre-built resource types
 
 The repository ships a `types.yaml` file that defines all the portable resource types used by the `adaptive-apps` reference application. Teams import them with a single command and then explore what was registered.
 
