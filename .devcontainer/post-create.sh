@@ -78,11 +78,13 @@ if ! command -v yq >/dev/null 2>&1; then
 fi
 
 # k3d for local k3s workflows (only when Docker is available)
+K3D_SKIPPED=0
 if command -v docker >/dev/null 2>&1; then
   if ! command -v k3d >/dev/null 2>&1; then
     curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
   fi
 else
+  K3D_SKIPPED=1
   echo "Skipping k3d install: docker CLI/socket not available in this container runtime."
 fi
 
@@ -96,6 +98,11 @@ fi
 
 echo "Installed tool versions:"
 for cmd in az kubectl helm rad bicep k3d rustc cargo jq yq pwsh; do
+  if [[ "$cmd" == "k3d" && "$K3D_SKIPPED" -eq 1 ]]; then
+    echo "k3d: skipped (docker unavailable)"
+    continue
+  fi
+
   if ! command -v "$cmd" >/dev/null 2>&1; then
     echo "$cmd: not found"
     continue
