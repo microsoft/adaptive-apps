@@ -238,8 +238,23 @@ Validate the app model and backing resources:
 
 ```bash
 rad app graph -a adaptive-apps
-rad resource list -a adaptive-apps
-kubectl get pods -n "$RADIUS_LOCAL_ENVIRONMENT"
+rad resource list Applications.Core/containers -a adaptive-apps
+kubectl get pods -n "$(rad environment show env-local-prod --output json | jq -r '.properties.compute.namespace')"
+```
+
+**PowerShell (no `jq` required):**
+
+```powershell
+rad app graph -a adaptive-apps
+rad resource list Applications.Core/containers -a adaptive-apps
+$LOCAL_NAMESPACE = (rad environment show env-local-prod --output json | ConvertFrom-Json).properties.compute.namespace
+$LOCAL_APP_NAMESPACE = "$LOCAL_NAMESPACE-adaptive-apps"
+kubectl get namespace $LOCAL_APP_NAMESPACE --no-headers *> $null
+if ($LASTEXITCODE -eq 0) {
+    kubectl get pods -n $LOCAL_APP_NAMESPACE
+} else {
+    kubectl get pods -n $LOCAL_NAMESPACE
+}
 ```
 
 Expose the frontend and verify the app is reachable:
@@ -662,8 +677,23 @@ Validate the second deployment:
 
 ```bash
 rad app graph -a adaptive-apps
-rad resource list -a adaptive-apps
-kubectl get pods -n "$RADIUS_NAMESPACE"
+rad resource list Applications.Core/containers -a adaptive-apps
+kubectl get pods -n "$(rad environment show env-azure-prod --output json | jq -r '.properties.compute.namespace')"
+```
+
+**PowerShell (no `jq` required):**
+
+```powershell
+rad app graph -a adaptive-apps
+rad resource list Applications.Core/containers -a adaptive-apps
+$AZURE_NAMESPACE = (rad environment show env-azure-prod --output json | ConvertFrom-Json).properties.compute.namespace
+$AZURE_APP_NAMESPACE = "$AZURE_NAMESPACE-adaptive-apps"
+kubectl get namespace $AZURE_APP_NAMESPACE --no-headers *> $null
+if ($LASTEXITCODE -eq 0) {
+    kubectl get pods -n $AZURE_APP_NAMESPACE
+} else {
+    kubectl get pods -n $AZURE_NAMESPACE
+}
 ```
 
 If the deployment is on AKS, also verify the Azure resources were created in the configured Azure resource group:
@@ -710,6 +740,8 @@ rad workspace switch "$RADIUS_LOCAL_WORKSPACE"
 rad app graph -a adaptive-apps
 rad resource list -a adaptive-apps
 rad recipe list --environment "$RADIUS_LOCAL_ENVIRONMENT"
+rad resource list Applications.Core/containers -a adaptive-apps
+rad recipe list --environment env-local-prod
 ```
 
 **Second workspace:**
@@ -719,6 +751,8 @@ rad workspace switch "$RADIUS_WORKSPACE"
 rad app graph -a adaptive-apps
 rad resource list -a adaptive-apps
 rad recipe list --environment "$RADIUS_ENVIRONMENT"
+rad resource list Applications.Core/containers -a adaptive-apps
+rad recipe list --environment env-azure-prod
 ```
 
 The app graph should look familiar because the Radius application resources are the same. The recipe outputs and backing infrastructure should differ because the environments are different.
@@ -804,6 +838,83 @@ rad recipe list --environment <environment-name>
 ```
 
 If a required resource type is missing, return to Challenge 04 and deploy `local-env.bicep` / `aks-env.bicep` (Stage 2) to register the full baseline recipe set before deploying the app.
+
+**Base deployment still shows AI resources after removing AI parameters**
+
+Radius deploys incrementally. If a previous deployment created AI resources (`ai-agent`, `trading-ai`, `ai-agent-guardrails`, or `trading-governance`), a later deploy that omits AI parameters may not delete those existing resources automatically.
+
+Reset and redeploy:
+
+```powershell
+rad app delete adaptive-apps
+
+rad deploy radius/app.bicep `
+    --group rg-trading `
+    --environment env-local-prod `
+    --parameters imageRegistry=ghcr.io/microsoft/adaptive-apps `
+    --parameters imageTag=latest `
+    --parameters authUsername=admin `
+    --parameters authPassword=<your-password>
+```
+
+Then verify the resulting app graph and resources again.
+
+**ai-agent fails with `OPENAI_API_KEY is required when AI_PROVIDER=openai`**
+
+This means the ai-agent container is running in `openai` mode without an API key.
+
+Use one of these fixes:
+
+- Disable AI for this deployment (safest path when AI is not required for this challenge):
+
+```powershell
+rad deploy radius/app.bicep `
+    --group rg-trading `
+    --environment env-local-prod `
+    --parameters imageRegistry=ghcr.io/microsoft/adaptive-apps `
+    --parameters imageTag=latest `
+    --parameters authUsername=admin `
+    --parameters authPassword=<your-password>
+```
+
+- Local recipe-backed AI (requires Kaito to be installed and available in the cluster):
+
+```powershell
+rad deploy radius/app.bicep `
+    --group rg-trading `
+    --environment env-local-prod `
+    --parameters imageRegistry=ghcr.io/microsoft/adaptive-apps `
+    --parameters imageTag=latest `
+    --parameters authUsername=admin `
+    --parameters authPassword=<your-password> `
+    --parameters aiProvider=local `
+    --parameters aiModel=qwen2.5-coder-7b-instruct
+```
+
+If this local-AI deploy fails with `NotFound ... /resources/kaitoWorkspace`, install Kaito first by following [tutorials/common/prepare-gpu-kaito.md](tutorials/common/prepare-gpu-kaito.md).
+
+- OpenAI mode with explicit key:
+
+```powershell
+rad deploy radius/app.bicep `
+    --group rg-trading `
+    --environment env-local-prod `
+    --parameters imageRegistry=ghcr.io/microsoft/adaptive-apps `
+    --parameters imageTag=latest `
+    --parameters authUsername=admin `
+    --parameters authPassword=<your-password> `
+    --parameters aiProvider=openai `
+    --parameters aiEndpoint=https://api.openai.com/v1 `
+    --parameters aiModelName=<openai-model-name> `
+    --parameters aiApiKey=<openai-api-key>
+```
+
+Then confirm recovery:
+
+```powershell
+kubectl get pods --namespace env-local-prod-adaptive-apps
+kubectl logs --namespace env-local-prod-adaptive-apps <ai-agent-pod-name> --previous
+```
 
 **Azure recipe deployment fails with authorization errors**
 

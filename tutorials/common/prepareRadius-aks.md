@@ -97,6 +97,7 @@ export AZURE_SUBSCRIPTION="<your-subscription-id>"
 export RESOURCE_GROUP="<your-azure-resource-group>"
 
 rad env update "$RADIUS_ENVIRONMENT" \
+rad env update env-azure-prod \
     --azure-subscription-id "$AZURE_SUBSCRIPTION" \
     --azure-resource-group "$RESOURCE_GROUP"
 ```
@@ -122,10 +123,8 @@ Expected output:
 The workload identity setup from [prepare-aks.md](./prepare-aks.md) created an Entra app for Radius. Bind it to the control plane:
 
 ```bash
-export AKS_CLUSTER="<your-cluster-name>"
-export RADIUS_APP_NAME="${AKS_CLUSTER}-radius-app"
-export RADIUS_APP_ID=$(az ad app list \
-  --query "[?displayName=='${RADIUS_APP_NAME}'].appId | [0]" -o tsv)
+export APPLICATION_CLIENT_ID=$(az ad app list \
+  --query "[?displayName=='${AKS_CLUSTER}-radius-app'].appId | [0]" -o tsv)
 export TENANT_ID=$(az account show --query tenantId -o tsv)
 
 rad credential register azure wi \
