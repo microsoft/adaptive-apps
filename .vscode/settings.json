@@ -1,3 +1,4 @@
 {
-  "dev.containers.mountWaylandSocket": false
+  "dev.containers.mountWaylandSocket": false,
+  "remote.containers.mountWaylandSocket": false
 }
