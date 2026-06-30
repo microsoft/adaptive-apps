@@ -2,99 +2,230 @@
 
 **[Home](../README.md)** - [Next Challenge >](./Challenge-01.md)
 
-**_This is a template for "Challenge Zero" which focuses on getting prerequisites set up for the hack. The italicized text provides hints & examples of what should or should NOT go in each section._**
+Challenge 00 is a prerequisite verification challenge. Students should arrive with most tools already installed or be prepared to install them quickly. Your role as coach is to help unblock any environment issues so the team can move forward into Challenge 01 cluster setup.
 
-**_We have included links to some common What The Hack pre-reqs in this template. All common prerequisite links go to the WTH-CommonPrerequisites page where there are more details on what each tool's purpose is._**
-
-**_You should remove any common pre-reqs that are not required for your hack. Then add additional pre-reqs that are required for your hack in the Description section below._**
-
-**_You should remove all italicized & sample text in this template and replace with your content._**
 
 ## Introduction
 
 Thank you for participating in the AdaptiveApps What The Hack. Before you can hack, you will need to set up some prerequisites.
 
-## Common Prerequisites
+## Common Prerequisites and Installation Instructions
 
-We have compiled a list of common tools and software that will come in handy to complete most What The Hack Azure-based hacks!
+Below are step-by-step instructions for installing all required tools on Linux, macOS, and Windows (via WSL2). Share these with students before the hack, or use them during Challenge 00 to help teams get up and running.
 
-You might not need all of them for the hack you are participating in. However, if you work with Azure on a regular basis, these are all things you should consider having in your toolbox.
+### macOS
 
-<!-- If you are editing this template manually, be aware that these links are only designed to work if this Markdown file is in the /xxx-HackName/Student/ folder of your hack. -->
-
-- [Azure Subscription](../../000-HowToHack/WTH-Common-Prerequisites.md#azure-subscription)
-- [Windows Subsystem for Linux](../../000-HowToHack/WTH-Common-Prerequisites.md#windows-subsystem-for-linux)
-- [Managing Cloud Resources](../../000-HowToHack/WTH-Common-Prerequisites.md#managing-cloud-resources)
-  - [Azure Portal](../../000-HowToHack/WTH-Common-Prerequisites.md#azure-portal)
-  - [Azure CLI](../../000-HowToHack/WTH-Common-Prerequisites.md#azure-cli)
-    - [Note for Windows Users](../../000-HowToHack/WTH-Common-Prerequisites.md#note-for-windows-users)
-    - [Azure PowerShell CmdLets](../../000-HowToHack/WTH-Common-Prerequisites.md#azure-powershell-cmdlets)
-  - [Azure Cloud Shell](../../000-HowToHack/WTH-Common-Prerequisites.md#azure-cloud-shell)
-- [Visual Studio Code](../../000-HowToHack/WTH-Common-Prerequisites.md#visual-studio-code)
-  - [VS Code plugin for ARM Templates](../../000-HowToHack/WTH-Common-Prerequisites.md#visual-studio-code-plugins-for-arm-templates)
-- [Azure Storage Explorer](../../000-HowToHack/WTH-Common-Prerequisites.md#azure-storage-explorer)
-
-## Description
-
-_This section should clearly state any additional prerequisite tools that need to be installed or set up in the Azure environment that the student will hack in._
-
-_While ordered lists are generally not welcome in What The Hack challenge descriptions, you can use one here in Challenge Zero IF and only IF the steps you are asking the student to perform are not core to the learning objectives of the hack._
-
-_For example, if the hack is on IoT Devices and you want the student to deploy an ARM/Bicep template that sets up the environment they will hack in without them needing to understand how ARM/Bicep templates work, you can provide step-by-step instructions on how to deploy the ARM/Bicep template._
-
-_Optionally, you may provide resource files such as a sample application, code snippets, or templates as learning aids for the students. These files are stored in the hack's `Student/Resources` folder. It is the coach's responsibility to package these resources into a Resources.zip file and provide it to the students at the start of the hack. You should leave the sample text below in that refers to the Resources.zip file._
-
-**\*NOTE:** Do NOT provide direct links to files or folders in the What The Hack repository from the student guide. Instead, you should refer to the Resources.zip file provided by the coach.\*
-
-**\*NOTE:** Any direct links to the What The Hack repo will be flagged for review during the review process by the WTH V-Team, including exception cases.\*
-
-_Sample challenge zero text for the IoT Hack Of The Century:_
-
-Now that you have the common pre-requisites installed on your workstation, there are prerequisites specifc to this hack.
-
-Your coach will provide you with a Resources.zip file that contains resources you will need to complete the hack. If you plan to work locally, you should unpack it on your workstation. If you plan to use the Azure Cloud Shell, you should upload it to the Cloud Shell and unpack it there.
-
-Please install these additional tools:
-
-- [Azure IoT Tools](https://marketplace.visualstudio.com/items?itemName=vsciot-vscode.azure-iot-tools) extension for Visual Studio Code
-- .NET SDK 6.0 or later installed on your development machine. This can be downloaded from [here](https://www.microsoft.com/net/download/all) for multiple platforms.
-
-In the `/Challenge00/` folder of the Resources.zip file, you will find an ARM template, `setupIoTEnvironment.json` that sets up the initial hack environment in Azure you will work with in subsequent challenges.
-
-Please deploy the template by running the following Azure CLI commands from the location of the template file:
-```
-az group create --name myIoT-rg --location eastus
-az group deployment create -g myIoT-rg --name HackEnvironment -f setupIoTEnvironment.json
+**Azure CLI:**
+```bash
+brew install azure-cli
 ```
 
-## Success Criteria
+**kubectl:**
+```bash
+brew install kubectl
+```
 
-_Success criteria goes here. The success criteria should be a list of checks so a student knows they have completed the challenge successfully. These should be things that can be demonstrated to a coach._
+**Helm:**
+```bash
+brew install helm
+```
 
-_The success criteria should not be a list of instructions._
+**Radius CLI:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/radius-project/radius/main/deploy/install.sh | /bin/bash
+```
 
-_Success criteria should always start with language like: "Validate XXX..." or "Verify YYY..." or "Show ZZZ..." or "Demonstrate you understand VVV..."_
+If `rad` is not found after install, add the installer path and reload your shell:
+```bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+```
 
-_Sample success criteria for the IoT prerequisites challenge:_
+**VS Code:**
+- Download from [https://code.visualstudio.com](https://code.visualstudio.com) and install, or:
+```bash
+brew install --cask visual-studio-code
+```
 
-To complete this challenge successfully, you should be able to:
+**Verify installation:**
+```bash
+az --version
+kubectl version --client
+helm version
+rad version
+code --version
+```
 
-- Verify that you have a bash shell with the Azure CLI available.
-- Verify that the ARM template has deployed the following resources in Azure:
-  - Azure IoT Hub
-  - Virtual Network
-  - Jumpbox VM
+### Linux (Ubuntu/Debian)
+
+**Azure CLI:**
+```bash
+curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+```
+
+**kubectl:**
+```bash
+curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+```
+
+**Helm:**
+```bash
+curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+```
+
+**Radius CLI:**
+
+Use the official Radius installation script (recommended):
+
+```bash
+wget -q "https://raw.githubusercontent.com/radius-project/radius/main/deploy/install.sh" -O - | /bin/bash
+```
+
+After installation, add Radius to your PATH:
+```bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+**Verify installation:**
+```bash
+rad version
+```
+
+If the script fails, manually download the binary from [https://github.com/radius-project/radius/releases](https://github.com/radius-project/radius/releases):
+```bash
+# Download rad_linux_amd64 or rad_linux_arm64 for your architecture
+chmod +x rad_linux_*
+mkdir -p ~/.local/bin
+mv rad_linux_* ~/.local/bin/rad
+# Then add ~/.local/bin to PATH as shown above
+```
+
+**VS Code:**
+- Download from [https://code.visualstudio.com](https://code.visualstudio.com), or:
+```bash
+sudo snap install code --classic
+```
+
+**Verify installation:**
+```bash
+az --version
+kubectl version --client
+helm version
+rad version
+code --version
+```
+
+### Windows (WSL2 + PowerShell 7)
+
+First, ensure you have WSL2 installed and a Linux distribution (Ubuntu recommended):
+```powershell
+wsl --install -d Ubuntu
+```
+
+**Option A: Use WSL2 bash for tools**
+
+Open your WSL2 terminal and run the Linux installation commands above.
+
+**Option B: Use PowerShell 7 on Windows with Windows package managers**
+
+Install PowerShell 7 (if not already installed):
+```powershell
+iex "& { $(irm https://aka.ms/install-powershell.ps1) } -UseMSI"
+```
+
+Then install tools via winget:
+
+**Azure CLI:**
+```powershell
+winget install Microsoft.AzureCLI
+```
+
+**kubectl:**
+```powershell
+winget install Kubernetes.kubectl
+```
+
+**Helm:**
+```powershell
+winget install Helm.Helm
+```
+
+**Radius CLI:**
+```powershell
+winget install RadiusProject.rad
+```
+
+**VS Code:**
+- Download from [https://code.visualstudio.com](https://code.visualstudio.com) and run installer
+
+**Verify installation (PowerShell):**
+```powershell
+az --version
+kubectl version --client
+helm version
+rad version
+code --version
+```
+
+**Note on WSL2:** For Challenge 01, you may need to run the Azure CLI and kubectl commands from both Windows PowerShell *and* WSL2 bash (depending on where your cluster is). Windows PowerShell is fine for Azure resource creation; WSL2 bash works better for connecting to local clusters (kind, k3d) or Arc proxy scenarios.
+
+### Troubleshooting Installation
+
+| Tool | Issue | Solution |
+|------|-------|----------|
+| az | Command not found | Verify installation completed; restart terminal; check PATH |
+| kubectl | Cannot connect to cluster | Ensure kubeconfig is in `~/.kube/config`; run `kubectl config view` |
+| helm | Permission denied | Use `sudo helm` or check file permissions in `~/.helm` |
+| rad | Old version | Download latest from GitHub releases; reinstall |
+| VS Code | Extensions not loading | Try `code --install-extension ms-azure-tools.vscode-azuretools` |
+
+### Verification Checklist
+
+Use these commands to verify each student's environment before they proceed to Challenge 01:
+
+**Azure Subscription & CLI:**
+- `az account show` → confirms Azure CLI is installed and signed in
+- `az --version` → shows CLI version (should be recent)
+- Verify Owner access to at least one subscription where they can create resource groups
+
+**kubectl:**
+- `kubectl version --client` → confirms kubectl is installed (version 1.24+)
+- They may not have a cluster connected yet; that's Challenge 01's job
+
+**Helm:**
+- `helm version` → confirms Helm is installed (3.12+)
+- Students will need this for Challenge 02 onward
+
+**Radius CLI (rad):**
+- `rad version` → confirms Radius CLI is installed (latest stable version)
+- If missing, point them to [https://docs.radapp.io/getting-started/install/](https://docs.radapp.io/getting-started/install/)
+
+**VS Code:**
+- Just verify they can open it and have basic extensions (Azure Account, Kubernetes, REST Client optional)
+
+**Shell:**
+- On Windows: PowerShell 7+ or WSL2 bash. On Mac/Linux: bash or zsh
+- They'll need this for running the prep scripts in Challenge 01
+
+### Common Issues
+
+**"az: command not found"** → Azure CLI not installed. Direct to https://learn.microsoft.com/cli/azure/install-azure-cli
+
+**"kubectl: command not found"** → kubectl not in PATH. Verify installation and PATH environment variable
+
+**"rad: command not found"** → Radius CLI not installed. Direct to Radius docs or check if they're using a container-based approach
+
+**"Permission denied" on az commands** → Likely not signed in. Run `az login` and follow browser flow
+
+**Multiple subscriptions but wrong one selected** → Use `az account set --subscription <id>` to set default
+
+All of these are required to successfully navigate **Challenge 01: Prepare the Platforms**, where they'll either use the provided automation script ([prepare-azure-local.ps1](../../common/prepare-azure-local.ps1)) or follow the manual platform prep guides ([prepare-aks.md](../../common/prepare-aks.md), [prepare-azure-local.md](../../common/prepare-azure-local.md), etc.).
 
 ## Learning Resources
 
 _List of relevant links and online articles that should give the attendees the knowledge needed to complete the challenge._
 
-_Think of this list as giving the students a head start on some easy Internet searches. However, try not to include documentation links that are the literal step-by-step answer of the challenge's scenario._
-
-**\*Note:** Use descriptive text for each link instead of just URLs.\*
-
-_Sample IoT resource links:_
-
-- [What is a Thingamajig?](https://www.bing.com/search?q=what+is+a+thingamajig)
 - [10 Tips for Never Forgetting Your Thingamajic](https://www.youtube.com/watch?v=dQw4w9WgXcQ)
 - [IoT & Thingamajigs: Together Forever](https://www.youtube.com/watch?v=yPYZpwSpKmA)
