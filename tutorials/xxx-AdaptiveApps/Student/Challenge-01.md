@@ -25,45 +25,19 @@ You are the platform squad for the team. Your responsibility is to stand up at l
 
 If your platform setup is inconsistent, every downstream challenge becomes harder to debug. A clean and validated platform now reduces delivery risk for the rest of the hack.
 
-<<<<<<< Updated upstream
+## Description
+
 As a team, set up and validate at least one target environment so that the following are true. If your team will complete the portability challenge during this event, you may optionally prepare a second target environment now:
-=======
-## Challenge Goals
->>>>>>> Stashed changes
 
-1. Prepare and validate at least one Kubernetes target environment that the full team can use.
-2. Install the adaptive-apps portfolio baseline in a namespace/release strategy that matches your selected environment.
-3. Capture and share validation evidence proving the platform is ready for Radius in Challenge 02.
+- A Kubernetes cluster is available and the current `kubectl` context points at it from every team member's workstation. Any CNCF-conformant cluster works (AKS, kind, k3d, Arc-enabled Kubernetes, or Azure Local). AKS with OIDC issuer and workload identity enabled is strongly recommended for later challenges.
+- An **Azure Container Registry (ACR)** exists and is attached to the cluster so it can pull images without a pull secret.
+- An **Azure Key Vault** exists with RBAC authorization enabled and the cluster's identity has been granted appropriate data-plane access.
+- An **Azure Storage account** exists and the cluster's identity has been granted `Storage Blob Data Contributor`.
+- All role assignments are in place and `kubectl get nodes` shows a healthy cluster.
 
-## Requirements and Constraints
+Treat this as a *platform engineering* exercise. The goal is a clean, verifiable environment that the rest of the team can build on.
 
-- Work as a team and use a shared environment decision (single primary cluster for all members).
-- You may choose any supported environment path:
-	- AKS
-	- Local k3s (k3d)
-	- Arc-enabled Kubernetes
-	- Azure Local
-- Radius installation is out of scope in this challenge.
-- The portfolio deployment must match the environment capabilities (for example, Istio integration behavior may differ by platform).
-- Keep your setup reproducible: another teammate must be able to validate the same environment state.
-
-## Tasks
-
-### Task 1 - Select a Platform Strategy
-
-Design a platform approach for this challenge window. Decide which environment to use first, how teammates will share access, and what evidence you will collect to prove readiness.
-
-### Task 2 - Prepare the Environment
-
-Implement your selected environment path and configure team access so everyone can query the same cluster context. Validate that the cluster is healthy enough to host the portfolio baseline.
-
-### Task 3 - Install the Portfolio Baseline
-
-Deploy the adaptive-apps chart using a profile that matches your chosen environment. Ensure namespace/release conventions are clear and repeatable for the team.
-
-### Task 4 - Validate Readiness for Next Challenge
-
-Demonstrate that the release is visible and workloads are starting as expected. Document any environment-specific decisions and known caveats before moving on.
+> **NOTE:** Do not install Radius yet — that is Challenge 2. Focus on the cluster and supporting infrastructure first.
 
 ## Success Criteria
 
@@ -103,21 +77,15 @@ You are done when all of the following are true:
 
 ## Learning Resources
 
-- Environment preparation guides:
-	- [Prepare AKS](../../common/prepare-aks.md)
-	- [Prepare local k3s (k3d)](../../common/prepare-k3s.md)
-	- [Prepare Arc-enabled Kubernetes](../../common/prepare-arc.md)
-	- [Prepare Azure Local](../../common/prepare-azure-local.md)
-- Portfolio install reference:
-	- [Getting Started - Install the portfolio chart](../../getting-started/README.md)
-- Product docs:
-	- [Azure Kubernetes Service documentation](https://learn.microsoft.com/azure/aks/)
-	- [Helm documentation](https://helm.sh/docs/)
-	- [Kubernetes kubectl setup](https://kubernetes.io/docs/tasks/tools/)
+- [Azure Kubernetes Service documentation](https://learn.microsoft.com/azure/aks/) — quickstarts, concepts, and how-to guides for AKS.
+- [Create an AKS cluster](https://learn.microsoft.com/azure/aks/learn/quick-kubernetes-deploy-cli) — CLI walkthrough for provisioning AKS with OIDC and workload identity.
+- [Azure Container Registry overview](https://learn.microsoft.com/azure/container-registry/container-registry-intro) — what ACR is and how to attach it to AKS.
+- [Azure Key Vault overview](https://learn.microsoft.com/azure/key-vault/general/overview) — concepts and RBAC authorization model.
+- [Kubernetes: Install and Set Up kubectl](https://kubernetes.io/docs/tasks/tools/) — if you still need to configure cluster access on your workstation.
+- [Arc-enabled Kubernetes overview](https://learn.microsoft.com/azure/azure-arc/kubernetes/overview) — if your team is targeting an Arc-enabled or Azure Local environment.
 
-## Optional Stretch
+## Tips
 
-<<<<<<< Updated upstream
 - OIDC issuer and workload identity must be enabled at cluster *creation* time on AKS — they cannot be easily added retroactively. Plan ahead.
 - The account used to create the cluster needs sufficient Azure RBAC permissions (Contributor on the resource group at minimum).
 - If AKS provisioning seems to hang, check `az aks show` for provisioning state rather than retrying the create command.
@@ -130,6 +98,3 @@ Finished early? Try one or more of the following:
 
 - Set up a **second** target environment (for example kind locally, an Arc-enabled cluster, Azure Local, or a second AKS cluster used as a workshop stand-in) so that Challenge 5 (Port the App Across Environments) has two environments to demonstrate portability.
 - Write a short runbook explaining how to **tear down and recreate** the cluster cleanly, including the ACR, Key Vault, and Storage dependencies.
-=======
-If you finish early, prepare a second environment and compare the trade-offs your team would face in Challenge 05 when demonstrating portability.
->>>>>>> Stashed changes

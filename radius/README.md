@@ -12,7 +12,8 @@ radius/
 │   └── types.yaml                     # All custom types under Radius.Resources
 └── recipes/
     ├── postgres/
-    │   └── kubernetes-trading-postgres.bicep   # PostgreSQL 16 + trading schema
+    │   ├── kubernetes-trading-postgres.bicep   # PostgreSQL 16 + trading schema (local)
+    │   └── azure-postgresql-flexible-server.bicep # Azure Database for PostgreSQL Flexible Server (AKS/Azure)
     ├── mqtt/
     │   └── kubernetes-mosquitto.bicep          # Eclipse Mosquitto 2 (MQTT + WS)
     └── ai-agent/

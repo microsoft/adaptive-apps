@@ -35,11 +35,77 @@ Override only if you have published recipes to a different registry.
 ''')
 param recipeRegistry string = 'ghcr.io/microsoft/adaptive-apps/recipes'
 
+@description('Optional fully qualified OCI template path for a custom sqlDatabases recipe, for example myregistry.azurecr.io/recipes/sql-server:1.0.0. Leave empty to skip sqlDatabases registration.')
+param sqlDatabasesRecipeTemplatePath string = ''
+
 @description('Azure subscription ID. Required — used to scope Azure resource creation.')
 param azureSubscriptionId string
 
 @description('Azure resource group name. The resource group must already exist.')
 param azureResourceGroup string
+
+var baseRecipes = {
+  // ── PostgreSQL ──────────────────────────────────────────────────────
+  'Radius.Resources/postgreSqlDatabases': {
+    default: {
+      templateKind: 'bicep'
+      templatePath: '${recipeRegistry}/postgres-azure-flex:latest'
+    }
+  }
+  // ── MQTT broker — Azure Event Grid MQTT endpoint ───────────────────
+  'Radius.Resources/mqttBrokers': {
+    default: {
+      templateKind: 'bicep'
+      templatePath: '${recipeRegistry}/mqtt-azure-event-grid:latest'
+    }
+  }
+  // ── Identity provider — Keycloak (OIDC) ────────────────────────────
+  // The Azure environment still uses the in-cluster Keycloak recipe
+  // until a dedicated Entra-backed recipe is introduced in a later step.
+  'Radius.Resources/idProviders': {
+    default: {
+      templateKind: 'bicep'
+      templatePath: '${recipeRegistry}/idp-keycloak:latest'
+    }
+  }
+  // ── Workload identity — AKS + Azure federated identity ─────────────
+  'Radius.Resources/workloadIdentities': {
+    default: {
+      templateKind: 'bicep'
+      templatePath: '${recipeRegistry}/workload-identity-azure:latest'
+    }
+  }
+  // ── AI model — Azure OpenAI ─────────────────────────────────────────
+  'Radius.Resources/aiModels': {
+    default: {
+      templateKind: 'bicep'
+      templatePath: '${recipeRegistry}/ai-agent-azure-openai:latest'
+    }
+  }
+  // ── Governance — Open Policy Agent (PDP) ───────────────────────────
+  'Radius.Resources/governance': {
+    default: {
+      templateKind: 'bicep'
+      templatePath: '${recipeRegistry}/governance-opa:latest'
+    }
+  }
+  // ── Agent guardrails — AGT in-pod sidecar ──────────────────────────
+  'Radius.Resources/agentGuardrails': {
+    default: {
+      templateKind: 'bicep'
+      templatePath: '${recipeRegistry}/agent-guardrails-agt:latest'
+    }
+  }
+}
+
+var customSqlRecipes = empty(sqlDatabasesRecipeTemplatePath) ? {} : {
+  'Radius.Resources/sqlDatabases': {
+    default: {
+      templateKind: 'bicep'
+      templatePath: sqlDatabasesRecipeTemplatePath
+    }
+  }
+}
 
 // ---------------------------------------------------------------------------
 // App namespace (with optional Istio injection label)
@@ -73,47 +139,6 @@ resource aksEnv 'Applications.Core/environments@2023-10-01-preview' = {
         scope: '/subscriptions/${azureSubscriptionId}/resourceGroups/${azureResourceGroup}'
       }
     }
-    recipes: {
-      // ── PostgreSQL ──────────────────────────────────────────────────────
-      'Radius.Resources/postgreSqlDatabases': {
-        default: {
-          templateKind: 'bicep'
-          templatePath: '${recipeRegistry}/postgres-azure-flex:latest'
-        }
-      }
-      // ── MQTT broker — Azure Event Grid MQTT endpoint ───────────────────
-      'Radius.Resources/mqttBrokers': {
-        default: {
-          templateKind: 'bicep'
-          templatePath: '${recipeRegistry}/mqtt-azure-event-grid:latest'
-        }
-      }
-      // ── Workload identity — AKS + Azure federated identity ─────────────
-      'Radius.Resources/workloadIdentities': {
-        default: {
-          templateKind: 'bicep'
-          templatePath: '${recipeRegistry}/workload-identity-azure:latest'
-        }
-      }
-      // ── AI model — Azure OpenAI ─────────────────────────────────────────
-      'Radius.Resources/aiModels': {
-        default: {
-          templateKind: 'bicep'
-          templatePath: '${recipeRegistry}/ai-agent-azure-openai:latest'
-        }
-      }
-      // ── Governance — Open Policy Agent (PDP) ───────────────────────────
-      'Radius.Resources/governance': {
-        default: {
-          templateKind: 'bicep'
-          templatePath: '${recipeRegistry}/governance-opa:latest'
-        }
-      }      // ── Agent guardrails — AGT in-pod sidecar ─────────────────────
-      'Radius.Resources/agentGuardrails': {
-        default: {
-          templateKind: 'bicep'
-          templatePath: '${recipeRegistry}/agent-guardrails-agt:latest'
-        }
-      }    }
+    recipes: union(baseRecipes, customSqlRecipes)
   }
 }
