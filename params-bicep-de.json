@@ -1,9 +1,0 @@
-{
-  "name": "radius-bicep-de",
-  "issuer": "https://swedencentral.oic.prod-aks.azure.com/16b3c013-d300-468d-ac64-7eda0820b6d3/36f23bf6-6c3e-4c71-9009-99b6e204474c/",
-  "subject": "system:serviceaccount:radius-system:bicep-de",
-  "description": "Kubernetes service account federated credential for bicep-de",
-  "audiences": [
-    "api://AzureADTokenExchange"
-  ]
-}
