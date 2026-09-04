@@ -483,9 +483,16 @@ resource backend 'Applications.Core/containers@2023-10-01-preview' = {
         // Only secrets and non-connection values require explicit wiring.
         CONNECTION_DB_SECRETS_PASSWORD: { value: tradingDb.properties.secrets.password }
         AZURE_CLIENT_ID: { value: backendIdentity.properties.clientId }
-        AZURE_TENANT_ID: { value: workloadIdentityTenantId }
-        MQTT_AUTH_METHOD: { value: backendIdentity.properties.authMethod }
-        MQTT_TOKEN_AUDIENCE: { value: backendIdentity.properties.tokenAudience }
+        // The tenant comes from the workload-identity recipe; the parameter is
+        // only an override. Wiring the parameter directly left it empty, which
+        // also stopped WorkloadIdentityCredential from ever being selected.
+        AZURE_TENANT_ID: { value: empty(workloadIdentityTenantId) ? backendIdentity.properties.tenantId : workloadIdentityTenantId }
+        // The broker — not the identity — decides how clients authenticate, so
+        // these must come from the mqttBrokers resource. Reading them from the
+        // workload identity would force token auth even when the environment
+        // registered the Mosquitto recipe.
+        MQTT_AUTH_METHOD: { value: tradingMqtt.properties.authMethod }
+        MQTT_TOKEN_AUDIENCE: { value: tradingMqtt.properties.tokenAudience }
         MQTT_TOPIC: { value: 'orders/new' }
       }
     }
@@ -521,9 +528,11 @@ resource frontend 'Applications.Core/containers@2023-10-01-preview' = {
         AI_AGENT_URL:   { value: 'http://ai-agent:7000' }
         MQTT_WS_URL:    { value: '${tradingMqtt.properties.wsPort == 443 ? 'wss' : 'ws'}://${tradingMqtt.properties.host}:${tradingMqtt.properties.wsPort}' }
         AZURE_CLIENT_ID: { value: frontendIdentity.properties.clientId }
-        AZURE_TENANT_ID: { value: workloadIdentityTenantId }
-        MQTT_AUTH_METHOD: { value: frontendIdentity.properties.authMethod }
-        MQTT_TOKEN_AUDIENCE: { value: frontendIdentity.properties.tokenAudience }
+        AZURE_TENANT_ID: { value: empty(workloadIdentityTenantId) ? frontendIdentity.properties.tenantId : workloadIdentityTenantId }
+        // See the note on the backend container: the broker recipe answers for
+        // its own authentication method.
+        MQTT_AUTH_METHOD: { value: tradingMqtt.properties.authMethod }
+        MQTT_TOKEN_AUDIENCE: { value: tradingMqtt.properties.tokenAudience }
         // OIDC values provided as parameters (from helm-deployed portfolio or external provider).
         OIDC_ISSUER:    { value: effectiveOidcIssuer }
         OIDC_AUTH_ENDPOINT: { value: effectiveOidcAuthEndpoint }
