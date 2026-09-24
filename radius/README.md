@@ -350,6 +350,43 @@ rad group delete trading
 
 ---
 
+## Choosing an MQTT broker recipe
+
+`Radius.Resources/mqttBrokers` has two recipes, and the containers adapt to
+whichever one the environment registers — `MQTT_AUTH_METHOD` and
+`MQTT_TOKEN_AUDIENCE` are wired from `tradingMqtt.properties.*`, so the broker
+answers for itself.
+
+| | `kubernetes-mosquitto.bicep` | `azure-event-grid.bicep` |
+|---|---|---|
+| `authMethod` | `none` | `OAUTH2-JWT` |
+| Transport | MQTT 1883 / WS 9001 | MQTTS 8883 / WSS 443 |
+| Backend order processing | ✅ | ✅ |
+| Browser live order stream | ✅ | ❌ |
+
+**Event Grid requires MQTT v5 enhanced authentication.** The backend sends the
+Microsoft Entra token in the CONNECT *Authentication Data* property with
+*Authentication Method* `OAUTH2-JWT`, and uses the token's `oid` claim as the
+MQTT client identifier — Event Grid matches it against the authenticating
+principal. It re-authenticates with an `AUTH` packet (reason code 25) before the
+token expires. Event Grid never reads the CONNECT password field; see
+[Microsoft Entra JWT authentication and Azure RBAC](https://learn.microsoft.com/azure/event-grid/mqtt-client-microsoft-entra-token-and-rbac).
+
+Set `MQTT_CLIENT_ID` on the container to override the derived client identifier.
+
+**The browser has no Event Grid path.** `src/frontend/public/index.html` connects
+to `MQTT_WS_URL` with the `mqtt.js` client and no credentials. Selecting the
+Event Grid recipe therefore gives you server-side order processing but no
+browser-side live streaming.
+
+**Deleting the app does not delete the namespace.** `azure-event-grid.bicep`
+returns `resources: []`, so Radius does not track the Event Grid namespace it
+created. `rad app delete`, or switching to another recipe, leaves it running and
+billing — delete it with
+`az eventgrid namespace delete --name <namespace> --resource-group <rg>`.
+
+---
+
 ## Troubleshooting
 
 **Recipe not found during deploy**
@@ -387,6 +424,17 @@ ready", this is likely the Kaito v0.9.0 node estimator bug (it ignores
 `max-model-len` from the ConfigMap and over-estimates GPU requirements). Fix by
 inflating the `nvidia.com/gpu.memory` node label — see the
 [root README known issues](../README.md#5-known-issues-kaito-v090) for details.
+
+**Backend cannot connect to the MQTT broker**
+The backend logs the CONNECT result and retries with exponential backoff instead
+of terminating; the REST API stays available while order streaming is degraded.
+```bash
+kubectl logs -n <namespace> -l radapp.io/resource=backend --tail=50 | grep MQTT
+```
+Against Event Grid, `NotAuthorized` usually means the identity lacks the
+`EventGrid TopicSpaces Publisher`/`Subscriber` role on the topic space, or the
+CONNECT client identifier does not match the principal's object ID (the backend
+derives it from the token's `oid` claim — override with `MQTT_CLIENT_ID`).
 
 **Bicep type errors**
 Make sure `types.tgz` has been generated (Step 3) and is present in the `radius/`
