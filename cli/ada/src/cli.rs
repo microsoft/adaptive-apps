@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
-use crate::commands::{bootstrap, home_cmd, oidc, package};
+use crate::commands::{bootstrap, home_cmd, oidc, package, skill};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -28,6 +28,9 @@ enum Command {
     /// Analyze an app source folder and emit a Radius app.bicep file.
     Package(package::PackageArgs),
 
+    /// Manage external agent-skill packs used by `ada package`.
+    Skill(skill::SkillArgs),
+
     /// Manage OIDC clients in a chart-deployed Keycloak.
     Oidc(oidc::OidcArgs),
 
@@ -41,6 +44,7 @@ impl Cli {
             Command::Init(args) => home_cmd::run_init(args),
             Command::Bootstrap(args) => bootstrap::run(args),
             Command::Package(args) => package::run(args),
+            Command::Skill(args) => skill::run(args),
             Command::Oidc(args) => oidc::run(args),
             Command::Radius(args) => home_cmd::run_radius(args),
         }
