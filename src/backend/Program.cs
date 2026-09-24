@@ -1,10 +1,13 @@
 using System.Buffers;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using System.Text;
 using System.Text.Json;
 using Azure.Core;
 using Azure.Identity;
 using MQTTnet;
+using MQTTnet.Formatter;
+using MQTTnet.Protocol;
 using Npgsql;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -55,6 +58,12 @@ builder.Services.AddSingleton(sp =>
 builder.Services.AddSingleton<OrderProcessor>();
 builder.Services.AddHostedService<MqttOrderListener>();
 
+// The MQTT listener retries on its own. This is a second line of defence: a
+// broker outage must never take down the REST API that serves accounts,
+// orders and trades.
+builder.Services.Configure<HostOptions>(options =>
+    options.BackgroundServiceExceptionBehavior = BackgroundServiceExceptionBehavior.Ignore);
+
 var app = builder.Build();
 app.UseCors();
 
@@ -101,12 +110,26 @@ record OrderMessage(
     string ClientOrderId
 );
 
-class MqttOrderListener : BackgroundService
+class MqttOrderListener : BackgroundService, IMqttEnhancedAuthenticationHandler
 {
+    // Azure Event Grid accepts Microsoft Entra tokens exclusively through MQTT v5
+    // enhanced authentication (CONNECT properties "Authentication Method" and
+    // "Authentication Data", plus AUTH packets for re-authentication). It never
+    // inspects the CONNECT password field.
+    // https://learn.microsoft.com/azure/event-grid/mqtt-client-microsoft-entra-token-and-rbac
+    private const string EntraAuthenticationMethod = "OAUTH2-JWT";
+
+    // Renew well before expiry so a slow token request cannot race the broker.
+    private static readonly TimeSpan TokenRenewalMargin = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan MinimumRenewalDelay = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan MaximumReconnectDelay = TimeSpan.FromMinutes(1);
+
     private readonly IConfiguration _configuration;
     private readonly ILogger<MqttOrderListener> _logger;
     private readonly OrderProcessor _processor;
+    private readonly MqttClientFactory _clientFactory = new();
     private IMqttClient? _client;
+    private byte[]? _currentToken;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
@@ -124,127 +147,421 @@ class MqttOrderListener : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // Radius injects CONNECTION_MQTT_* from the mqttBrokers connection.
-        var host  = _configuration["CONNECTION_MQTT_HOST"] ?? "localhost";
-        var port  = int.TryParse(_configuration["CONNECTION_MQTT_PORT"], out var parsed) ? parsed : 1883;
-        var topic = _configuration["MQTT_TOPIC"] ?? "orders/new";
+        var settings = ReadSettings();
 
-        var factory = new MqttClientFactory();
-        _client = factory.CreateMqttClient();
+        var client = _clientFactory.CreateMqttClient();
+        _client = client;
+
+        client.ApplicationMessageReceivedAsync += e => HandleApplicationMessageAsync(e, stoppingToken);
+
+        var consecutiveFailures = 0;
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            var sessionStarted = Stopwatch.GetTimestamp();
+            try
+            {
+                await RunSessionAsync(client, settings, stoppingToken);
+
+                // A session that ended almost immediately is a failure in
+                // disguise — a token refused after CONNACK, or another pod
+                // taking over the same client identifier during a rolling
+                // restart. Keep backing off instead of flapping once a second.
+                consecutiveFailures = Stopwatch.GetElapsedTime(sessionStarted) >= MaximumReconnectDelay
+                    ? 0
+                    : consecutiveFailures + 1;
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                consecutiveFailures++;
+                // Never rethrow: the HTTP API must keep serving even when the
+                // broker is unreachable or refuses the connection.
+                _logger.LogError(ex,
+                    "MQTT session failed (consecutive failures: {Failures}). Order streaming is degraded; the HTTP API remains available.",
+                    consecutiveFailures);
+            }
+
+            if (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
+
+            var delay = ReconnectDelay(consecutiveFailures);
+            _logger.LogInformation("MQTT: reconnecting in {Delay}", delay);
+            try
+            {
+                await Task.Delay(delay, stoppingToken);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+        }
+    }
+
+    private async Task RunSessionAsync(IMqttClient client, MqttSettings settings, CancellationToken cancellationToken)
+    {
+        var sessionEnded = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        // Scoped to this session: a late event from a previous connection
+        // attempt must not be mistaken for the end of the current one.
+        Func<MqttClientDisconnectedEventArgs, Task> onDisconnected = e =>
+        {
+            _logger.LogWarning(e.Exception,
+                "MQTT disconnected (reason: {Reason}{ReasonString})",
+                e.Reason,
+                string.IsNullOrWhiteSpace(e.ReasonString) ? string.Empty : $" - {e.ReasonString}");
+            sessionEnded.TrySetResult();
+            return Task.CompletedTask;
+        };
+
+        client.DisconnectedAsync += onDisconnected;
+        try
+        {
+            AccessToken? token = settings.UsesEntraAuthentication
+                ? await AcquireTokenAsync(settings, cancellationToken)
+                : null;
+
+            var options = BuildOptions(settings, token);
+            var connectResult = await client.ConnectAsync(options, cancellationToken);
+
+            // A refused CONNECT does not throw: MQTTnet returns the CONNACK and
+            // closes the socket. Event Grid reports the real cause here (missing
+            // TopicSpaces role, bad audience, wrong client identifier), so fail
+            // loudly instead of tripping over MqttClientNotConnectedException on
+            // the next line.
+            if (connectResult.ResultCode != MqttClientConnectResultCode.Success)
+            {
+                throw new InvalidOperationException(
+                    $"MQTT CONNECT refused by the broker: {connectResult.ResultCode}" +
+                    (string.IsNullOrWhiteSpace(connectResult.ReasonString) ? string.Empty : $" - {connectResult.ReasonString}"));
+            }
+
+            _logger.LogInformation(
+                "MQTT connected to {Host}:{Port} as {ClientId} (result: {ResultCode}, auth: {AuthMethod})",
+                settings.Host,
+                settings.Port,
+                options.ClientId,
+                connectResult.ResultCode,
+                settings.UsesEntraAuthentication ? EntraAuthenticationMethod : "none");
+
+            var subscribeResult = await client.SubscribeAsync(settings.Topic, MqttQualityOfServiceLevel.AtLeastOnce, cancellationToken);
+
+            // A denied SUBACK does not throw either, and the connection stays up.
+            // Without this check the backend would sit connected and silent —
+            // exactly what happens when the identity holds the Event Grid
+            // TopicSpaces Publisher role but not Subscriber.
+            var denied = subscribeResult.Items
+                .Where(item => item.ResultCode is not (MqttClientSubscribeResultCode.GrantedQoS0
+                    or MqttClientSubscribeResultCode.GrantedQoS1
+                    or MqttClientSubscribeResultCode.GrantedQoS2))
+                .ToList();
+            if (denied.Count > 0)
+            {
+                throw new InvalidOperationException(
+                    "MQTT SUBSCRIBE denied by the broker: " +
+                    string.Join(", ", denied.Select(item => $"{item.TopicFilter.Topic} => {item.ResultCode}")));
+            }
+
+            _logger.LogInformation("Listening for orders on MQTT topic {Topic}", settings.Topic);
+
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                var renewalDelay = token.HasValue
+                    ? RenewalDelay(token.Value.ExpiresOn)
+                    : Timeout.InfiniteTimeSpan;
+
+                using var renewalCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                var renewalDue = Task.Delay(renewalDelay, renewalCts.Token);
+                var finished = await Task.WhenAny(sessionEnded.Task, renewalDue);
+                renewalCts.Cancel();
+
+                if (finished == sessionEnded.Task)
+                {
+                    // The broker closed the session; the caller reconnects.
+                    return;
+                }
+
+                cancellationToken.ThrowIfCancellationRequested();
+
+                // Event Grid drops a client once its token expires unless the client
+                // re-authenticates with an AUTH packet carrying reason code 25.
+                token = await AcquireTokenAsync(settings, cancellationToken);
+                var refreshedToken = Encoding.UTF8.GetBytes(token.Value.Token);
+                Volatile.Write(ref _currentToken, refreshedToken);
+
+                await client.SendEnhancedAuthenticationExchangeDataAsync(
+                    new MqttEnhancedAuthenticationExchangeData
+                    {
+                        ReasonCode = MqttAuthenticateReasonCode.ReAuthenticate,
+                        AuthenticationData = refreshedToken
+                    },
+                    cancellationToken);
+
+                _logger.LogInformation(
+                    "MQTT: re-authenticated with a refreshed Entra token (expires {ExpiresOn:u})",
+                    token.Value.ExpiresOn);
+            }
+        }
+        finally
+        {
+            client.DisconnectedAsync -= onDisconnected;
+
+            // MQTTnet refuses ConnectAsync on a connected client, so a session
+            // that failed after CONNECT (a rejected SUBSCRIBE, for example) must
+            // not leave the connection open or every retry would fail.
+            if (client.IsConnected)
+            {
+                try
+                {
+                    await client.DisconnectAsync(cancellationToken: CancellationToken.None);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "MQTT: cleanup disconnect failed");
+                }
+            }
+        }
+    }
+
+    private MqttSettings ReadSettings()
+    {
+        // Radius injects CONNECTION_MQTT_* from the mqttBrokers connection.
+        var host = _configuration["CONNECTION_MQTT_HOST"] ?? "localhost";
+        var port = int.TryParse(_configuration["CONNECTION_MQTT_PORT"], out var parsed) ? parsed : 1883;
+        var topic = _configuration["MQTT_TOPIC"] ?? "orders/new";
 
         var authMethod = _configuration["MQTT_AUTH_METHOD"] ?? "none";
         var tokenAudience = _configuration["MQTT_TOKEN_AUDIENCE"] ?? "https://eventgrid.azure.net/";
-        var azureClientId = _configuration["AZURE_CLIENT_ID"] ?? string.Empty;
-        var azureTenantId = _configuration["AZURE_TENANT_ID"] ?? string.Empty;
-        var federatedTokenFile = _configuration["AZURE_FEDERATED_TOKEN_FILE"] ?? string.Empty;
-
         if (!tokenAudience.EndsWith("/", StringComparison.Ordinal))
         {
             tokenAudience += "/";
         }
 
-        var optionsBuilder = new MqttClientOptionsBuilder()
-            .WithTcpServer(host, port)
-            .WithClientId($"backend-{Guid.NewGuid():N}");
+        var clientIdOverride = _configuration["MQTT_CLIENT_ID"];
 
-        if (string.Equals(authMethod, "OAUTH2-JWT", StringComparison.OrdinalIgnoreCase))
+        return new MqttSettings(
+            host,
+            port,
+            topic,
+            string.Equals(authMethod, EntraAuthenticationMethod, StringComparison.OrdinalIgnoreCase),
+            tokenAudience,
+            string.IsNullOrWhiteSpace(clientIdOverride) ? null : clientIdOverride,
+            _configuration["AZURE_CLIENT_ID"] ?? string.Empty,
+            _configuration["AZURE_TENANT_ID"] ?? string.Empty,
+            _configuration["AZURE_FEDERATED_TOKEN_FILE"] ?? string.Empty);
+    }
+
+    private MqttClientOptions BuildOptions(MqttSettings settings, AccessToken? token)
+    {
+        var builder = new MqttClientOptionsBuilder()
+            .WithTcpServer(settings.Host, settings.Port);
+
+        if (token is null)
         {
-            TokenCredential credential;
-            if (!string.IsNullOrWhiteSpace(azureClientId) &&
-                !string.IsNullOrWhiteSpace(azureTenantId) &&
-                !string.IsNullOrWhiteSpace(federatedTokenFile))
-            {
-                credential = new WorkloadIdentityCredential(new WorkloadIdentityCredentialOptions
-                {
-                    ClientId = azureClientId,
-                    TenantId = azureTenantId,
-                    TokenFilePath = federatedTokenFile
-                });
-            }
-            else if (!string.IsNullOrWhiteSpace(azureClientId))
-            {
-                // Explicitly target the configured user-assigned identity to avoid
-                // ambiguous IMDS selection when multiple identities are present.
-                credential = new ManagedIdentityCredential(azureClientId);
-            }
-            else
-            {
-                credential = new DefaultAzureCredential(new DefaultAzureCredentialOptions
-                {
-                    ExcludeVisualStudioCredential = true,
-                    ExcludeAzureCliCredential = true,
-                    ExcludeAzurePowerShellCredential = true,
-                    ExcludeAzureDeveloperCliCredential = true
-                });
-            }
+            Volatile.Write(ref _currentToken, null);
+            return builder
+                .WithClientId(settings.ClientIdOverride ?? $"backend-{Guid.NewGuid():N}")
+                .Build();
+        }
 
-            AccessToken accessToken;
-            try
+        var tokenBytes = Encoding.UTF8.GetBytes(token.Value.Token);
+        Volatile.Write(ref _currentToken, tokenBytes);
+
+        // Event Grid matches the CONNECT client identifier against the object ID
+        // of the authenticating Entra principal, which the token carries as `oid`.
+        var objectId = settings.ClientIdOverride ?? TryGetObjectId(token.Value.Token);
+        if (objectId is null)
+        {
+            _logger.LogWarning(
+                "MQTT: the access token has no 'oid' claim and MQTT_CLIENT_ID is unset. Azure Event Grid rejects clients whose CONNECT client identifier is not the Entra object ID.");
+        }
+
+        return builder
+            .WithClientId(objectId ?? $"backend-{Guid.NewGuid():N}")
+            // Enhanced authentication requires MQTT v5.
+            .WithProtocolVersion(MqttProtocolVersion.V500)
+            .WithTlsOptions(tls => tls.UseTls())
+            .WithEnhancedAuthentication(EntraAuthenticationMethod, tokenBytes)
+            // Without a handler MQTTnet drops the connection when the broker
+            // answers a re-authentication with its own AUTH packet.
+            .WithEnhancedAuthenticationHandler(this)
+            .Build();
+    }
+
+    public Task HandleEnhancedAuthenticationAsync(MqttEnhancedAuthenticationEventArgs eventArgs)
+    {
+        if (eventArgs.ReasonCode == MqttAuthenticateReasonCode.ContinueAuthentication)
+        {
+            _logger.LogInformation("MQTT: broker requested continued authentication; resending the current token");
+            return eventArgs.SendAsync(
+                new SendMqttEnhancedAuthenticationDataOptions { Data = Volatile.Read(ref _currentToken) },
+                eventArgs.CancellationToken);
+        }
+
+        _logger.LogInformation(
+            "MQTT: enhanced authentication acknowledged by the broker (method: {Method}, reason: {ReasonCode})",
+            eventArgs.AuthenticationMethod,
+            eventArgs.ReasonCode);
+        return Task.CompletedTask;
+    }
+
+    private async Task<AccessToken> AcquireTokenAsync(MqttSettings settings, CancellationToken cancellationToken)
+    {
+        var credential = CreateCredential(settings);
+        try
+        {
+            var tokenRequest = new TokenRequestContext(new[] { settings.TokenAudience + ".default" });
+            return await credential.GetTokenAsync(tokenRequest, cancellationToken);
+        }
+        catch (Exception ex) when (ex is CredentialUnavailableException or AuthenticationFailedException)
+        {
+            _logger.LogError(ex,
+                "MQTT token acquisition failed. audience={Audience}, clientIdSet={ClientIdSet}, tenantIdSet={TenantIdSet}, federatedTokenFileSet={TokenFileSet}",
+                settings.TokenAudience,
+                !string.IsNullOrWhiteSpace(settings.AzureClientId),
+                !string.IsNullOrWhiteSpace(settings.AzureTenantId),
+                !string.IsNullOrWhiteSpace(settings.FederatedTokenFile));
+            throw;
+        }
+    }
+
+    private static TokenCredential CreateCredential(MqttSettings settings)
+    {
+        // A fresh credential per request on purpose: Azure.Identity caches tokens
+        // per instance and would hand back the near-expiry token we are trying to
+        // replace. Renewals are hourly, so the cost is irrelevant.
+        if (!string.IsNullOrWhiteSpace(settings.AzureClientId) &&
+            !string.IsNullOrWhiteSpace(settings.AzureTenantId) &&
+            !string.IsNullOrWhiteSpace(settings.FederatedTokenFile))
+        {
+            return new WorkloadIdentityCredential(new WorkloadIdentityCredentialOptions
             {
-                var tokenRequest = new TokenRequestContext(new[] { tokenAudience + ".default" });
-                accessToken = await credential.GetTokenAsync(tokenRequest, stoppingToken);
-            }
-            catch (Exception ex) when (ex is CredentialUnavailableException or AuthenticationFailedException)
+                ClientId = settings.AzureClientId,
+                TenantId = settings.AzureTenantId,
+                TokenFilePath = settings.FederatedTokenFile
+            });
+        }
+
+        if (!string.IsNullOrWhiteSpace(settings.AzureClientId))
+        {
+            // Explicitly target the configured user-assigned identity to avoid
+            // ambiguous IMDS selection when multiple identities are present.
+            return new ManagedIdentityCredential(settings.AzureClientId);
+        }
+
+        return new DefaultAzureCredential(new DefaultAzureCredentialOptions
+        {
+            ExcludeVisualStudioCredential = true,
+            ExcludeAzureCliCredential = true,
+            ExcludeAzurePowerShellCredential = true,
+            ExcludeAzureDeveloperCliCredential = true
+        });
+    }
+
+    private async Task HandleApplicationMessageAsync(MqttApplicationMessageReceivedEventArgs e, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var payloadSeq = e.ApplicationMessage.Payload;
+            var payload = payloadSeq.Length == 0
+                ? string.Empty
+                : Encoding.UTF8.GetString(payloadSeq.ToArray());
+            var order = JsonSerializer.Deserialize<OrderMessage>(payload, JsonOptions);
+            if (order is null)
             {
-                _logger.LogError(ex,
-                    "MQTT token acquisition failed. authMethod={AuthMethod}, clientIdSet={ClientIdSet}, tenantIdSet={TenantIdSet}, federatedTokenFileSet={TokenFileSet}",
-                    authMethod,
-                    !string.IsNullOrWhiteSpace(azureClientId),
-                    !string.IsNullOrWhiteSpace(azureTenantId),
-                    !string.IsNullOrWhiteSpace(federatedTokenFile));
+                _logger.LogWarning("Invalid order payload: {Payload}", payload);
                 return;
             }
 
-            optionsBuilder = optionsBuilder
-                .WithTlsOptions(tls => tls.UseTls())
-                // MQTTnet v5 uses username/password credentials for broker auth.
-                // Event Grid validates the JWT bearer token provided as password.
-                .WithCredentials(
-                    string.IsNullOrWhiteSpace(azureClientId) ? "oauth2-jwt" : azureClientId,
-                    accessToken.Token);
+            await _processor.ProcessOrderAsync(order, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to process order message");
+        }
+    }
 
-            _logger.LogInformation("MQTT: using OAUTH2-JWT authentication (audience: {Audience})", tokenAudience);
+    /// <summary>
+    /// Reads the <c>oid</c> claim (the Entra object ID of the authenticating
+    /// principal) from a JWT without validating it — the broker does that.
+    /// </summary>
+    private static string? TryGetObjectId(string accessToken)
+    {
+        var segments = accessToken.Split('.');
+        if (segments.Length < 2)
+        {
+            return null;
         }
 
-        var options = optionsBuilder.Build();
-
-        _client.ApplicationMessageReceivedAsync += async e =>
+        try
         {
-            try
-            {
-                var payloadSeq = e.ApplicationMessage.Payload;
-                var payload = payloadSeq.Length == 0
-                    ? string.Empty
-                    : System.Text.Encoding.UTF8.GetString(payloadSeq.ToArray());
-                var order = JsonSerializer.Deserialize<OrderMessage>(payload, JsonOptions);
-                if (order is null)
-                {
-                    _logger.LogWarning("Invalid order payload: {Payload}", payload);
-                    return;
-                }
+            using var payload = JsonDocument.Parse(Base64UrlDecode(segments[1]));
+            return payload.RootElement.TryGetProperty("oid", out var oid) && oid.ValueKind == JsonValueKind.String
+                ? oid.GetString()
+                : null;
+        }
+        catch (Exception ex) when (ex is FormatException or JsonException)
+        {
+            return null;
+        }
+    }
 
-                await _processor.ProcessOrderAsync(order, stoppingToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to process order message");
-            }
-        };
+    private static byte[] Base64UrlDecode(string value)
+    {
+        var normalized = value.Replace('-', '+').Replace('_', '/');
+        var padding = (4 - (normalized.Length % 4)) % 4;
+        return Convert.FromBase64String(normalized.PadRight(normalized.Length + padding, '='));
+    }
 
-        await _client.ConnectAsync(options, stoppingToken);
-        await _client.SubscribeAsync(topic, MQTTnet.Protocol.MqttQualityOfServiceLevel.AtLeastOnce, stoppingToken);
+    private static TimeSpan RenewalDelay(DateTimeOffset expiresOn)
+    {
+        var delay = expiresOn - DateTimeOffset.UtcNow - TokenRenewalMargin;
+        return delay < MinimumRenewalDelay ? MinimumRenewalDelay : delay;
+    }
 
-        _logger.LogInformation("Listening for orders on MQTT topic {Topic}", topic);
+    private static TimeSpan ReconnectDelay(int consecutiveFailures)
+    {
+        var seconds = Math.Min(Math.Pow(2, Math.Min(consecutiveFailures, 6)), MaximumReconnectDelay.TotalSeconds);
+        return TimeSpan.FromSeconds(seconds);
     }
 
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
         if (_client is not null)
         {
-            await _client.DisconnectAsync(cancellationToken: cancellationToken);
+            try
+            {
+                await _client.DisconnectAsync(cancellationToken: cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "MQTT disconnect on shutdown failed");
+            }
         }
         await base.StopAsync(cancellationToken);
     }
+
+    public override void Dispose()
+    {
+        _client?.Dispose();
+        base.Dispose();
+        GC.SuppressFinalize(this);
+    }
+
+    private sealed record MqttSettings(
+        string Host,
+        int Port,
+        string Topic,
+        bool UsesEntraAuthentication,
+        string TokenAudience,
+        string? ClientIdOverride,
+        string AzureClientId,
+        string AzureTenantId,
+        string FederatedTokenFile);
 }
 
 class OrderProcessor

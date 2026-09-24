@@ -1,22 +1,22 @@
 # Adaptive Apps
 
-*Build once, Adapt everywhere.*
+*Build once, adapt everywhere.*
 
 Adaptive Apps redefine how applications are built and operated by enabling them to move effortlessly across cloud, edge, and hybrid environments without re-architecture or lock-in.
 
-## Value Proposition
+## Value proposition
 
 * **Enable sovereign, multi-cloud, and isolated edge deployments**
 
-    Meet regulatory, geopolitical, and operational requirements while maintaining a single application model.
+  Meet regulatory, geopolitical, and operational requirements while maintaining a single application model.
 
 * **Unlock existing investments by modernizing brownfield applications**
 
-    Extend the life and value of legacy systems by making them portable, adaptable, and future-ready.
+  Extend the life and value of legacy systems by making them portable, adaptable, and future-ready.
 
 * **Bridge AI-native agentic systems with traditional microservices**
 
-    Create a unified platform where emerging AI-driven workflows and established enterprise services operate together seamlessly.
+  Create a unified platform where emerging AI-driven workflows and established enterprise services operate together seamlessly.
 
 ## Architecture
 
@@ -26,7 +26,9 @@ Adaptive Apps is comprised of four layers: application model, programming model,
     <img src="./docs/images/adaptive-apps-architecture.png" width="75%" />
 </p>
 
-### **Platform-agnostic application model**
+The architecture is described in additional detail on Microsoft Learn at [Build portable applications with adaptive apps](https://learn.microsoft.com/azure/architecture/solution-ideas/articles/adaptive-apps).
+
+### Platform-agnostic application model
 
 Adaptive Apps use [Radius](https://docs.radapp.io/) as the application model.
 
@@ -34,7 +36,7 @@ A Radius application is composed of multiple resources, where each resource type
 
 Radius resource types are extensible, allowing Adaptive Apps to introduce new concepts such as AI agents alongside existing core resource types like compute and storage.
 
-### **Platform-agnostic programming model**
+### Platform-agnostic programming model
 
 For an application to be truly portable, its code must avoid direct dependencies on platform-specific APIs.
 
@@ -42,7 +44,7 @@ For an application to be truly portable, its code must avoid direct dependencies
 
 > **NOTE**: Using Dapr is not mandatory. When sufficient platform parity exists across target environments, applications may bind directly to platform-specific APIs. For example, if all required services are available across Azure and Azure Arc, an application written against Azure APIs can remain portable within that scope.
 
-### **Adaptive application platform**
+### Adaptive application platform
 
 The Adaptive Application Platform provides the runtime capabilities required by Adaptive Apps, including compute, storage, messaging, networking, observability, and AI services.
 
@@ -52,7 +54,7 @@ Adaptive Apps adopt and extend AI-enabled tools to simplify adoption and moderni
 
 As an initial capability, Adaptive Apps provide AI-based refactoring tools that assist in transforming legacy applications to adopt the Dapr programming model and portability patterns.
 
-## Capability Portfolios
+## Capability portfolios
 
 Delivering a consistent set of platform capabilities across cloud and edge environments is challenging due to differences in software availability, compatibility, and resource constraints.
 
@@ -62,7 +64,7 @@ An application targets a specific capability portfolio and can be deployed to an
 
 A horiztonal comparison of portfolios is available [here](./docs/portfolios/overview.md).
 
-### **Defined portfolios**
+### Defined portfolios
 
 As a starting point, we define six portfolios, as summarized in the following table:
 
@@ -75,18 +77,12 @@ As a starting point, we define six portfolios, as summarized in the following ta
 | [`core-ai`](./docs/portfolios/core-ai.md) | ✓ | ✓ | ✓ | ✗ | ✓ |
 | [`ent-ai`](./docs/portfolios/ent-ai.md) | ✓ | ✓ | ✓ | ✓ (off by default) | ✓ |
 
-* **`min`** — baseline hosting (identity + service hosting). Ideal for PoC,
-  MVP, hackathon, demos and experiments.
-* **`core`** — builds on `min` with operational readiness: service mesh, data
-  sync, observability, basic policy enforcement, secret management. Ideal for
-  standard production workloads.
-* **`ent`** — builds on `core` for large-scale enterprise: advanced policy
-  enforcement, advanced certificate management, advanced monitoring,
-  backup/restore.
-* **`*-ai`** — layer on-cluster AI model management onto the base portfolio
-  for offline / local inference.
+* **`min`** — baseline hosting (identity + service hosting). Ideal for PoC, MVP, hackathon, demos and experiments.
+* **`core`** — builds on `min` with operational readiness: service mesh, data sync, observability, basic policy enforcement, secret management. Ideal for standard production workloads.
+* **`ent`** — builds on `core` for large-scale enterprise: advanced policy enforcement, advanced certificate management, advanced monitoring, backup/restore.
+* **`*-ai`** — layer on-cluster AI model management onto the base portfolio for offline / local inference.
 
-### **Capability portfolio deployment**
+### Capability portfolio deployment
 
 Adaptive Apps don't assume a specific control plane that operates the applications. A capability vendor is free to choose the most appropriate packaging and delivery mechanism to bootstrap a portfolio, including:
 
@@ -97,16 +93,15 @@ Adaptive Apps don't assume a specific control plane that operates the applicatio
 
 As long as the portfolio satisfies the capability contract, applications remain portable.
 
-### **Third-part capability vendors**
+### Third-part capability vendors
 
 Adaptive Apps enable third-party vendors to implement and deliver capability portfolios on cloud, edge, or specialized environments. As long as a portfolio exposes the required capabilities and APIs, any Adaptive App targeting that portfolio can be deployed without modification.
 
 To support the Radius application model, capability vendors are expected to implement the necessary Radius recipes for deployment.
 
-## Getting Started
+## Getting started
 
-Follow our [Getting Started tutorial](./tutorials/getting-started/README.md) to
-deploy an Adaptive App portfolio on local Kubernetes, AKS, Azure Local, or Azure Arc.
+Follow our [Getting Started tutorial](./tutorials/getting-started/README.md) to deploy an Adaptive App portfolio on local Kubernetes, AKS, Azure Local, or Azure Arc.
 
 ### Additional tutorials
 
@@ -120,4 +115,3 @@ deploy an Adaptive App portfolio on local Kubernetes, AKS, Azure Local, or Azure
 * [Authentication](./docs/authentication/README.md)
 * [Data Sync](./docs/data-sync/README.md)
 * [Policies](./docs/policies/README.md)
-
