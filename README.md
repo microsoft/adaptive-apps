@@ -109,6 +109,23 @@ Follow our [Getting Started tutorial](./tutorials/getting-started/README.md) to 
 * [Governance](./tutorials/governance/README.md) — author `AuthorizationPolicy` (native and OPA-delegated) for the `ent`/`ent-ai` portfolios.
 * [Service mesh](./tutorials/service-mesh/README.md) — enroll the app namespace in Istio and verify mesh traffic.
 
+## Adaptive Apps MicroHack
+
+Looking for a guided, hands-on learning path instead of reference material? The [**Adaptive Apps MicroHack**](https://github.com/microsoft/MicroHack/tree/main/03-Azure/01-01-App%20Innovation/04-adaptive-apps) is a challenge-based workshop, hosted in the [microsoft/MicroHack](https://github.com/microsoft/MicroHack) repository, that is built directly on top of this project.
+
+It walks platform engineers and application developers through the full lifecycle of an adaptive application: preparing Kubernetes target platforms, installing and operating Radius, authoring resource types and environment-specific recipes, and then proving portability by deploying the [Simplified Trading App](./src/README.md) from this repository — unchanged — to Azure, Azure Local, and a disconnected edge cluster. Later challenges extend the same approach to identity, secure service communication, AI services, and brownfield modernization.
+
+### How it differs from this repository
+
+| | This repository (`microsoft/adaptive-apps`) | The MicroHack (`microsoft/MicroHack`) |
+| --- | --- | --- |
+| **Purpose** | The Adaptive Apps project itself: the reference architecture, concepts, and shipped assets | A guided, time-boxed workshop that teaches the concepts by doing |
+| **Content** | Capability portfolios, Radius resource types and recipes, Helm charts, the `ada` CLI, the Simplified Trading App, and task-focused tutorials | A sequence of challenges with student and coach guides, per-audience learning paths, and a pre-provisionable lab environment |
+| **How you use it** | Consume it as the upstream source — reference it, deploy from it, extend it in your own applications | Work through it once, end to end, to build the skills; it *consumes* the assets published here rather than redefining them |
+| **Audience** | Anyone building, operating, or extending Adaptive Apps | Platform engineers (challenges 02–06) and application developers (challenges 05–11) new to the approach |
+
+In short: this repository is the **product**, and the MicroHack is the **hands-on course** built on it. The MicroHack does not introduce a separate stack — any change to the concepts, portfolios, or recipes originates here.
+
 ## Topics
 
 * [Agent Guardrails](./docs/agents/guard-rail.md)
