@@ -72,7 +72,7 @@ jobs:
           echo "version=${tag#cli-v}" >> "$GITHUB_OUTPUT"
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # v1
         with:
           targets: ${{ matrix.target }}
 
