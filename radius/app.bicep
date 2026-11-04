@@ -28,6 +28,10 @@
 
 extension radius
 extension radiusResources
+extension kubernetes with {
+  kubeConfig: ''
+  namespace: 'default'
+} as k8s
 
 // ---------------------------------------------------------------------------
 // Parameters
@@ -53,6 +57,9 @@ param nativeUiImage string = ''
 
 @description('Namespace owned by the Kubernetes-hosted agent environment.')
 param nativeAgentNamespace string = 'adaptive'
+
+@description('Kubernetes namespace where Radius deploys the trading application.')
+param appKubernetesNamespace string = 'trading'
 
 @description('Portable-agent Radius Environment ID. Required when enableNativeAgents is true.')
 param nativeAgentEnvironment string = ''
@@ -642,6 +649,7 @@ resource frontend 'Applications.Core/containers@2023-10-01-preview' = {
           containerPort: 3000
         }
       }
+
       env: {
         PORT:           { value: '3000' }
         OTEL_SERVICE_NAME: { value: 'trading-frontend' }
@@ -691,6 +699,51 @@ resource frontend 'Applications.Core/containers@2023-10-01-preview' = {
       identity: { source: frontendIdentity.id }
     }
   }
+}
+
+resource frontendHttpsRoute 'gateway.networking.k8s.io/HTTPRoute@v1' = if (enableNativeAgents) {
+  metadata: {
+    name: 'trading-frontend'
+    namespace: appKubernetesNamespace
+  }
+  spec: {
+    parentRefs: [{
+      name: 'ui-ingress'
+      namespace: nativeAgentNamespace
+      sectionName: 'trading'
+    }]
+    rules: [{
+      matches: [{
+        path: {
+          type: 'PathPrefix'
+          value: '/'
+        }
+      }]
+      backendRefs: [{
+        name: 'frontend'
+        port: 3000
+      }]
+    }]
+  }
+  dependsOn: [frontend]
+}
+
+resource frontendHttpsPolicy 'gateway.envoyproxy.io/SecurityPolicy@v1alpha1' = if (enableNativeAgents) {
+  metadata: {
+    name: 'trading-frontend'
+    namespace: appKubernetesNamespace
+  }
+  spec: {
+    targetRefs: [{
+      group: 'gateway.networking.k8s.io'
+      kind: 'HTTPRoute'
+      name: 'trading-frontend'
+    }]
+    authorization: {
+      defaultAction: 'Allow'
+    }
+  }
+  dependsOn: [frontendHttpsRoute]
 }
 
 resource nativeAgentUi 'Applications.Core/containers@2023-10-01-preview' = if (enableNativeAgents) {

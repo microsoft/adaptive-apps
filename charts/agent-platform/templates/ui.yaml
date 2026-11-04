@@ -267,7 +267,7 @@ metadata:
 spec:
   gatewayClassName: adaptive-envoy
   listeners:
-    {{- range $listener := list (dict "name" "ui" "port" 8443) (dict "name" "identity" "port" 8444) }}
+    {{- range $listener := list (dict "name" "ui" "port" 8443 "routes" "Same") (dict "name" "identity" "port" 8444 "routes" "Same") (dict "name" "trading" "port" 3443 "routes" "Selector") }}
     - name: {{ $listener.name }}
       protocol: HTTPS
       port: {{ $listener.port }}
@@ -278,7 +278,12 @@ spec:
             name: {{ required "runtime.certificateSecret is required" $.Values.runtime.certificateSecret }}
       allowedRoutes:
         namespaces:
-          from: Same
+          from: {{ $listener.routes }}
+          {{- if eq $listener.routes "Selector" }}
+          selector:
+            matchLabels:
+              adaptive-apps.microsoft.com/trading-ingress: "true"
+          {{- end }}
     {{- end }}
 ---
 apiVersion: gateway.envoyproxy.io/v1alpha1

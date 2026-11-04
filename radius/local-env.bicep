@@ -40,7 +40,10 @@ resource appNamespace 'core/Namespace@v1' = {
     name: namespace
     labels: enableIstioInjection ? {
       'istio-injection': 'enabled'
-    } : {}
+      'adaptive-apps.microsoft.com/trading-ingress': 'true'
+    } : {
+      'adaptive-apps.microsoft.com/trading-ingress': 'true'
+    }
   }
 }
 

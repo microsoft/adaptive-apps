@@ -150,6 +150,52 @@ ada bootstrap --portfolio min \
 target — switch contexts with `kubectl config use-context <name>` before
 invoking `ada`.
 
+### Existing AKS Azure credentials
+
+With `--with-radius --platform aks --resource-group ... --aks-cluster ...`,
+bootstrap first checks `rad credential list --workspace <radius-workspace>
+-o json`. If an Azure credential is registered, bootstrap preserves it and skips
+Entra application discovery, federation, RBAC, and credential registration.
+This check does not access Microsoft Graph or verify that the existing
+credential still has working federation and Azure permissions. Inspection
+failures stop bootstrap rather than triggering provisioning. The check supports
+both JSON-only output and the informational banner emitted by Radius CLI 0.57.
+
+The workload-identity helper scripts provision the Entra application and
+federation, but do not register the credential with Radius. If you ran a helper
+separately, register its application client ID once against the target Radius
+workspace before rerunning bootstrap:
+
+```bash
+rad credential register azure wi \
+  --workspace <radius-workspace> \
+  --client-id <application-client-id> \
+  --tenant-id <tenant-id>
+```
+
+Use the client ID printed by the PowerShell helper when Graph access is blocked
+from your deployment workstation. The workspace must already point to the
+intended Radius installation. If no credential is registered, automatic
+provisioning still requires Graph access. `--skip-azure-credentials` disables
+both inspection and provisioning when you manage registration yourself.
+
+### Browser port overrides
+
+For concurrent local and remote native deployments, add
+`--keycloak-port 8445 --trading-port 3445 --keep-port-forward` to the remote
+bootstrap command. Local ports map to the unchanged Gateway listeners `8444`
+and `3443`. Keycloak's public URL, native issuers, and printed OIDC exports
+follow the Keycloak override. Trading's callback origin remains controlled by
+`tradingOrigin` in the agents configuration.
+
+Set `keycloakPort` in the agents configuration to persist the choice across
+`ada init` and bootstrap, or pass `--keycloak-port` to both commands. Without
+an override, native Keycloak retains port `8444`; standard bootstrap retains
+its HTTP port `8080`. Existing derived inputs require the explicit
+`--refresh-derived-state` flag after a reviewed port change. The refresh
+preserves retained credentials. Deploy using the newly printed app command
+so its issuer and browser endpoint match the new public Keycloak URL.
+
 ## Native application setup
 
 Follow [Getting Started](../tutorials/getting-started/README.md) for the shared

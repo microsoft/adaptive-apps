@@ -438,23 +438,30 @@ impl PortForward {
         local_port: u16,
         remote_port: u16,
     ) -> Result<Self> {
+        Self::start_service_ports(namespace, service, &[(local_port, remote_port)])
+    }
+
+    pub fn start_service_ports(
+        namespace: &str,
+        service: &str,
+        ports: &[(u16, u16)],
+    ) -> Result<Self> {
+        let mappings: Vec<_> = ports
+            .iter()
+            .map(|(local, remote)| format!("{local}:{remote}"))
+            .collect();
         ui::step(&format!(
-            "kubectl port-forward -n {namespace} svc/{service} {local_port}:{remote_port}"
+            "kubectl port-forward -n {namespace} svc/{service} {}",
+            mappings.join(" ")
         ));
-        let mut child = Command::new("kubectl")
-            .args([
-                "port-forward",
-                "-n",
-                namespace,
-                &format!("svc/{service}"),
-                &format!("{local_port}:{remote_port}"),
-            ])
+        let mut command = Command::new("kubectl");
+        command.args(["port-forward", "-n", namespace, &format!("svc/{service}")]);
+        command.args(&mappings);
+        let mut child = command
             .stdout(Stdio::null())
             .stderr(Stdio::piped())
             .spawn()
-            .with_context(|| {
-                format!("failed to spawn `kubectl port-forward` on local port {local_port}")
-            })?;
+            .with_context(|| format!("failed to spawn `kubectl port-forward` for {service}"))?;
         let stderr = child.stderr.take();
         Ok(Self { child, stderr })
     }

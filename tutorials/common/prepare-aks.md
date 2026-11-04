@@ -83,10 +83,57 @@ export RADIUS_GROUP=trading
 
 2. Register Azure credentials so Radius can provision Azure resources (Event Grid, Managed Identity, etc.):
 
-    Use `wi-helper.sh` script under the `tutorials/getting-started/assets/` folder to create managed identity and set up service account federation:
+    Use `wi-helper.sh` script under the `tutorials/getting-started/assets/` folder to create an Entra application and service principal and set up service account federation:
 
     >**NOTE:** See https://docs.radapp.io/guides/operations/providers/azure-provider/howto-azure-provider-wi/ for more information
 
     ```bash
     ./wi-helper.sh $AKS_CLUSTER $RESOURCE_GROUP $AZURE_SUBSCRIPTION $AKS_OIDC_ISSUER
     ```
+
+### Windows PowerShell with tenant-specific federation policy
+
+For tenants requiring the trusted-issuer Graph API used by
+[`wi-helper-private.sh`](../getting-started/assets/wi-helper-private.sh), use
+[`wi-helper-private.ps1`](../getting-started/assets/wi-helper-private.ps1) from
+Windows PowerShell 5.1 or PowerShell 7 with native Windows Azure CLI.
+Windows and WSL Azure CLI authentication contexts are separate.
+
+Run the following from the repository root, replacing the placeholder values.
+The Windows login must satisfy your organization's Conditional Access policy;
+the helper does not bypass token-protection requirements.
+
+```powershell
+$TENANT_ID = "<your tenant ID>"
+$AZURE_SUBSCRIPTION = "<your subscription ID>"
+$RESOURCE_GROUP = "<your resource group>"
+$AKS_CLUSTER = "<your AKS cluster name>"
+
+az config set core.enable_broker_on_windows=true
+az login --tenant $TENANT_ID
+az account set --subscription $AZURE_SUBSCRIPTION
+
+$AKS_OIDC_ISSUER = az aks show `
+    --subscription $AZURE_SUBSCRIPTION `
+    --resource-group $RESOURCE_GROUP `
+    --name $AKS_CLUSTER `
+    --query oidcIssuerProfile.issuerUrl -o tsv
+
+.\tutorials\getting-started\assets\wi-helper-private.ps1 `
+    -K8sClusterName $AKS_CLUSTER `
+    -AzureResourceGroup $RESOURCE_GROUP `
+    -AzureSubscriptionId $AZURE_SUBSCRIPTION `
+    -OidcIssuerUrl $AKS_OIDC_ISSUER
+```
+
+Before running, verify the helper's hardcoded `AksFicIssuerId` against the
+cluster's OIDC issuer URL using the mappings in the script, and confirm the
+hardcoded service-management reference is approved for your team. Changing the
+tenant used for login does not select a different trusted-issuer binding.
+
+Like the Bash helper, the PowerShell helper reuses the first matching
+`<cluster>-radius-app` application, deletes and recreates the four named Radius
+federated credentials, creates a service principal if absent, and grants it
+**Owner on the supplied resource group**. You need permissions to manage the
+Entra application and assign that Azure role. Azure CLI failures stop the
+PowerShell helper; partial changes are not rolled back.

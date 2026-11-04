@@ -24,6 +24,9 @@ pub struct InitArgs {
     release: String,
     #[arg(long, default_value = "adaptive")]
     group: String,
+    /// Override the agents config's browser-facing Keycloak port (default 8444).
+    #[arg(long, requires = "agents_config", value_parser = clap::value_parser!(u16).range(1..))]
+    keycloak_port: Option<u16>,
     /// Print the resolved layout without creating any directories.
     #[arg(long)]
     dry_run: bool,
@@ -51,6 +54,7 @@ pub fn run_init(args: InitArgs) -> Result<()> {
             &args.release,
             &args.group,
             args.refresh_derived_state,
+            args.keycloak_port,
         )?;
     }
     Ok(())

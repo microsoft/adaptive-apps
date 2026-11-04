@@ -25,4 +25,4 @@ Once your `kubectl` context points at the AKS Arc cluster, return to the
 unified tutorial at
 [**§2 Bring up the platform**](../getting-started/README.md#2-bring-up-the-platform)
 and run `ada bootstrap` with `--platform azure-local` (or use the manual
-OPTION 2 path).
+advanced manual path).

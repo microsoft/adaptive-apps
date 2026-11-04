@@ -185,7 +185,9 @@ pub struct BootstrapArgs {
 
     /// Skip automatic Azure credential provisioning. By default, when
     /// `--with-radius` is combined with `--platform aks` and both
-    /// `--resource-group` and `--aks-cluster` are supplied, `ada` creates
+    /// `--resource-group` and `--aks-cluster` are supplied, `ada` first
+    /// checks for an Azure credential registered with Radius and reuses it
+    /// without querying Microsoft Graph. Otherwise it creates
     /// (or reuses) an Entra application named `<cluster>-radius-app`,
     /// federates the four Radius service accounts in `radius-system`,
     /// grants the app `Owner` on the resource group, and registers the
@@ -292,11 +294,23 @@ pub struct BootstrapArgs {
     #[arg(long, default_value = "admin")]
     keycloak_admin_password: String,
 
+    /// Browser-facing Keycloak port. Defaults to 8444 with agents (or the
+    /// agents config's keycloakPort), and 8080 otherwise. Native mode also
+    /// updates Keycloak's public URL, OIDC issuers, and generated app exports.
+    #[arg(long, value_parser = clap::value_parser!(u16).range(1..))]
+    keycloak_port: Option<u16>,
+
+    /// Local HTTPS trading Gateway port with agents. Does not change the
+    /// frontend callback origin; set tradingOrigin in the agents config too.
+    #[arg(long, requires = "with", value_parser = clap::value_parser!(u16).range(1..))]
+    trading_port: Option<u16>,
+
     /// After provisioning the OIDC client, keep the `kubectl port-forward`
     /// to Keycloak running in the foreground (press Ctrl-C to stop).
     /// Use this when you want to run `rad deploy` from another terminal
-    /// against `http://localhost:8080` without setting up port-forwarding
-    /// yourself.
+    /// against localhost without setting up port-forwarding yourself.
+    /// Use --keycloak-port (and --trading-port with agents) to avoid
+    /// conflicts with another deployment.
     #[arg(long)]
     keep_port_forward: bool,
 }
@@ -437,7 +451,9 @@ pub fn run(args: BootstrapArgs) -> Result<()> {
             &args.release,
             &args.radius_group,
             args.refresh_derived_state,
+            args.keycloak_port,
         )?;
+        native_browser_ports(args.trading_port, prepared.keycloak_port)?;
         agents::save_derived(
             &prepared.private.join("trading.parameters.json"),
             &serde_json::json!({
@@ -523,11 +539,10 @@ pub fn run(args: BootstrapArgs) -> Result<()> {
         print_native_app_exports(&args, &prepared)?;
         if args.keep_port_forward {
             let service = native_ui_gateway_service(&args.namespace)?;
-            native_port_forward = Some(oidc::PortForward::start_service(
+            native_port_forward = Some(oidc::PortForward::start_service_ports(
                 "envoy-gateway-system",
                 &service,
-                8444,
-                8444,
+                &native_browser_ports(args.trading_port, prepared.keycloak_port)?,
             )?);
         }
     } else {
@@ -541,7 +556,7 @@ pub fn run(args: BootstrapArgs) -> Result<()> {
     }
     if let Some(mut pf) = native_port_forward {
         println!();
-        ui::note("keeping native HTTPS ingress on https://localhost:8444 — press Ctrl-C to stop");
+        ui::note("keeping trading and identity HTTPS ingress on the ports shown above — press Ctrl-C to stop");
         ui::note("copy the exports and `rad deploy` command above into another terminal");
         let _ = pf.wait();
     }
@@ -561,11 +576,13 @@ fn print_native_app_exports(args: &BootstrapArgs, prepared: &agents::Prepared) -
     println!("export AUTH_PASSWORD=admin");
     println!("export OIDC_CLIENT_ID=adaptive-trading");
     println!("export OIDC_CLIENT_SECRET={}", client_secret.trim());
-    println!("export OIDC_ISSUER=https://localhost:8444/realms/adaptive");
-    println!("export OIDC_AUTH_ENDPOINT={keycloak}/realms/adaptive/protocol/openid-connect/auth");
-    println!(
-        "export OIDC_BROWSER_AUTH_ENDPOINT=https://localhost:8444/realms/adaptive/protocol/openid-connect/auth"
+    let issuer = format!(
+        "https://localhost:{}/realms/adaptive",
+        prepared.keycloak_port
     );
+    println!("export OIDC_ISSUER={issuer}");
+    println!("export OIDC_AUTH_ENDPOINT={keycloak}/realms/adaptive/protocol/openid-connect/auth");
+    println!("export OIDC_BROWSER_AUTH_ENDPOINT={issuer}/protocol/openid-connect/auth");
     println!("export OIDC_TOKEN_ENDPOINT={keycloak}/realms/adaptive/protocol/openid-connect/token");
     println!(
         "export OIDC_USERINFO_ENDPOINT={keycloak}/realms/adaptive/protocol/openid-connect/userinfo"
@@ -625,6 +642,14 @@ fn print_native_app_exports(args: &BootstrapArgs, prepared: &agents::Prepared) -
     println!("  --parameters editorAgentImage=\"$EDITOR_IMAGE\" \\");
     println!("  --parameters nativeUiImage=\"$NATIVE_UI_IMAGE\"");
     Ok(())
+}
+
+fn native_browser_ports(trading_port: Option<u16>, keycloak_port: u16) -> Result<[(u16, u16); 2]> {
+    let trading_port = trading_port.unwrap_or(3443);
+    if trading_port == keycloak_port {
+        bail!("Trading and Keycloak browser ports must be different");
+    }
+    Ok([(trading_port, 3443), (keycloak_port, 8444)])
 }
 
 fn native_ui_gateway_service(namespace: &str) -> Result<String> {
@@ -1024,7 +1049,7 @@ fn install_radius(args: &BootstrapArgs) -> Result<()> {
     let azure_creds_planned = wants_azure_credential_automation(args);
     if azure_creds_planned {
         ui::bullet(&format!(
-            "+ provision Azure credential for Radius (Entra app `{}-radius-app`, federate radius-system SAs, grant Owner on `{}`, rad credential register azure wi)",
+            "+ reuse registered Radius Azure credential, or provision one (Entra app `{}-radius-app`, federate radius-system SAs, grant Owner on `{}`, rad credential register azure wi)",
             args.aks_cluster.as_deref().unwrap_or(""),
             args.resource_group.as_deref().unwrap_or(""),
         ));
@@ -1355,7 +1380,7 @@ fn maybe_provision_oidc_client(args: &BootstrapArgs) -> Result<()> {
         admin_password: args.keycloak_admin_password.clone(),
         admin_password_file: None,
         client_secret_file: None,
-        local_port: 8080,
+        local_port: args.keycloak_port.unwrap_or(8080),
         pod_ready_timeout_secs: 180,
         keep_port_forward: args.keep_port_forward,
         dry_run: args.dry_run,
@@ -1397,7 +1422,48 @@ fn keycloak_service_present(namespace: &str, service: &str) -> Result<bool> {
 
 #[cfg(test)]
 mod tests {
-    use super::single_service_name;
+    use super::{native_browser_ports, parse_radius_azure_credential, single_service_name};
+
+    #[test]
+    fn native_browser_port_overrides_keep_gateway_listener_ports() {
+        assert_eq!(
+            native_browser_ports(None, 8444).unwrap(),
+            [(3443, 3443), (8444, 8444)]
+        );
+        assert_eq!(
+            native_browser_ports(Some(3445), 8445).unwrap(),
+            [(3445, 3443), (8445, 8444)]
+        );
+        assert!(native_browser_ports(Some(8445), 8445).is_err());
+    }
+
+    #[test]
+    fn browser_port_flags_validate_ranges_and_preserve_defaults() {
+        #[derive(clap::Parser)]
+        struct TestCli {
+            #[command(flatten)]
+            args: super::BootstrapArgs,
+        }
+        let parse = |extra: &[&str]| {
+            <TestCli as clap::Parser>::try_parse_from(
+                ["ada", "--portfolio", "min-ai", "--with", "agents"]
+                    .into_iter()
+                    .chain(extra.iter().copied()),
+            )
+        };
+        let defaults = parse(&[]).unwrap().args;
+        assert_eq!(defaults.keycloak_port, None);
+        assert_eq!(defaults.trading_port, None);
+        let custom = parse(&["--keycloak-port", "8445", "--trading-port", "3445"])
+            .unwrap()
+            .args;
+        assert_eq!(custom.keycloak_port, Some(8445));
+        assert_eq!(custom.trading_port, Some(3445));
+        for flag in ["--keycloak-port", "--trading-port"] {
+            assert!(parse(&[flag, "0"]).is_err());
+            assert!(parse(&[flag, "65536"]).is_err());
+        }
+    }
 
     #[test]
     fn native_gateway_service_must_have_one_owner() {
@@ -1408,6 +1474,205 @@ mod tests {
         assert!(single_service_name("").is_err());
         assert!(single_service_name("envoy-ui-1 envoy-ui-2").is_err());
     }
+
+    #[test]
+    fn registered_radius_azure_credential_is_reused() {
+        assert!(parse_radius_azure_credential(
+            br#"[{"Name":"azure","Enabled":true},{"Name":"aws","Enabled":false}]"#
+        )
+        .unwrap());
+    }
+
+    #[test]
+    fn unregistered_radius_azure_credential_needs_provisioning() {
+        for output in [
+            "[]",
+            r#"[{"Name":"azure","Enabled":false}]"#,
+            r#"[{"Name":"aws","Enabled":true}]"#,
+        ] {
+            assert!(!parse_radius_azure_credential(output.as_bytes()).unwrap());
+        }
+    }
+
+    #[test]
+    fn radius_057_credential_list_banner_is_supported() {
+        let output = concat!(
+            "Listing credentials for all cloud providers for Radius installation ",
+            "\"Kubernetes (context=ada-ignite)\"...\r\n",
+            "[\r\n  {\"Name\":\"azure\",\"Enabled\":true}\r\n]\r\n"
+        );
+        assert!(parse_radius_azure_credential(output.as_bytes()).unwrap());
+    }
+
+    #[test]
+    fn invalid_radius_credential_output_is_not_treated_as_absent() {
+        for output in [
+            "",
+            "not JSON",
+            "null",
+            "{}",
+            r#"[{"Name":"azure"}]"#,
+            r#"[{"Name":"azure","Enabled":"true"}]"#,
+            r#"{"Name":"azure","Enabled":true}"#,
+            "unexpected diagnostic\n[]",
+            "Listing credentials for all cloud providers for Radius installation \"test\"...\nnot JSON",
+        ] {
+            assert!(
+                parse_radius_azure_credential(output.as_bytes()).is_err(),
+                "accepted invalid credential output: {output}"
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn radius_credential_check_precedes_azure_cli() {
+        use std::os::unix::fs::PermissionsExt;
+
+        const CHILD: &str = "ADA_TEST_RADIUS_CREDENTIAL_CASE";
+        if let Ok(case) = std::env::var(CHILD) {
+            #[derive(clap::Parser)]
+            struct TestCli {
+                #[command(flatten)]
+                args: super::BootstrapArgs,
+            }
+            let cli = <TestCli as clap::Parser>::parse_from([
+                "ada",
+                "--portfolio",
+                "min",
+                "--platform",
+                "aks",
+                "--with-radius",
+                "--radius-workspace",
+                "test-workspace",
+                "--resource-group",
+                "test-rg",
+                "--aks-cluster",
+                "test-aks",
+            ]);
+            let result = super::provision_azure_credential(&cli.args);
+            match case.as_str() {
+                "registered" => result.unwrap(),
+                "failed" => assert!(
+                    result
+                        .unwrap_err()
+                        .to_string()
+                        .contains("inspection denied"),
+                    "inspection failure must not fall through to Azure CLI"
+                ),
+                "invalid" => assert!(
+                    result
+                        .unwrap_err()
+                        .to_string()
+                        .contains("invalid JSON credential status"),
+                    "invalid output must not fall through to Azure CLI"
+                ),
+                _ => panic!("unexpected test case"),
+            }
+            return;
+        }
+
+        let directory = std::env::temp_dir().join(format!(
+            "ada-radius-credential-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir(&directory).unwrap();
+        let rad = directory.join("rad");
+        std::fs::write(
+            &rad,
+            r#"#!/bin/sh
+if [ "$*" != "credential list --workspace test-workspace -o json" ]; then
+    echo "unexpected rad arguments" >&2
+    exit 2
+fi
+case "$ADA_TEST_RADIUS_CREDENTIAL_CASE" in
+    registered)
+        printf '%s\n' 'Listing credentials for all cloud providers for Radius installation "Kubernetes (context=test)"...'
+        printf '%s\n' '[{"Name":"azure","Enabled":true}]'
+        ;;
+    failed) echo "inspection denied" >&2; exit 1 ;;
+    invalid) printf '%s\n' 'not JSON' ;;
+esac
+"#,
+        )
+        .unwrap();
+        std::fs::set_permissions(&rad, std::fs::Permissions::from_mode(0o700)).unwrap();
+
+        let results: Vec<_> = ["registered", "failed", "invalid"]
+            .into_iter()
+            .map(|case| {
+                let output = std::process::Command::new(std::env::current_exe().unwrap())
+                    .args([
+                        "--exact",
+                        "commands::bootstrap::tests::radius_credential_check_precedes_azure_cli",
+                        "--nocapture",
+                    ])
+                    .env(CHILD, case)
+                    // No az executable: even tool discovery must be skipped on reuse.
+                    .env("PATH", &directory)
+                    .output()
+                    .unwrap();
+                (case, output)
+            })
+            .collect();
+        std::fs::remove_file(rad).unwrap();
+        std::fs::remove_dir(directory).unwrap();
+        for (case, output) in results {
+            assert!(
+                output.status.success(),
+                "{case}: {}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+    }
+}
+
+fn radius_azure_credential_registered(workspace: &str) -> Result<bool> {
+    let output = Command::new("rad")
+        .args(["credential", "list", "--workspace", workspace, "-o", "json"])
+        .output()
+        .context("failed to run `rad credential list`")?;
+    if !output.status.success() {
+        bail!(
+            "`rad credential list --workspace {workspace} -o json` failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+    parse_radius_azure_credential(&output.stdout)
+}
+
+fn parse_radius_azure_credential(output: &[u8]) -> Result<bool> {
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "PascalCase")]
+    struct CredentialStatus {
+        name: String,
+        enabled: bool,
+    }
+
+    let output = std::str::from_utf8(output)
+        .context("invalid UTF-8 credential status from `rad credential list`")?
+        .trim();
+    // Radius 0.57 writes this informational line to stdout even with JSON output.
+    let json = match output.split_once('\n') {
+        Some((banner, json))
+            if banner.starts_with(
+                "Listing credentials for all cloud providers for Radius installation \"",
+            ) && banner.trim_end().ends_with("\"...") =>
+        {
+            json
+        }
+        _ => output,
+    };
+    let credentials: Vec<CredentialStatus> = serde_json::from_str(json)
+        .context("invalid JSON credential status from `rad credential list`")?;
+    Ok(credentials
+        .iter()
+        .any(|credential| credential.name == "azure" && credential.enabled))
 }
 
 /// Federated identity subjects for the Radius control plane service
@@ -1420,12 +1685,22 @@ const RADIUS_FEDERATED_SAS: &[(&str, &str)] = &[
 ];
 
 /// Auto-provision the Azure credential Radius needs to deploy resources.
-/// Idempotent: reuses the Entra app and federated credentials if they
-/// already exist; the role assignment and `rad credential register` are
-/// naturally idempotent.
+/// Reuse a registered Radius credential without accessing Microsoft Graph.
+/// Otherwise provision the Entra app, federation, and role assignment.
 fn provision_azure_credential(args: &BootstrapArgs) -> Result<()> {
-    ensure_tool("az")?;
     ensure_tool("rad")?;
+
+    if !args.dry_run && radius_azure_credential_registered(&args.radius_workspace)? {
+        ui::note(&format!(
+            "Azure credential already registered with Radius workspace `{}`; \
+             skipping Entra application, federation, RBAC, and credential provisioning \
+             (existing access is not revalidated)",
+            args.radius_workspace
+        ));
+        return Ok(());
+    }
+
+    ensure_tool("az")?;
 
     let rg = args
         .resource_group
@@ -1457,7 +1732,7 @@ fn provision_azure_credential(args: &BootstrapArgs) -> Result<()> {
     );
 
     if args.dry_run {
-        ui::dry_run("would discover AKS OIDC issuer, create/reuse Entra app, federate SAs, grant Owner, rad credential register azure wi");
+        ui::dry_run("would check the Radius Azure credential; only if absent, discover AKS OIDC issuer, create/reuse Entra app, federate SAs, grant Owner, rad credential register azure wi");
         return Ok(());
     }
 

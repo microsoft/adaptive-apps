@@ -1,0 +1,40 @@
+{
+  "agentModel": "openai-chat",
+  "imageRegistry": "ghcr.io/microsoft/adaptive-apps",
+  "imageTag": "latest",
+  "images": {
+    "agent-policy": "ghcr.io/microsoft/adaptive-apps/agent-policy@sha256:fcafa0c72ce55ae121b3e8aefadf3775f5949b295d0413df39dccae8caec22ea",
+    "editor": "ghcr.io/microsoft/adaptive-apps/editor@sha256:cfa64b452346f6aa8300fd78af8f342ff051a1c370eb917cf19073f967f234af",
+    "governance-sidecar": "ghcr.io/microsoft/adaptive-apps/governance-sidecar@sha256:8d8b7b5c5090c3297bdc42bed5cf3ad2677f5d89da34ca58b784dddb32cf6766",
+    "platform-api": "ghcr.io/microsoft/adaptive-apps/platform-api@sha256:c823ffcf0555a3b7e1e2589f1efa7bc7b04abf74eaa73057d5615a1bbbc0691c",
+    "prompt-agent": "ghcr.io/microsoft/adaptive-apps/prompt-agent@sha256:c5e97dbaabd66bca1dad7f955eeec17e6c0a4336770bf1a4613f810223ef8c78",
+    "ui": "ghcr.io/microsoft/adaptive-apps/ui@sha256:757326a8ce9f578b3f38bdad08d320ba5416de05027934d04789549f0d08eac2",
+    "ui-embedded": "ghcr.io/microsoft/adaptive-apps/ui-embedded@sha256:3aff2e6707889c8cd813e4093380461945ddfd8b117b329c1640167db9ac18d4"
+  },
+  "models": [
+    {
+      "name": "openai-chat",
+      "properties": {
+        "model": "gpt-4o",
+        "openai": {
+          "endpoint": "https://api.openai.com/v1",
+          "model": "gpt-4o"
+        }
+      }
+    }
+  ],
+  "openaiApiKeyFile": "/home/hbai/projects/microsoft/adaptive-apps/.adaptive/private/openai-api-key",
+  "peers": [
+    {
+      "agentId": "adaptive-{namespace}-editor",
+      "keycloakClientId": "adaptive-{namespace}-editor",
+      "targets": [
+        "writer",
+        "auditor"
+      ]
+    }
+  ],
+  "recipeArchive": "https://github.com/microsoft/adaptive-apps/releases/download/recipes-fc7ebf2a2e83c3efa35e713b7d599edaed3fa376/recipes.tgz",
+  "recipeRegistry": "ghcr.io/microsoft/adaptive-apps/recipes",
+  "strictResponses": false
+}

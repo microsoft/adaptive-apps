@@ -50,6 +50,10 @@ pub struct Config {
     pub openai_api_key_file: Option<PathBuf>,
     #[serde(default)]
     pub strict_responses: bool,
+    #[serde(default = "default_trading_origin")]
+    pub trading_origin: String,
+    #[serde(default = "default_keycloak_port")]
+    pub keycloak_port: u16,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -120,9 +124,16 @@ fn default_image_registry() -> String {
 fn default_tag() -> String {
     "dev".into()
 }
+fn default_trading_origin() -> String {
+    "http://localhost:3000".into()
+}
+
+fn default_keycloak_port() -> u16 {
+    8444
+}
 
 fn application_parameters(config: &Config, openai_api_key: Option<&str>) -> Result<Value> {
-    let mut values = json!({"enableNativeAgents": true});
+    let mut values = json!({"enableNativeAgents": true, "appBaseUrl": config.trading_origin});
     let Some(model) = config
         .models
         .iter()
@@ -227,6 +238,7 @@ pub struct Prepared {
     pub agent_model: String,
     pub image_registry: String,
     pub image_tag: String,
+    pub keycloak_port: u16,
 }
 
 pub fn pinned(image: &str) -> bool {
@@ -417,8 +429,14 @@ pub fn prepare(
     release: &str,
     group: &str,
     refresh_derived_state: bool,
+    keycloak_port: Option<u16>,
 ) -> Result<Prepared> {
     let config: Config = serde_json::from_slice(&fs::read(config_file)?)?;
+    let keycloak_port = keycloak_port.unwrap_or(config.keycloak_port);
+    if keycloak_port == 0 {
+        bail!("Keycloak browser port must be between 1 and 65535");
+    }
+    let keycloak_public_url = format!("https://localhost:{keycloak_port}");
     if config.recipe_archive.contains("REPLACE_WITH")
         || (!config.recipe_archive.starts_with("https://")
             && !(config.recipe_archive.starts_with("http://")
@@ -659,7 +677,7 @@ pub fn prepare(
     let keycloak = format!("http://{release}-keycloak.{namespace}.svc.cluster.local:8080");
     let keycloak_provisioning =
         format!("http://{release}-keycloak-provisioning.{namespace}.svc.cluster.local:8080");
-    let issuer = "https://localhost:8444/realms/adaptive";
+    let issuer = format!("{keycloak_public_url}/realms/adaptive");
     let peers = resolved_peers(&config.peers, namespace);
     let mut executor = json!({
         "env": {"KEYCLOAK_URL": keycloak_provisioning, "KEYCLOAK_REALM": "master", "KEYCLOAK_CLIENT_ID": "admin-cli", "KEYCLOAK_USER": "admin"},
@@ -728,10 +746,10 @@ pub fn prepare(
         "services.parameters.json",
         json!({
             "environment": environment, "loginEnvironment": login_environment,
-            "keycloakPublicUrl": "https://localhost:8444",
+            "keycloakPublicUrl": keycloak_public_url,
             "login": {
                 "uiOrigin": "https://localhost:8443",
-                "tradingOrigin": "http://localhost:3000",
+                "tradingOrigin": config.trading_origin,
                 "platformRoles": ["agent.invoke"],
                 "connected": false
             },
@@ -749,7 +767,7 @@ pub fn prepare(
         &private.join("portfolio.values.json"),
         &json!({
             "features": {"agents": {"enabled": true}},
-            "keycloak": {"existingSecret": "adaptive-keycloak-admin", "publicUrl": "https://localhost:8444"},
+            "keycloak": {"existingSecret": "adaptive-keycloak-admin", "publicUrl": keycloak_public_url},
             "postgresql": {"auth": {"password": database}},
             "agents": {
                 "keycloakService": format!("{release}-keycloak"),
@@ -804,6 +822,7 @@ pub fn prepare(
         agent_model: config.agent_model,
         image_registry: config.image_registry,
         image_tag: config.image_tag,
+        keycloak_port,
     })
 }
 
@@ -897,11 +916,13 @@ mod tests {
             .unwrap(),
         )
         .unwrap();
-        let prepared = prepare(&config, &root, "demo-test", "demo", "adaptive", false).unwrap();
+        let prepared =
+            prepare(&config, &root, "demo-test", "demo", "adaptive", false, None).unwrap();
+        assert_eq!(prepared.keycloak_port, 8444);
         let before = fs::read(prepared.private.join("secrets.json")).unwrap();
         let trading_secret =
             fs::read(prepared.private.join("adaptive-trading-client-secret")).unwrap();
-        prepare(&config, &root, "demo-test", "demo", "adaptive", false).unwrap();
+        prepare(&config, &root, "demo-test", "demo", "adaptive", false, None).unwrap();
         assert_eq!(
             before,
             fs::read(prepared.private.join("secrets.json")).unwrap()
@@ -922,6 +943,118 @@ mod tests {
             application["parameters"]["enableNativeAgents"]["value"],
             true
         );
+        assert_eq!(
+            application["parameters"]["appBaseUrl"]["value"],
+            "http://localhost:3000"
+        );
+        let services: Value = serde_json::from_slice(
+            &fs::read(prepared.private.join("services.parameters.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            services["parameters"]["login"]["value"]["tradingOrigin"],
+            "http://localhost:3000"
+        );
+        let mut https_config: Value = serde_json::from_slice(&fs::read(&config).unwrap()).unwrap();
+        https_config["tradingOrigin"] = json!("https://localhost:3443");
+        fs::write(&config, serde_json::to_vec(&https_config).unwrap()).unwrap();
+        prepare(&config, &root, "demo-test", "demo", "adaptive", true, None).unwrap();
+        let https_application: Value = serde_json::from_slice(
+            &fs::read(prepared.private.join("application.parameters.json")).unwrap(),
+        )
+        .unwrap();
+        let https_services: Value = serde_json::from_slice(
+            &fs::read(prepared.private.join("services.parameters.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            https_application["parameters"]["appBaseUrl"]["value"],
+            "https://localhost:3443"
+        );
+        assert_eq!(
+            https_services["parameters"]["login"]["value"]["tradingOrigin"],
+            "https://localhost:3443"
+        );
+        assert!(prepare(
+            &config,
+            &root,
+            "demo-test",
+            "demo",
+            "adaptive",
+            false,
+            Some(8445)
+        )
+        .is_err());
+        let changed = prepare(
+            &config,
+            &root,
+            "demo-test",
+            "demo",
+            "adaptive",
+            true,
+            Some(8445),
+        )
+        .unwrap();
+        assert_eq!(changed.keycloak_port, 8445);
+        let changed_environment: Value = serde_json::from_slice(
+            &fs::read(prepared.private.join("environment.parameters.json")).unwrap(),
+        )
+        .unwrap();
+        let changed_services: Value = serde_json::from_slice(
+            &fs::read(prepared.private.join("services.parameters.json")).unwrap(),
+        )
+        .unwrap();
+        let changed_portfolio: Value = serde_json::from_slice(
+            &fs::read(prepared.private.join("portfolio.values.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            changed_environment["parameters"]["platform"]["value"]["issuer"],
+            "https://localhost:8445/realms/adaptive"
+        );
+        assert_eq!(
+            changed_services["parameters"]["keycloakPublicUrl"]["value"],
+            "https://localhost:8445"
+        );
+        assert_eq!(
+            changed_portfolio["keycloak"]["publicUrl"],
+            "https://localhost:8445"
+        );
+        assert_eq!(
+            changed_portfolio["agents"]["runtime"]["issuer"],
+            "https://localhost:8445/realms/adaptive"
+        );
+        assert_eq!(
+            changed_portfolio["agents"]["modelGateway"]["authorization"]["issuer"],
+            "https://localhost:8445/realms/adaptive"
+        );
+        assert_eq!(
+            before,
+            fs::read(prepared.private.join("secrets.json")).unwrap()
+        );
+        assert_eq!(
+            changed_services["parameters"]["login"]["value"]["tradingOrigin"],
+            "https://localhost:3443"
+        );
+        https_config["keycloakPort"] = json!(8445);
+        fs::write(&config, serde_json::to_vec(&https_config).unwrap()).unwrap();
+        assert_eq!(
+            prepare(&config, &root, "demo-test", "demo", "adaptive", false, None)
+                .unwrap()
+                .keycloak_port,
+            8445
+        );
+        https_config["keycloakPort"] = json!(0);
+        fs::write(&config, serde_json::to_vec(&https_config).unwrap()).unwrap();
+        assert!(
+            prepare(&config, &root, "demo-test", "demo", "adaptive", false, None)
+                .err()
+                .unwrap()
+                .to_string()
+                .contains("Keycloak browser port")
+        );
+        https_config["keycloakPort"] = json!(8445);
+        fs::write(&config, serde_json::to_vec(&https_config).unwrap()).unwrap();
         assert_eq!(prepared.image_registry, "adaptive.local/adaptive");
         assert_eq!(prepared.image_tag, "dev");
         assert_eq!(
@@ -953,8 +1086,8 @@ mod tests {
         assert!(login_secrets
             .get("TF_VAR_adaptive_trading_client_secret")
             .is_none());
-        assert!(prepare(&config, &root, "other", "demo", "adaptive", false).is_err());
-        prepare(&config, &root, "other", "demo", "adaptive", true).unwrap();
+        assert!(prepare(&config, &root, "other", "demo", "adaptive", false, None).is_err());
+        prepare(&config, &root, "other", "demo", "adaptive", true, None).unwrap();
         assert_eq!(
             trading_secret,
             fs::read(prepared.private.join("adaptive-trading-client-secret")).unwrap()
@@ -964,7 +1097,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(refreshed["parameters"]["namespace"]["value"], "other");
-        prepare(&config, &root, "demo-test", "demo", "adaptive", true).unwrap();
+        prepare(&config, &root, "demo-test", "demo", "adaptive", true, None).unwrap();
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -996,16 +1129,16 @@ mod tests {
         let mut invalid: Value = serde_json::from_slice(&fs::read(&config).unwrap()).unwrap();
         invalid["agentNames"] = json!(["a".repeat(33)]);
         fs::write(&config, serde_json::to_vec(&invalid).unwrap()).unwrap();
-        assert!(prepare(&config, &root, "demo-test", "demo", "adaptive", false).is_err());
+        assert!(prepare(&config, &root, "demo-test", "demo", "adaptive", false, None).is_err());
         invalid["agentNames"] = json!(["writer"]);
         invalid["agentModel"] = json!("unsafe model");
         fs::write(&config, serde_json::to_vec(&invalid).unwrap()).unwrap();
-        assert!(prepare(&config, &root, "demo-test", "demo", "adaptive", false).is_err());
+        assert!(prepare(&config, &root, "demo-test", "demo", "adaptive", false, None).is_err());
         invalid["agentModel"] = json!("local-chat");
         invalid["models"][0]["properties"]["localService"]["cpuInference"] = json!(true);
         fs::write(&config, serde_json::to_vec(&invalid).unwrap()).unwrap();
         assert!(
-            prepare(&config, &root, "demo-test", "demo", "adaptive", false)
+            prepare(&config, &root, "demo-test", "demo", "adaptive", false, None)
                 .err()
                 .unwrap()
                 .to_string()
@@ -1014,7 +1147,7 @@ mod tests {
         invalid["models"] = json!([{"name":"cloud","properties":{"model":"cloud","azure":{"endpoint":"https://example.test","deployment":"chat"}}}]);
         fs::write(&config, serde_json::to_vec(&invalid).unwrap()).unwrap();
         assert!(
-            prepare(&config, &root, "demo-test", "demo", "adaptive", false)
+            prepare(&config, &root, "demo-test", "demo", "adaptive", false, None)
                 .err()
                 .unwrap()
                 .to_string()
@@ -1068,7 +1201,16 @@ mod tests {
         )
         .unwrap();
 
-        let prepared = prepare(&config, &root, "openai-test", "demo", "adaptive", false).unwrap();
+        let prepared = prepare(
+            &config,
+            &root,
+            "openai-test",
+            "demo",
+            "adaptive",
+            false,
+            None,
+        )
+        .unwrap();
         let secrets: Value =
             serde_json::from_slice(&fs::read(prepared.private.join("secrets.json")).unwrap())
                 .unwrap();
@@ -1100,13 +1242,19 @@ mod tests {
         assert_eq!(retained, "test-openai-secret");
 
         fs::write(&key, "changed-secret").unwrap();
-        assert!(
-            prepare(&config, &root, "openai-test", "demo", "adaptive", false)
-                .err()
-                .unwrap()
-                .to_string()
-                .contains("rotate the retained credential explicitly")
-        );
+        assert!(prepare(
+            &config,
+            &root,
+            "openai-test",
+            "demo",
+            "adaptive",
+            false,
+            None
+        )
+        .err()
+        .unwrap()
+        .to_string()
+        .contains("rotate the retained credential explicitly"));
         fs::remove_dir_all(root).unwrap();
     }
 }

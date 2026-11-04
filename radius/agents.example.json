@@ -4,6 +4,7 @@
   "imageRegistry": "ghcr.io/REPLACE_WITH_LOWERCASE_OWNER/REPLACE_WITH_LOWERCASE_REPOSITORY",
   "imageTag": "latest",
   "strictResponses": false,
+  "tradingOrigin": "https://localhost:3443",
   "agentModel": "local-chat",
   "peers": [{
     "keycloakClientId": "adaptive-{namespace}-editor",

@@ -1,0 +1,9 @@
+{
+  "name": "radius-applications-rp",
+  "issuer": "https://westus2.oic.prod-aks.azure.com/72f988bf-86f1-41af-91ab-2d7cd011db47/ef3fcf60-5b2c-4484-a8fa-5690d594125d/",
+  "subject": "system:serviceaccount:radius-system:applications-rp",
+  "description": "Kubernetes service account federated credential for applications-rp",
+  "audiences": [
+    "api://AzureADTokenExchange"
+  ]
+}
