@@ -1,0 +1,22 @@
+@baseUrl = http://localhost:7000
+@accessToken = replace-with-short-lived-keycloak-access-token
+
+### Cloud: explicitly save a fact
+POST {{baseUrl}}/advice
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{"question":"Remember: The king has donkey ears!"}
+
+### Cloud or local: recall without model inference or chat history
+POST {{baseUrl}}/advice
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{"question":"What did I ask you to remember?"}
+
+### Missing authentication must return 401 when memory is enabled
+POST {{baseUrl}}/advice
+Content-Type: application/json
+
+{"question":"Recall memories"}

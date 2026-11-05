@@ -111,6 +111,7 @@ const hasOidcEndpoints = !!(
 );
 const microsoftEnabled = hasOidcCredentials && hasOidcEndpoints;
 const nativeAgentsEnabled = !!(config.nativeAgentUrl && config.nativeUiUrl);
+const advisorMemoryEnabled = process.env.ADVISOR_MEMORY_ENABLED === "true";
 const refreshes = new Map();
 
 // ---------------------------------------------------------------------------
@@ -401,7 +402,30 @@ const aiProxy = createProxyMiddleware({
   target: config.aiAgentUrl,
   changeOrigin: true,
   pathFilter: '/advice',
+  on: {
+    proxyReq: (proxyReq, req) => {
+      if (!advisorMemoryEnabled) return;
+      proxyReq.removeHeader("cookie");
+      proxyReq.removeHeader("authorization");
+      proxyReq.setHeader("Authorization", `Bearer ${req.advisorAccessToken}`);
+    },
+  },
 });
+async function ensureAdvisorAuth(req, res, next) {
+  if (!advisorMemoryEnabled || req.path !== "/advice") return next();
+  if (!req.isAuthenticated()) return res.status(401).json({ answer: "OIDC sign-in is required for advisor memory." });
+  if (req.user.provider !== "microsoft") {
+    return res.status(403).json({ answer: "Advisor memory requires OIDC sign-in, not local password login." });
+  }
+  try {
+    req.advisorAccessToken = await serverAccessToken(req);
+    return next();
+  } catch (error) {
+    console.warn("Advisor memory token unavailable:", error.message);
+    return res.status(401).json({ answer: "OIDC session expired; sign in again." });
+  }
+}
+app.use(ensureAdvisorAuth);
 app.use(ensureAuth, aiProxy);
 
 const dnsLabel = "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?";
@@ -520,4 +544,4 @@ if (require.main === module) server.listen(port, () => {
   console.log(`  Native agents : ${nativeAgentsEnabled ? "enabled" : "disabled"}`);
 });
 
-module.exports = { app, exactNativeRequest, ensureNativeAuth, serverAccessToken };
+module.exports = { app, exactNativeRequest, ensureNativeAuth, ensureAdvisorAuth, serverAccessToken };

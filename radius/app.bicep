@@ -138,6 +138,35 @@ param aiModelName string = ''
 @secure()
 param aiApiKey string = ''
 
+@description('Opt-in durable Trading Advisor memory. PostgreSQL supports a cloud source or read-only local replica.')
+@allowed(['none', 'table', 'postgres'])
+param advisorMemoryProvider string = 'none'
+
+@description('Stable source and logical agent identifiers shared by cloud and local memory providers.')
+param advisorMemorySourceId string = 'trading-memory-v1'
+param advisorMemoryAgentId string = 'trading-advisor'
+
+@description('Entra tenant accepted in the advisor memory user claims, not necessarily the AKS subscription tenant.')
+param advisorMemoryEntraTenantId string = ''
+
+@description('Audience added to Keycloak access tokens for the Trading Advisor.')
+param advisorMemoryAudience string = 'trading-advisor'
+
+@description('Azure Table service HTTPS endpoint and pre-created table for cloud advisor memory.')
+param advisorMemoryTableEndpoint string = ''
+param advisorMemoryTableName string = 'AdvisorMemory'
+
+@description('Pre-provisioned AKS advisor managed identity, federated with the advisor-memory service account.')
+param advisorMemoryClientId string = ''
+param advisorMemoryServiceAccount string = 'advisor-memory'
+
+@description('Dedicated PostgreSQL connection string for the advisor_memory schema in this deployment.')
+@secure()
+param advisorMemoryPostgres string = ''
+
+@description('Keep PostgreSQL advisor memory read-only locally. Set false explicitly for the writable AKS source.')
+param advisorMemoryPostgresReadOnly bool = true
+
 @description('''
 Model hint for the AI Recipe (used only when aiProvider == 'local').
   Kaito (kubernetes-kaito.bicep)       : a Kaito preset, e.g. llama-3.1-8b-instruct
@@ -533,7 +562,27 @@ var aiAgentBaseEnv = {
   OTEL_RESOURCE_ATTRIBUTES: { value: 'service.namespace=adaptive-apps,service.version=1.0.0,deployment.environment=radius' }
   OTEL_EXPORTER_OTLP_ENDPOINT: { value: otelCollectorEndpoint }
   OTEL_EXPORTER_OTLP_PROTOCOL: { value: 'http/protobuf' }
+  ADVISOR_MEMORY_PROVIDER: { value: advisorMemoryProvider }
 }
+
+var advisorMemoryEnv = advisorMemoryProvider == 'none' ? {} : {
+  ADVISOR_MEMORY_SOURCE_ID: { value: advisorMemorySourceId }
+  ADVISOR_MEMORY_AGENT_ID: { value: advisorMemoryAgentId }
+  ADVISOR_MEMORY_ENTRA_TENANT_ID: { value: advisorMemoryEntraTenantId }
+  ADVISOR_MEMORY_OIDC_ISSUER: { value: effectiveOidcIssuer }
+  ADVISOR_MEMORY_OIDC_AUDIENCE: { value: advisorMemoryAudience }
+  ADVISOR_MEMORY_OIDC_METADATA: { value: replace(effectiveOidcTokenEndpoint, '/protocol/openid-connect/token', '/.well-known/openid-configuration') }
+  ADVISOR_MEMORY_TABLE_ENDPOINT: { value: advisorMemoryTableEndpoint }
+  ADVISOR_MEMORY_TABLE_NAME: { value: advisorMemoryTableName }
+  ADVISOR_MEMORY_CREDENTIAL: { value: 'workload' }
+  ADVISOR_MEMORY_POSTGRES: { value: advisorMemoryPostgres }
+  ADVISOR_MEMORY_POSTGRES_READ_ONLY: { value: string(advisorMemoryPostgresReadOnly) }
+  AZURE_CLIENT_ID: { value: advisorMemoryClientId }
+  AZURE_TENANT_ID: { value: workloadIdentityTenantId }
+}
+var advisorPodPatch = advisorMemoryProvider == 'table'
+  ? union(agentGuardrailsPodPatch, { serviceAccountName: advisorMemoryServiceAccount })
+  : agentGuardrailsPodPatch
 
 // Two separate ai-agent declarations, each guarded by an `if`. This avoids
 // a non-conditional resource depending on the conditional `tradingAI`
@@ -552,16 +601,17 @@ resource aiAgentLocal 'Applications.Core/containers@2023-10-01-preview' = if (is
           containerPort: 7000
         }
       }
-      env: union(aiAgentBaseEnv, union(agentGuardrailsAgentEnv, {
+      env: union(aiAgentBaseEnv, advisorMemoryEnv, union(agentGuardrailsAgentEnv, {
         CONNECTION_AI_SECRETS_APIKEY: { value: tradingAI!.properties.secrets.apiKey }
       }))
     }
+    extensions: advisorMemoryProvider == 'table' ? kubernetesMetadataExtension : []
     connections: {
       ai: { source: tradingAI!.id }
     }
     runtimes: {
       kubernetes: {
-        pod: agentGuardrailsPodPatch
+        pod: advisorPodPatch
       }
     }
   }
@@ -578,16 +628,17 @@ resource aiAgentExternal 'Applications.Core/containers@2023-10-01-preview' = if 
           containerPort: 7000
         }
       }
-      env: union(aiAgentBaseEnv, union(agentGuardrailsAgentEnv, {
+      env: union(aiAgentBaseEnv, advisorMemoryEnv, union(agentGuardrailsAgentEnv, {
         CONNECTION_AI_PROVIDER:       { value: aiProvider }
         CONNECTION_AI_ENDPOINT:       { value: aiEndpoint }
         CONNECTION_AI_MODEL:          { value: aiModelName }
         CONNECTION_AI_SECRETS_APIKEY: { value: aiApiKey }
       }))
     }
+    extensions: advisorMemoryProvider == 'table' ? kubernetesMetadataExtension : []
     runtimes: {
       kubernetes: {
-        pod: agentGuardrailsPodPatch
+        pod: advisorPodPatch
       }
     }
   }
@@ -660,6 +711,7 @@ resource frontend 'Applications.Core/containers@2023-10-01-preview' = {
         // browser traffic to these endpoints, so only port 3000 is exposed.
         BACKEND_URL:    { value: 'http://backend:8080' }
         AI_AGENT_URL:   { value: 'http://ai-agent:7000' }
+        ADVISOR_MEMORY_ENABLED: { value: advisorMemoryProvider == 'none' ? 'false' : 'true' }
         MQTT_WS_URL:    { value: '${tradingMqtt.properties.wsPort == 443 ? 'wss' : 'ws'}://${tradingMqtt.properties.host}:${tradingMqtt.properties.wsPort}' }
         AZURE_CLIENT_ID: { value: frontendIdentity.properties.clientId }
         AZURE_TENANT_ID: { value: empty(workloadIdentityTenantId) ? frontendIdentity.properties.tenantId : workloadIdentityTenantId }

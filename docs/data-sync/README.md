@@ -1,5 +1,12 @@
 # Data Sync
 
+For an implemented one-way example, see
+[Trading Advisor memory](../../src/ai-agent/README.md): AKS PostgreSQL (or
+Azure Table Storage) is the authoritative append-only store, a separate utility
+copies facts to local PostgreSQL, and the local advisor reads its replica
+without cloud storage access. It uses verified cross-deployment user identity, idempotent imports,
+and explicit read-only behavior rather than bidirectional conflict resolution.
+
 To support business continuity during cloud disconnection, applications may need to synchronize data between cloud-based databases and local databases. Adaptive App does not pre-package a specific data synchronization solution in its capability portfolios because data sync is often platform-specific and depends heavily on business requirements, database technologies, consistency expectations, and conflict-resolution rules.
 
 Instead, Adaptive App provides the following general guidance and recommends selecting the most appropriate synchronization approach for each scenario.

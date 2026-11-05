@@ -22,6 +22,7 @@ using OpenTelemetry.Trace;
 // ---------------------------------------------------------------------------
 
 var builder = WebApplication.CreateBuilder(args);
+var memoryEnabled = builder.AddAdvisorMemory();
 
 builder.Services.AddOpenTelemetry()
     .ConfigureResource(resource => resource
@@ -51,10 +52,10 @@ builder.Services.AddCors(options =>
 
 // Radius injects CONNECTION_AI_* from the aiModels connection.
 // For local dev (docker-compose) the same env vars are set explicitly.
-var provider = (Environment.GetEnvironmentVariable("CONNECTION_AI_PROVIDER") ?? "openai").ToLowerInvariant();
-var apiKey   = Environment.GetEnvironmentVariable("CONNECTION_AI_SECRETS_APIKEY") ?? "";
-var endpoint = Environment.GetEnvironmentVariable("CONNECTION_AI_ENDPOINT") ?? "";
-var model    = Environment.GetEnvironmentVariable("CONNECTION_AI_MODEL") ?? "gpt-4o";
+var provider = (builder.Configuration["CONNECTION_AI_PROVIDER"] ?? "openai").ToLowerInvariant();
+var apiKey   = builder.Configuration["CONNECTION_AI_SECRETS_APIKEY"] ?? "";
+var endpoint = builder.Configuration["CONNECTION_AI_ENDPOINT"] ?? "";
+var model    = builder.Configuration["CONNECTION_AI_MODEL"] ?? "gpt-4o";
 
 // Strip any "publisher/" prefix (e.g. "Qwen/Qwen3-0.6B" -> "Qwen3-0.6B")
 var slashIdx = model.LastIndexOf('/');
@@ -195,9 +196,16 @@ Console.WriteLine($"Guardrails  : {(guardrailsEnabled ? $"enabled (mode={guardra
 
 var app = builder.Build();
 app.UseCors();
+if (memoryEnabled)
+{
+    app.UseAuthentication();
+    app.UseAuthorization();
+}
 
 // POST /advice  –  { "question": "..." }  →  { "answer": "..." }
-app.MapPost("/advice", async (AdviceRequest req, AIAgent agent, IHttpClientFactory httpClientFactory) =>
+var advice = app.MapPost("/advice", async (
+    AdviceRequest req, AIAgent agent, IHttpClientFactory httpClientFactory,
+    HttpContext context, CancellationToken cancellationToken) =>
 {
     using var activity = AiAgentTelemetry.ActivitySource.StartActivity("ai.generate_advice", ActivityKind.Internal);
     var question = req.Question?.Trim();
@@ -229,10 +237,46 @@ app.MapPost("/advice", async (AdviceRequest req, AIAgent agent, IHttpClientFacto
 
     try
     {
-        var response = await agent.RunAsync(question);
+        var memoryContext = "";
+        if (memoryEnabled)
+        {
+            var memory = context.RequestServices.GetRequiredService<IAdvisorMemoryService>();
+            var prepared = await memory.PrepareAsync(context.User, question, cancellationToken);
+            if (prepared.Answer is not null)
+                return Results.Ok(new { answer = prepared.Answer });
+            memoryContext = prepared.Context;
+        }
+        var messages = new List<ChatMessage>();
+        if (memoryContext.Length > 0) messages.Add(new(ChatRole.System, memoryContext));
+        messages.Add(new(ChatRole.User, question));
+        var response = await agent.RunAsync(messages, cancellationToken: cancellationToken);
         AiAgentTelemetry.AdviceRequests.Add(1,
             new KeyValuePair<string, object?>("status", "ok"));
         return Results.Ok(new { answer = response.Text ?? "I wasn't able to generate advice at this time." });
+    }
+    catch (UnauthorizedAccessException)
+    {
+        app.Logger.LogWarning("Advisor memory rejected missing or untrusted Entra user claims.");
+        return Results.Json(new { answer = "Advisor memory requires verified Entra tenant and object-ID claims." }, statusCode: 403);
+    }
+    catch (MemoryReadOnlyException error)
+    {
+        app.Logger.LogInformation("Advisor memory write rejected by the read-only local provider.");
+        return Results.Json(new { answer = error.Message }, statusCode: 409);
+    }
+    catch (ArgumentException) when (memoryEnabled && question.StartsWith("Remember:", StringComparison.OrdinalIgnoreCase))
+    {
+        app.Logger.LogWarning("Advisor memory rejected an invalid remember command.");
+        return Results.BadRequest(new { answer = "Remember: must be followed by 1 to 4000 characters." });
+    }
+    catch (Exception ex) when (memoryEnabled && ex is (Azure.RequestFailedException or Npgsql.NpgsqlException or InvalidDataException))
+    {
+        app.Logger.LogError(ex, "Advisor memory storage operation failed.");
+        return Results.Json(new { answer = "Advisor memory is unavailable. Nothing was acknowledged as saved; retry after checking storage." }, statusCode: 503);
+    }
+    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+    {
+        throw;
     }
     catch (Exception ex)
     {
@@ -244,11 +288,14 @@ app.MapPost("/advice", async (AdviceRequest req, AIAgent agent, IHttpClientFacto
             statusCode: 502);
     }
 });
+if (memoryEnabled) advice.RequireAuthorization();
 
 // GET /health
 app.MapGet("/health", () => Results.Ok(new { status = "ok", provider, model, endpoint, guardrails = guardrailsEnabled }));
 
 app.Run();
+
+public partial class Program { }
 
 // ---------------------------------------------------------------------------
 // Request / response models

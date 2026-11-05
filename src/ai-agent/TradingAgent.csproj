@@ -5,6 +5,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Remove="Memory/**/*.cs;MemorySync/**/*.cs;tests/**/*.cs" />
+    <Content Remove="Memory/**;MemorySync/**;tests/**" />
+    <None Remove="Memory/**;MemorySync/**;tests/**" />
+    <ProjectReference Include="Memory/AdvisorMemory.csproj" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.22" />
     <PackageReference Include="Microsoft.Agents.AI.OpenAI" Version="1.4.0" />
     <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.5.1" />
     <PackageReference Include="OpenAI" Version="2.10.0" />

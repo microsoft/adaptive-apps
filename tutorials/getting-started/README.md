@@ -300,6 +300,11 @@ On AKS, add the workload-identity parameters:
 
 ## 3. Verify
 
+For the optional **Trading Advisor** memory portability demo (independent of
+the Agents tab), follow [advisor memory setup](../../src/ai-agent/README.md).
+It adds AKS PostgreSQL writes (or managed-identity Azure Tables), one-way PostgreSQL replication,
+and identity-scoped local recall; it is disabled by default.
+
 For portable agents:
 
 ```bash

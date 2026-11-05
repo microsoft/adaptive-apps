@@ -9,7 +9,8 @@ process.env.OIDC_TOKEN_ENDPOINT = "https://identity.example/token";
 process.env.OIDC_USERINFO_ENDPOINT = "https://identity.example/userinfo";
 process.env.OIDC_CLIENT_ID = "adaptive-trading";
 process.env.OIDC_CLIENT_SECRET = "test-only-client-secret";
-const { exactNativeRequest, ensureNativeAuth, serverAccessToken } = require("./server");
+process.env.ADVISOR_MEMORY_ENABLED = "true";
+const { exactNativeRequest, ensureNativeAuth, ensureAdvisorAuth, serverAccessToken } = require("./server");
 
 function request(method, path, provider = "microsoft") {
   return {
@@ -96,4 +97,29 @@ test("concurrent requests redeem a rotating refresh token once", async () => {
   } finally {
     global.fetch = originalFetch;
   }
+});
+
+test("advisor memory rejects local login and missing OIDC sessions explicitly", async () => {
+  for (const [req, expected] of [
+    [request("POST", "/advice", "local"), 403],
+    [request("POST", "/advice"), 401],
+  ]) {
+    req.session = {};
+    let status;
+    await ensureAdvisorAuth(req, {
+      status(value) { status = value; return this; },
+      json(body) { assert.ok(body.answer); },
+    }, () => assert.fail("request must not reach advisor"));
+    assert.equal(status, expected);
+  }
+});
+
+test("advisor uses server-side OIDC token rather than browser-supplied identity", async () => {
+  const req = request("POST", "/advice");
+  req.headers = { authorization: "Bearer forged", "x-user-id": "another-user" };
+  req.session = { oidcTokens: { accessToken: "server-token", expiresAt: Date.now() + 300_000 } };
+  let continued = false;
+  await ensureAdvisorAuth(req, {}, () => { continued = true; });
+  assert.equal(continued, true);
+  assert.equal(req.advisorAccessToken, "server-token");
 });
