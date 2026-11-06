@@ -196,6 +196,11 @@ its HTTP port `8080`. Existing derived inputs require the explicit
 preserves retained credentials. Deploy using the newly printed app command
 so its issuer and browser endpoint match the new public Keycloak URL.
 
+Keycloak readiness checks re-list the Service's selected Pods during rollouts,
+so a replaced Pod does not strand bootstrap waiting on a deleted Pod name.
+The wait requires a non-terminating Ready Pod within the configured timeout;
+API and JSON errors stop provisioning explicitly.
+
 ## Native application setup
 
 Follow [Getting Started](../tutorials/getting-started/README.md) for the shared

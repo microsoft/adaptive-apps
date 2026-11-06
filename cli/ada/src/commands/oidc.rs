@@ -516,54 +516,138 @@ fn wait_for_pod_ready(namespace: &str, release: &str, timeout: Duration) -> Resu
         "waiting up to {}s for keycloak pod (selector `{selector}`) to be Ready",
         timeout.as_secs()
     ));
-    let deadline = Instant::now() + timeout;
-
-    // 1. Poll until at least one pod matches the selector. `kubectl wait`
-    //    returns immediately ("no matching resources found") when zero
-    //    pods exist, so we can't rely on it to wait for pod creation.
-    loop {
+    poll_keycloak_ready(timeout, Duration::from_secs(2), || {
         let out = Command::new("kubectl")
-            .args(["get", "pod", "-n", namespace, "-l", &selector, "-o", "name"])
+            .args([
+                "get",
+                "pod",
+                "-n",
+                namespace,
+                "-l",
+                &selector,
+                "-o",
+                "json",
+                "--request-timeout=10s",
+            ])
             .output()
             .context("failed to run `kubectl get pod` for keycloak")?;
-        if out.status.success() && !out.stdout.is_empty() {
-            break;
-        }
-        if Instant::now() >= deadline {
+        if !out.status.success() {
             bail!(
-                "no keycloak pod (selector `{selector}`) appeared in namespace `{namespace}` within {}s",
+                "failed to list Keycloak pods in namespace `{namespace}`: {}",
+                String::from_utf8_lossy(&out.stderr).trim()
+            );
+        }
+        keycloak_pods_ready(&out.stdout)
+    })
+    .with_context(|| format!("waiting for Keycloak pods in namespace `{namespace}`"))
+}
+
+fn poll_keycloak_ready(
+    timeout: Duration,
+    interval: Duration,
+    mut ready: impl FnMut() -> Result<bool>,
+) -> Result<()> {
+    let deadline = Instant::now() + timeout;
+    loop {
+        if ready()? {
+            return Ok(());
+        }
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            bail!(
+                "no non-terminating Keycloak pod became Ready within {}s",
                 timeout.as_secs()
             );
         }
-        thread::sleep(Duration::from_secs(2));
+        thread::sleep(interval.min(remaining));
+    }
+}
+
+fn keycloak_pods_ready(output: &[u8]) -> Result<bool> {
+    #[derive(serde::Deserialize)]
+    struct PodList {
+        items: Vec<Pod>,
+    }
+    #[derive(serde::Deserialize)]
+    struct Pod {
+        metadata: Metadata,
+        #[serde(default)]
+        status: Status,
+    }
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Metadata {
+        deletion_timestamp: Option<String>,
+    }
+    #[derive(Default, serde::Deserialize)]
+    struct Status {
+        #[serde(default)]
+        conditions: Vec<Condition>,
+    }
+    #[derive(serde::Deserialize)]
+    struct Condition {
+        #[serde(rename = "type")]
+        kind: String,
+        status: String,
+    }
+    let pods: PodList =
+        serde_json::from_slice(output).context("invalid Keycloak pod-list JSON from kubectl")?;
+    // Re-list rather than watching fixed Pod names: Helm rollouts replace them.
+    Ok(pods.items.iter().any(|pod| {
+        pod.metadata.deletion_timestamp.is_none()
+            && pod
+                .status
+                .conditions
+                .iter()
+                .any(|condition| condition.kind == "Ready" && condition.status == "True")
+    }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn keycloak_wait_follows_replacement_pods() {
+        let snapshots = [
+            r#"{"items":[{"metadata":{"name":"old"},"status":{"conditions":[{"type":"Ready","status":"False"}]}}]}"#,
+            r#"{"items":[]}"#,
+            r#"{"items":[{"metadata":{"name":"old","deletionTimestamp":"2026-11-05T17:00:00Z"},"status":{"conditions":[{"type":"Ready","status":"True"}]}},{"metadata":{"name":"replacement"},"status":{}}]}"#,
+            r#"{"items":[{"metadata":{"name":"replacement"},"status":{"conditions":[{"type":"Ready","status":"True"}]}}]}"#,
+        ];
+        let mut calls = 0;
+        poll_keycloak_ready(Duration::from_secs(1), Duration::ZERO, || {
+            let result = keycloak_pods_ready(snapshots[calls].as_bytes());
+            calls += 1;
+            result
+        })
+        .unwrap();
+        assert_eq!(calls, snapshots.len());
     }
 
-    // 2. Now that at least one pod exists, wait for Ready with whatever
-    //    time remains.
-    let remaining = deadline.saturating_duration_since(Instant::now());
-    let remaining_secs = remaining.as_secs().max(1);
-    let out = Command::new("kubectl")
-        .args([
-            "wait",
-            "-n",
-            namespace,
-            "--for=condition=Ready",
-            "pod",
-            "-l",
-            &selector,
-            &format!("--timeout={remaining_secs}s"),
-        ])
-        .output()
-        .context("failed to run `kubectl wait` for keycloak pod")?;
-    if !out.status.success() {
-        let stderr = String::from_utf8_lossy(&out.stderr);
-        bail!(
-            "keycloak pod did not become Ready in namespace `{namespace}` within {}s: {}",
-            timeout.as_secs(),
-            stderr.trim()
-        );
+    #[test]
+    fn keycloak_wait_times_out_and_preserves_query_errors() {
+        let timeout =
+            poll_keycloak_ready(Duration::ZERO, Duration::ZERO, || Ok(false)).unwrap_err();
+        assert!(timeout
+            .to_string()
+            .contains("no non-terminating Keycloak pod"));
+        let error = poll_keycloak_ready(Duration::from_secs(300), Duration::ZERO, || {
+            bail!("forbidden")
+        })
+        .unwrap_err();
+        assert_eq!(error.to_string(), "forbidden");
     }
-    Ok(())
+
+    #[test]
+    fn keycloak_readiness_requires_valid_current_pod_status() {
+        assert!(!keycloak_pods_ready(br#"{"items":[{"metadata":{}}]}"#).unwrap());
+        assert!(!keycloak_pods_ready(
+            br#"{"items":[{"metadata":{},"status":{"conditions":[{"type":"ContainersReady","status":"True"}]}}]}"#
+        ).unwrap());
+        assert!(keycloak_pods_ready(b"not JSON").is_err());
+        assert!(keycloak_pods_ready(b"{}").is_err());
+    }
 }
 
 /// Read the Service's `spec.selector` and format it as a `key=value,...`

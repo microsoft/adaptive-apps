@@ -17,10 +17,10 @@ You can deploy KeyCloak by installing one of the Adaptive Apps capability portfo
 
     Then, you can use KeyCloak portal to manage users and credentials.
 
-3. Collect KeyCloak SAML endpoint. Visit the http://localhost:8080/realms/master/protocol/saml/descriptor page and note down:
+3. Collect KeyCloak SAML endpoint. Visit the http://localhost:8080/realms/adpative/protocol/saml/descriptor page and note down:
 
-    - `entityID` of the root element, i.e., `http://localhost:8080/realms/master`.
-    - `Location` of the `md:ArtifactResolutionService` element, i.e., `http://localhost:8080/realms/master/protocol/saml/resolve`.
+    - `entityID` of the root element, i.e., `http://localhost:8080/realms/adaptive`.
+    - `Location` of the `md:ArtifactResolutionService` element, i.e., `http://localhost:8080/realms/adaptive/protocol/saml/resolve`.
 
 ## Creating an Enterprise Application in Azure Entra ID
 
@@ -34,8 +34,8 @@ You can deploy KeyCloak by installing one of the Adaptive Apps capability portfo
 
     - **Identifier (Entity ID)**: the `entityID` attribute from the KeyCloak SAML
     - **Reply URL**: the `Location` attribute from the KeyCloak SAML.
-    - Add a secondary **Reply URL** with `/resolve` replaced with `endpoint`, i.e., `http://localhost:8080/realms/master/protocol/saml/endpoint`.
-    - **Logout Url (Optional)**: This will be `entityID` with a `protocol/saml` post-fix, i.e., `http://localhost:8080/realms/master/protocol/saml`. This Url is required to use `https`. You can omit it for now.
+    - Add a secondary **Reply URL** with `/resolve` replaced with `endpoint`, i.e., `http://localhost:8080/realms/adaptive/broker/saml/endpoint`.
+    - **Logout Url (Optional)**: This will be `entityID` with a `protocol/saml` post-fix, i.e., `http://localhost:8080/realms/adaptive/protocol/saml`. This Url is required to use `https`. You can omit it for now.
 
     Click **Save** to save changes.
 8. Scroll to the **SAML Certificates** section and download **Federation Metadata XML**.
