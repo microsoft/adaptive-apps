@@ -35,6 +35,27 @@ public sealed class MemoryTests
     }
 
     [Fact]
+    public void DemoIdentityMappingIsExplicitPortableAndSeparateFromEntra()
+    {
+        ClaimsPrincipal Demo(string subject) => new(new ClaimsIdentity(new[] { new Claim("sub", subject) }, "validated-jwt"));
+        var cloud = MemoryScope.ForKeycloakDemo(Demo(Owner), Owner, Tenant, "demo-source", "trading-advisor");
+        var local = MemoryScope.ForKeycloakDemo(Demo(Other), Other, Tenant, "demo-source", "trading-advisor");
+        Assert.Equal(cloud, local);
+        Assert.NotEqual(Scope().PartitionKey, cloud.PartitionKey);
+        Assert.NotEqual(cloud.PartitionKey,
+            MemoryScope.ForKeycloakDemo(Demo(Owner), Owner, Other, "demo-source", "trading-advisor").PartitionKey);
+        Assert.Throws<UnauthorizedAccessException>(() =>
+            MemoryScope.ForKeycloakDemo(Demo(Other), Owner, Tenant, "demo-source", "trading-advisor"));
+        var duplicate = Demo(Owner);
+        ((ClaimsIdentity)duplicate.Identity!).AddClaim(new("sub", Owner));
+        Assert.Throws<UnauthorizedAccessException>(() =>
+            MemoryScope.ForKeycloakDemo(duplicate, Owner, Tenant, "demo-source", "trading-advisor"));
+        Assert.Throws<UnauthorizedAccessException>(() =>
+            MemoryScope.ForKeycloakDemo(new(new ClaimsIdentity(new[] { new Claim("sub", Owner) })),
+                Owner, Tenant, "demo-source", "trading-advisor"));
+    }
+
+    [Fact]
     public async Task AdvisorAcknowledgesOnlyCommittedFactsAndLocalWritesAreExplicitlyRejected()
     {
         var store = new TestMemoryStore();

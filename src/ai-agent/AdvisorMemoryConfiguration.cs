@@ -18,9 +18,19 @@ public static class AdvisorMemoryConfiguration
         string Required(string name) => MemoryCredentials.Required(builder.Configuration[name], name);
         var sourceId = Required("ADVISOR_MEMORY_SOURCE_ID");
         var agentId = Required("ADVISOR_MEMORY_AGENT_ID");
-        var tenant = Required("ADVISOR_MEMORY_ENTRA_TENANT_ID");
-        if (!Guid.TryParse(tenant, out var tenantId) || tenantId == Guid.Empty)
-            throw new InvalidOperationException("ADVISOR_MEMORY_ENTRA_TENANT_ID must be a nonempty tenant GUID.");
+        var identityMode = builder.Configuration["ADVISOR_MEMORY_IDENTITY_MODE"] ?? "entra";
+        if (identityMode is not ("entra" or "keycloak-demo"))
+            throw new InvalidOperationException("ADVISOR_MEMORY_IDENTITY_MODE must be entra or keycloak-demo.");
+        var tenant = identityMode == "entra" ? Required("ADVISOR_MEMORY_ENTRA_TENANT_ID") : "";
+        var demoSubject = identityMode == "keycloak-demo" ? Required("ADVISOR_MEMORY_DEMO_SUBJECT") : null;
+        var demoUserId = identityMode == "keycloak-demo" ? Required("ADVISOR_MEMORY_DEMO_USER_ID") : null;
+        foreach (var (name, value) in identityMode == "entra"
+            ? new[] { ("ADVISOR_MEMORY_ENTRA_TENANT_ID", tenant) }
+            : new[] { ("ADVISOR_MEMORY_DEMO_SUBJECT", demoSubject), ("ADVISOR_MEMORY_DEMO_USER_ID", demoUserId) })
+        {
+            if (!Guid.TryParse(value, out var id) || id == Guid.Empty)
+                throw new InvalidOperationException($"{name} must be a nonempty GUID.");
+        }
         var issuer = Required("ADVISOR_MEMORY_OIDC_ISSUER");
         var metadata = Required("ADVISOR_MEMORY_OIDC_METADATA");
         var audience = Required("ADVISOR_MEMORY_OIDC_AUDIENCE");
@@ -74,7 +84,7 @@ public static class AdvisorMemoryConfiguration
                 services.GetRequiredService<NpgsqlDataSource>(), sourceId, agentId, readOnly));
         }
         builder.Services.AddSingleton<IAdvisorMemoryService>(services => new AdvisorMemoryService(
-            services.GetRequiredService<IMemoryStore>(), tenant, sourceId, agentId));
+            services.GetRequiredService<IMemoryStore>(), tenant, sourceId, agentId, identityMode, demoSubject, demoUserId));
         return true;
     }
 }

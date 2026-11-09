@@ -33,7 +33,9 @@ HTTP contract is unchanged.
 
 ## Trust and identity prerequisites
 
-Configure **both** Keycloak installations before enabling memory:
+The default identity mode is `entra`. Configure **both** Keycloak installations
+as follows for Entra identity; the explicitly gated local-user demo alternative
+below does not require Entra federation.
 
 1. In the Entra SAML enterprise application's claims, ensure the signed
    assertion supplies the user's object ID and issuing tenant ID:
@@ -69,6 +71,39 @@ need to match. Set `ADVISOR_MEMORY_ENTRA_TENANT_ID` to the demo user's tenant
 on both deployments. PostgreSQL authenticates with separate database roles;
 it does not use this user claim or require Azure Storage/workload identity.
 The optional Table provider uses the AKS workload identity independently.
+
+### Keycloak-local demo without Entra access
+
+Set `ADVISOR_MEMORY_IDENTITY_MODE=keycloak-demo` explicitly on both advisors.
+Create a dedicated local user in each Keycloak realm and sign in using the
+frontend's **OIDC button**, then that Keycloak user's credentials. The frontend's
+separate local-password login still cannot access memory.
+
+Configure these server-side values:
+
+| Variable | Value |
+|---|---|
+| `ADVISOR_MEMORY_DEMO_SUBJECT` | This deployment's exact Keycloak user UUID (`sub`), different in each realm |
+| `ADVISOR_MEMORY_DEMO_USER_ID` | One reviewed, nonempty UUID shared across both deployments for this demo only |
+
+Add the `trading-advisor` access-token audience mapper to the trading client
+in both realms. Keep issuer, signature, audience, and expiry validation enabled.
+Only the configured subject is authorized; matching usernames/emails, browser
+headers, Entra claims, or other realm users do not grant demo memory access.
+No fake Entra tenant/object-ID attributes are used. Missing/invalid mappings
+fail explicitly, and there is no automatic fallback from Entra mode.
+
+Demo partitions hash `[source ID, agent ID, "keycloak-demo", demo UUID]`,
+separate from Entra partitions. Changing the demo UUID starts a different
+memory scope; do not silently remap users or migrate memories across identities.
+This intentionally single-user demo mode is not a production identity-linking
+service. Retain the provisioned user IDs and credentials; do not recreate users
+or regenerate passwords on repeat setup.
+
+Radius equivalents are `advisorMemoryIdentityMode=keycloak-demo`,
+`advisorMemoryDemoSubject=<this-realm-user-uuid>`, and
+`advisorMemoryDemoUserId=<shared-demo-uuid>`. Entra mode remains the default
+and still requires `advisorMemoryEntraTenantId`.
 
 The frontend forwards its server-held OIDC access token only when
 `ADVISOR_MEMORY_ENABLED=true`; the advisor validates it independently.
@@ -357,7 +392,8 @@ SELECT source_id, agent_id, completed_at, scanned_count FROM advisor_memory.sync
 
 ## Demonstration and verification
 
-1. Sign in through the same verified Entra identity on both systems.
+1. Sign in through the same verified Entra identity on both systems, or use
+   the explicitly mapped Keycloak-local demo users described above.
 2. On AKS, send `Remember: The king has donkey ears!`.
 3. Run a successful sync pass and inspect `sync_status`.
 4. Stop the sync worker or disconnect its cloud network. Keep local Keycloak,

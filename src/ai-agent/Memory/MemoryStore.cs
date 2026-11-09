@@ -22,6 +22,20 @@ public sealed record MemoryScope(string SourceId, string AgentId, string Partiti
         return new(sourceId, agentId, Convert.ToHexString(key).ToLowerInvariant());
     }
 
+    public static MemoryScope ForKeycloakDemo(
+        ClaimsPrincipal user, string allowedSubject, string demoUserId, string sourceId, string agentId)
+    {
+        var subject = SingleGuidClaim(user, "sub");
+        if (user.Identity?.IsAuthenticated != true ||
+            !Guid.TryParse(allowedSubject, out var expectedSubject) || expectedSubject == Guid.Empty ||
+            subject != expectedSubject ||
+            !Guid.TryParse(demoUserId, out var stableId) || stableId == Guid.Empty)
+            throw new UnauthorizedAccessException("This Keycloak user is not mapped to the configured demo identity.");
+        var key = SHA256.HashData(Encoding.UTF8.GetBytes(
+            JsonSerializer.Serialize(new[] { sourceId, agentId, "keycloak-demo", stableId.ToString("D") })));
+        return new(sourceId, agentId, Convert.ToHexString(key).ToLowerInvariant());
+    }
+
     private static Guid SingleGuidClaim(ClaimsPrincipal user, string name)
     {
         var values = user.FindAll(name).ToArray();

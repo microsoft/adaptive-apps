@@ -149,6 +149,14 @@ param advisorMemoryAgentId string = 'trading-advisor'
 @description('Entra tenant accepted in the advisor memory user claims, not necessarily the AKS subscription tenant.')
 param advisorMemoryEntraTenantId string = ''
 
+@description('Verified identity mode. keycloak-demo explicitly maps one local Keycloak subject per deployment; never an Entra fallback.')
+@allowed(['entra', 'keycloak-demo'])
+param advisorMemoryIdentityMode string = 'entra'
+
+@description('In keycloak-demo mode, this deployment Keycloak user UUID and a shared stable demo UUID. Never derive from username or email.')
+param advisorMemoryDemoSubject string = ''
+param advisorMemoryDemoUserId string = ''
+
 @description('Audience added to Keycloak access tokens for the Trading Advisor.')
 param advisorMemoryAudience string = 'trading-advisor'
 
@@ -569,6 +577,9 @@ var advisorMemoryEnv = advisorMemoryProvider == 'none' ? {} : {
   ADVISOR_MEMORY_SOURCE_ID: { value: advisorMemorySourceId }
   ADVISOR_MEMORY_AGENT_ID: { value: advisorMemoryAgentId }
   ADVISOR_MEMORY_ENTRA_TENANT_ID: { value: advisorMemoryEntraTenantId }
+  ADVISOR_MEMORY_IDENTITY_MODE: { value: advisorMemoryIdentityMode }
+  ADVISOR_MEMORY_DEMO_SUBJECT: { value: advisorMemoryDemoSubject }
+  ADVISOR_MEMORY_DEMO_USER_ID: { value: advisorMemoryDemoUserId }
   ADVISOR_MEMORY_OIDC_ISSUER: { value: effectiveOidcIssuer }
   ADVISOR_MEMORY_OIDC_AUDIENCE: { value: advisorMemoryAudience }
   ADVISOR_MEMORY_OIDC_METADATA: { value: replace(effectiveOidcTokenEndpoint, '/protocol/openid-connect/token', '/.well-known/openid-configuration') }

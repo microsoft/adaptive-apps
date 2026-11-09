@@ -16,6 +16,40 @@ using Xunit;
 
 public sealed class AdviceApiTests
 {
+    [Fact]
+    public async Task KeycloakDemoUsesOnlyExplicitSubjectMappingAndStillValidatesJwt()
+    {
+        await using var app = new AdvisorFactory(identityMode: "keycloak-demo");
+        using var client = app.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", app.Token(includeIdentity: false));
+        var saved = await client.PostAsJsonAsync("/advice", new { question = "Remember: demo-only fact" });
+        Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
+        var recall = await client.PostAsJsonAsync("/advice", new { question = "Recall memories" });
+        Assert.Contains("demo-only fact", await recall.Content.ReadAsStringAsync());
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", app.Token(MemoryTests.Other));
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await client.PostAsJsonAsync("/advice", new { question = "Recall memories" })).StatusCode);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", app.Token(issuer: "https://other.test"));
+        Assert.Equal(HttpStatusCode.Unauthorized,
+            (await client.PostAsJsonAsync("/advice", new { question = "Recall memories" })).StatusCode);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", app.Token(audience: "wrong"));
+        Assert.Equal(HttpStatusCode.Unauthorized,
+            (await client.PostAsJsonAsync("/advice", new { question = "Recall memories" })).StatusCode);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", app.Token(expired: true));
+        Assert.Equal(HttpStatusCode.Unauthorized,
+            (await client.PostAsJsonAsync("/advice", new { question = "Recall memories" })).StatusCode);
+    }
+
+    [Theory]
+    [InlineData("unknown", MemoryTests.Owner)]
+    [InlineData("keycloak-demo", "")]
+    [InlineData("keycloak-demo", "not-a-guid")]
+    public async Task InvalidDemoMappingFailsStartup(string mode, string subject)
+    {
+        await using var app = new AdvisorFactory(identityMode: mode, demoSubject: subject);
+        Assert.Throws<InvalidOperationException>(() => app.CreateClient());
+    }
+
     [Theory]
     [InlineData(null, true)]
     [InlineData("true", true)]
@@ -118,7 +152,8 @@ public sealed class AdviceApiTests
 }
 
 public sealed class AdvisorFactory(
-    bool memoryEnabled = true, string? postgres = null, string? postgresReadOnly = null) : WebApplicationFactory<Program>
+    bool memoryEnabled = true, string? postgres = null, string? postgresReadOnly = null,
+    string? identityMode = null, string demoSubject = MemoryTests.Owner) : WebApplicationFactory<Program>
 {
     private const string Issuer = "https://identity.test/realms/adaptive";
     private readonly RsaSecurityKey key = new(RSA.Create(2048));
@@ -134,6 +169,12 @@ public sealed class AdvisorFactory(
         builder.UseSetting("ADVISOR_MEMORY_SOURCE_ID", "demo-source");
         builder.UseSetting("ADVISOR_MEMORY_AGENT_ID", "trading-advisor");
         builder.UseSetting("ADVISOR_MEMORY_ENTRA_TENANT_ID", MemoryTests.Tenant);
+        if (identityMode is not null)
+        {
+            builder.UseSetting("ADVISOR_MEMORY_IDENTITY_MODE", identityMode);
+            builder.UseSetting("ADVISOR_MEMORY_DEMO_SUBJECT", demoSubject);
+            builder.UseSetting("ADVISOR_MEMORY_DEMO_USER_ID", MemoryTests.Tenant);
+        }
         builder.UseSetting("ADVISOR_MEMORY_OIDC_ISSUER", Issuer);
         builder.UseSetting("ADVISOR_MEMORY_OIDC_METADATA", Issuer + "/.well-known/openid-configuration");
         builder.UseSetting("ADVISOR_MEMORY_OIDC_AUDIENCE", "trading-advisor");
