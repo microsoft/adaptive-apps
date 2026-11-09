@@ -24,9 +24,10 @@ public static class AdvisorMemoryConfiguration
         var tenant = identityMode == "entra" ? Required("ADVISOR_MEMORY_ENTRA_TENANT_ID") : "";
         var demoSubject = identityMode == "keycloak-demo" ? Required("ADVISOR_MEMORY_DEMO_SUBJECT") : null;
         var demoUserId = identityMode == "keycloak-demo" ? Required("ADVISOR_MEMORY_DEMO_USER_ID") : null;
-        foreach (var (name, value) in identityMode == "entra"
-            ? new[] { ("ADVISOR_MEMORY_ENTRA_TENANT_ID", tenant) }
-            : new[] { ("ADVISOR_MEMORY_DEMO_SUBJECT", demoSubject), ("ADVISOR_MEMORY_DEMO_USER_ID", demoUserId) })
+        (string Name, string? Value)[] identityValues = identityMode == "entra"
+            ? [("ADVISOR_MEMORY_ENTRA_TENANT_ID", tenant)]
+            : [("ADVISOR_MEMORY_DEMO_SUBJECT", demoSubject), ("ADVISOR_MEMORY_DEMO_USER_ID", demoUserId)];
+        foreach (var (name, value) in identityValues)
         {
             if (!Guid.TryParse(value, out var id) || id == Guid.Empty)
                 throw new InvalidOperationException($"{name} must be a nonempty GUID.");
