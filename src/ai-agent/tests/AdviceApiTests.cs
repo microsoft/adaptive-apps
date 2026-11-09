@@ -27,8 +27,9 @@ public sealed class AdviceApiTests
         var recall = await client.PostAsJsonAsync("/advice", new { question = "Recall memories" });
         Assert.Contains("demo-only fact", await recall.Content.ReadAsStringAsync());
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", app.Token(MemoryTests.Other));
-        Assert.Equal(HttpStatusCode.Forbidden,
-            (await client.PostAsJsonAsync("/advice", new { question = "Recall memories" })).StatusCode);
+        var unmapped = await client.PostAsJsonAsync("/advice", new { question = "Recall memories" });
+        Assert.Equal(HttpStatusCode.Forbidden, unmapped.StatusCode);
+        Assert.Contains("configured identity mode", await unmapped.Content.ReadAsStringAsync());
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", app.Token(issuer: "https://other.test"));
         Assert.Equal(HttpStatusCode.Unauthorized,
             (await client.PostAsJsonAsync("/advice", new { question = "Recall memories" })).StatusCode);

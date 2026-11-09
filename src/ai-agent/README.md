@@ -282,6 +282,40 @@ service account or add its workload-identity metadata extension.
 
 ## PostgreSQL schema and synchronization
 
+### Retained database ownership
+
+Inspect the existing trading PostgreSQL Deployment before choosing it for
+memory: the sample's database recipe can be ephemeral. A container filesystem
+is not durable memory, even if a sync pass succeeded.
+
+The optional [native PostgreSQL manifest](Memory/postgres.yaml) provisions a
+separate single-instance memory database, not an operator or a replacement for
+trading's database. Before applying it, provision:
+
+* StorageClass `advisor-memory-retained`, using the cluster's reviewed dynamic
+  provisioner with **Retain** reclaim policy.
+* Separately retained Secret `advisor-memory-database` in
+  `trading-adaptive-apps`, with `owner-password`. Generate a password once and
+  retain it; never replace credentials for an existing volume.
+
+The StatefulSet uses database `advisor_memory`, owner `memory_owner`, a pinned
+PostgreSQL 16 Alpine image, and its native non-root UID/GID 70. Its PVC is
+retained on scale-down/deletion. The manifest does not create database roles,
+seed memories, enable TLS, or configure network isolation; apply the schema,
+dedicated roles, and appropriate network/TLS controls separately. It is a
+single-instance demo database, not a highly available production service.
+
+```bash
+kubectl --context <reviewed-context> apply -f src/ai-agent/Memory/postgres.yaml
+kubectl --context <reviewed-context> -n trading-adaptive-apps \
+  rollout status statefulset/advisor-memory-postgres
+```
+
+Changing the image or recreating a Pod must not replace the Secret or PVC.
+Retain identity credentials separately from this database state.
+
+### Schema and roles
+
 Apply the empty schema to **both** existing PostgreSQL databases, using
 separate approved administrative connections:
 
@@ -402,6 +436,47 @@ SELECT source_id, agent_id, completed_at, scanned_count FROM advisor_memory.sync
    `What did I ask you to remember?`.
 6. Confirm another user cannot recall the fact and a local `Remember:` is
    explicitly rejected.
+
+For the configured Keycloak-local demo, use the OIDC button on each frontend,
+then sign in as the dedicated `advisor-demo` realm user. Each cluster retains
+its own password in `min-ai/advisor-memory-demo-login`; retrieve it only in
+your private terminal:
+
+```bash
+kubectl --context <local-or-aks-context> -n min-ai \
+  get secret advisor-memory-demo-login -o jsonpath='{.data.password}' |
+  base64 --decode
+printf '\n'
+```
+
+Do not use the frontend's separate password-login form or an unrelated Entra
+user for this explicitly single-user demo. Sign out of previous sessions and
+use separate browser profiles for the two localhost deployments. Use the exact
+`Remember:` and `Recall memories` commands above; a model reply such as
+"Understood" to a different phrase is not a durable-save acknowledgment.
+
+When hosting sync with user systemd services, keep source/destination database
+forwards explicitly pinned to their Kubernetes contexts, store the worker's
+environment file with mode 0600, and inspect its completion log. In the
+workstation service layout used for this demo:
+
+```bash
+systemctl --user status advisor-memory-sync.service
+journalctl --user -u advisor-memory-sync.service --no-pager -n 10
+
+# Simulate source-storage disconnection without changing local credentials.
+systemctl --user stop advisor-memory-sync.service advisor-memory-postgres@aks.service
+# Recall memories locally, then restore synchronization.
+systemctl --user start advisor-memory-postgres@aks.service advisor-memory-sync.service
+```
+
+The context-pinned `advisor-memory-frontend@local` and
+`advisor-memory-frontend@aks` services expose ports 3000 and 3001; do not start
+competing forwards on those ports. These workstation services require the
+user's session/WSL instance and valid Kubernetes credentials; they are not
+cluster-hosted sync or a guarantee of synchronization while the workstation
+is off. After a database restart, a request may explicitly return 503 while
+its pooled connection is invalidated; retry after the database is Ready.
 
 Recall and remember commands do not call the model. Ordinary trading advice
 still requires the configured inference provider; disconnecting from Azure

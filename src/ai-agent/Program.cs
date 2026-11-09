@@ -256,8 +256,8 @@ var advice = app.MapPost("/advice", async (
     }
     catch (UnauthorizedAccessException)
     {
-        app.Logger.LogWarning("Advisor memory rejected missing or untrusted Entra user claims.");
-        return Results.Json(new { answer = "Advisor memory requires verified Entra tenant and object-ID claims." }, statusCode: 403);
+        app.Logger.LogWarning("Advisor memory rejected an identity not authorized by the configured identity mode.");
+        return Results.Json(new { answer = "Advisor memory requires an authorized identity for the configured identity mode." }, statusCode: 403);
     }
     catch (MemoryReadOnlyException error)
     {
