@@ -56,7 +56,11 @@ const config = {
   mqttTopic: process.env.MQTT_TOPIC || "orders/new",
   nativeAgentUrl: process.env.NATIVE_AGENT_URL || "",
   nativeUiUrl: process.env.NATIVE_UI_URL || "",
+  computePlatform: process.env.COMPUTE_PLATFORM || "aks",
 };
+if (!["aks", "k3s"].includes(config.computePlatform)) {
+  throw new Error("COMPUTE_PLATFORM must be aks or k3s");
+}
 
 // ---------------------------------------------------------------------------
 // Auth configuration
@@ -372,6 +376,7 @@ app.get("/config", ensureAuth, (req, res) => {
     aiAgentUrl: "",            // relative — proxied through this server at /advice
     mqttWsUrl: `ws://${req.headers.host}/mqtt`,  // WebSocket proxied at /mqtt
     mqttTopic: config.mqttTopic,
+    computePlatform: config.computePlatform,
   });
 });
 

@@ -610,6 +610,9 @@ fn print_native_app_exports(args: &BootstrapArgs, prepared: &agents::Prepared) -
     println!("  --environment {} \\", args.radius_environment);
     println!("  --parameters imageRegistry=\"$TRADING_IMAGE_REGISTRY\" \\");
     println!("  --parameters imageTag=\"$TRADING_IMAGE_TAG\" \\");
+    if matches!(args.platform, Some(Platform::K3s)) {
+        println!("  --parameters computePlatform=k3s \\");
+    }
     println!("  --parameters authUsername=\"$AUTH_USERNAME\" \\");
     println!("  --parameters authPassword=\"$AUTH_PASSWORD\" \\");
     println!(

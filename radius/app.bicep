@@ -46,6 +46,10 @@ param imageRegistry string = 'ghcr.io/microsoft/adaptive-apps'
 @description('Container image tag for all three application services.')
 param imageTag string = 'latest'
 
+@description('Actual Kubernetes hosting platform displayed by the trading frontend, independent of connectivity and model provider.')
+@allowed(['aks', 'k3s'])
+param computePlatform string = 'aks'
+
 @description('Enable the portable-agent pages and authenticated gateway proxy under /agents. Disabled by default.')
 param enableNativeAgents bool = false
 
@@ -743,6 +747,7 @@ resource frontend 'Applications.Core/containers@2023-10-01-preview' = {
         OIDC_CLIENT_ID: { value: oidcClientId }
         OIDC_CLIENT_SECRET: { value: oidcClientSecret }
         APP_BASE_URL: { value: appBaseUrl }
+        COMPUTE_PLATFORM: { value: computePlatform }
         AUTH_USERNAME:  { value: authUsername }
         AUTH_PASSWORD:  { value: authPassword }
         SESSION_SECRET: { value: sessionSecret }

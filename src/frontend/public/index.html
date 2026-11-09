@@ -593,7 +593,11 @@
         redButtonLabelEl.textContent = disconnected ? "Restore cloud" : "Simulate outage";
         capabilityModeEl.textContent = disconnected ? "Disconnected scenario" : "Cloud connected";
         capabilityListEl.replaceChildren(
-          ...capabilities[mode].map(({ icon, fallback, backing, label, value, detail }) => {
+          ...capabilities[mode].map((capability) => {
+            const { icon, fallback, backing, label, value, detail } =
+              capability.label === "Compute" && config?.computePlatform === "k3s"
+                ? { fallback: "K3s", backing: "local", label: "Compute", value: "K3s", detail: "Hosted on local K3s Kubernetes" }
+                : capability;
             const card = document.createElement("div");
             card.className = "capability-card";
             card.dataset.backing = backing;
@@ -828,6 +832,7 @@
 
       async function init() {
         config = await fetchJson("/config");
+        renderCapabilities(document.body.dataset.connectivity);
 
         // Display logged-in user
         try {
@@ -856,7 +861,6 @@
       }
 
       redButtonEl.addEventListener("click", toggleConnectivityScenario);
-      renderCapabilities("connected");
       init().catch(() => {
         statusEl.textContent = "Failed to initialize frontend config.";
       });
