@@ -10,7 +10,8 @@ public interface IAdvisorMemoryService
 
 public sealed class AdvisorMemoryService(
     IMemoryStore store, string tenantId, string sourceId, string agentId,
-    string identityMode = "entra", string? demoSubject = null, string? demoUserId = null) : IAdvisorMemoryService
+    string identityMode = "entra", string? demoSubject = null, string? demoUserId = null,
+    string? sharedScopeId = null) : IAdvisorMemoryService
 {
     public async Task<(string? Answer, string Context)> PrepareAsync(
         ClaimsPrincipal user, string question, CancellationToken cancellationToken)
@@ -19,6 +20,7 @@ public sealed class AdvisorMemoryService(
         {
             "entra" => MemoryScope.ForUser(user, tenantId, sourceId, agentId),
             "keycloak-demo" => MemoryScope.ForKeycloakDemo(user, demoSubject ?? "", demoUserId ?? "", sourceId, agentId),
+            "shared-demo" => MemoryScope.ForSharedDemo(user, sharedScopeId ?? "", sourceId, agentId),
             _ => throw new InvalidOperationException("Unsupported advisor memory identity mode.")
         };
         if (question.StartsWith("Remember:", StringComparison.OrdinalIgnoreCase))

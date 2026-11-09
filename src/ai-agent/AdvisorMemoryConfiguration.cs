@@ -19,14 +19,18 @@ public static class AdvisorMemoryConfiguration
         var sourceId = Required("ADVISOR_MEMORY_SOURCE_ID");
         var agentId = Required("ADVISOR_MEMORY_AGENT_ID");
         var identityMode = builder.Configuration["ADVISOR_MEMORY_IDENTITY_MODE"] ?? "entra";
-        if (identityMode is not ("entra" or "keycloak-demo"))
-            throw new InvalidOperationException("ADVISOR_MEMORY_IDENTITY_MODE must be entra or keycloak-demo.");
+        if (identityMode is not ("entra" or "keycloak-demo" or "shared-demo"))
+            throw new InvalidOperationException("ADVISOR_MEMORY_IDENTITY_MODE must be entra, keycloak-demo, or shared-demo.");
         var tenant = identityMode == "entra" ? Required("ADVISOR_MEMORY_ENTRA_TENANT_ID") : "";
         var demoSubject = identityMode == "keycloak-demo" ? Required("ADVISOR_MEMORY_DEMO_SUBJECT") : null;
         var demoUserId = identityMode == "keycloak-demo" ? Required("ADVISOR_MEMORY_DEMO_USER_ID") : null;
-        (string Name, string? Value)[] identityValues = identityMode == "entra"
-            ? [("ADVISOR_MEMORY_ENTRA_TENANT_ID", tenant)]
-            : [("ADVISOR_MEMORY_DEMO_SUBJECT", demoSubject), ("ADVISOR_MEMORY_DEMO_USER_ID", demoUserId)];
+        var sharedScopeId = identityMode == "shared-demo" ? Required("ADVISOR_MEMORY_SHARED_SCOPE_ID") : null;
+        (string Name, string? Value)[] identityValues = identityMode switch
+        {
+            "entra" => [("ADVISOR_MEMORY_ENTRA_TENANT_ID", tenant)],
+            "keycloak-demo" => [("ADVISOR_MEMORY_DEMO_SUBJECT", demoSubject), ("ADVISOR_MEMORY_DEMO_USER_ID", demoUserId)],
+            _ => [("ADVISOR_MEMORY_SHARED_SCOPE_ID", sharedScopeId)]
+        };
         foreach (var (name, value) in identityValues)
         {
             if (!Guid.TryParse(value, out var id) || id == Guid.Empty)
@@ -85,7 +89,8 @@ public static class AdvisorMemoryConfiguration
                 services.GetRequiredService<NpgsqlDataSource>(), sourceId, agentId, readOnly));
         }
         builder.Services.AddSingleton<IAdvisorMemoryService>(services => new AdvisorMemoryService(
-            services.GetRequiredService<IMemoryStore>(), tenant, sourceId, agentId, identityMode, demoSubject, demoUserId));
+            services.GetRequiredService<IMemoryStore>(), tenant, sourceId, agentId,
+            identityMode, demoSubject, demoUserId, sharedScopeId));
         return true;
     }
 }

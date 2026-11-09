@@ -79,6 +79,24 @@ public sealed class MemoryTests
         await Assert.ThrowsAsync<ArgumentException>(() => service.PrepareAsync(User(), "Remember: ", default));
     }
 
+    [Fact]
+    public void SharedDemoIsPortableButSeparateFromOtherIdentityModesAndScopes()
+    {
+        var cloud = MemoryScope.ForSharedDemo(User(), Tenant, "demo-source", "trading-advisor");
+        var local = MemoryScope.ForSharedDemo(User(Other, issuer: "local"), Tenant, "demo-source", "trading-advisor");
+        Assert.Equal(cloud, local);
+        Assert.NotEqual(Scope().PartitionKey, cloud.PartitionKey);
+        var demoUser = new ClaimsPrincipal(new ClaimsIdentity(new[] { new Claim("sub", Owner) }, "jwt"));
+        Assert.NotEqual(MemoryScope.ForKeycloakDemo(demoUser, Owner, Tenant, "demo-source", "trading-advisor").PartitionKey,
+            cloud.PartitionKey);
+        Assert.NotEqual(MemoryScope.ForSharedDemo(User(), Other, "demo-source", "trading-advisor").PartitionKey,
+            cloud.PartitionKey);
+        Assert.NotEqual(MemoryScope.ForSharedDemo(User(), Tenant, "another-source", "trading-advisor").PartitionKey,
+            cloud.PartitionKey);
+        Assert.Throws<UnauthorizedAccessException>(() =>
+            MemoryScope.ForSharedDemo(new(new ClaimsIdentity()), Tenant, "demo-source", "trading-advisor"));
+    }
+
     [StorageFact]
     public async Task SourceToReplicaIntegration()
     {

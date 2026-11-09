@@ -17,6 +17,41 @@ using Xunit;
 public sealed class AdviceApiTests
 {
     [Fact]
+    public async Task SharedDemoDeliberatelySharesFactsBetweenAuthenticatedUsersButNeverAnonymousRequests()
+    {
+        await using var app = new AdvisorFactory(identityMode: "shared-demo");
+        using var client = app.CreateClient();
+        Assert.Equal(HttpStatusCode.Unauthorized,
+            (await client.PostAsJsonAsync("/advice", new { question = "Recall memories" })).StatusCode);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", app.Token(includeIdentity: false));
+        Assert.Equal(HttpStatusCode.OK,
+            (await client.PostAsJsonAsync("/advice", new { question = "Remember: shared demo fact" })).StatusCode);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", app.Token(MemoryTests.Other, includeIdentity: false));
+        var recall = await client.PostAsJsonAsync("/advice", new { question = "Recall memories" });
+        Assert.Equal(HttpStatusCode.OK, recall.StatusCode);
+        Assert.Contains("shared demo fact", await recall.Content.ReadAsStringAsync());
+        app.Store.ReadOnly = true;
+        Assert.Equal(HttpStatusCode.Conflict,
+            (await client.PostAsJsonAsync("/advice", new { question = "Remember: forbidden local write" })).StatusCode);
+        foreach (var token in new[] { app.Token(issuer: "https://other.test"), app.Token(audience: "wrong"), app.Token(expired: true) })
+        {
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            Assert.Equal(HttpStatusCode.Unauthorized,
+                (await client.PostAsJsonAsync("/advice", new { question = "Recall memories" })).StatusCode);
+        }
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("invalid")]
+    [InlineData("00000000-0000-0000-0000-000000000000")]
+    public async Task InvalidSharedScopeFailsStartup(string scope)
+    {
+        await using var app = new AdvisorFactory(identityMode: "shared-demo", sharedScopeId: scope);
+        Assert.Throws<InvalidOperationException>(() => app.CreateClient());
+    }
+
+    [Fact]
     public async Task KeycloakDemoUsesOnlyExplicitSubjectMappingAndStillValidatesJwt()
     {
         await using var app = new AdvisorFactory(identityMode: "keycloak-demo");
@@ -154,7 +189,8 @@ public sealed class AdviceApiTests
 
 public sealed class AdvisorFactory(
     bool memoryEnabled = true, string? postgres = null, string? postgresReadOnly = null,
-    string? identityMode = null, string demoSubject = MemoryTests.Owner) : WebApplicationFactory<Program>
+    string? identityMode = null, string demoSubject = MemoryTests.Owner,
+    string sharedScopeId = MemoryTests.Tenant) : WebApplicationFactory<Program>
 {
     private const string Issuer = "https://identity.test/realms/adaptive";
     private readonly RsaSecurityKey key = new(RSA.Create(2048));
@@ -175,6 +211,7 @@ public sealed class AdvisorFactory(
             builder.UseSetting("ADVISOR_MEMORY_IDENTITY_MODE", identityMode);
             builder.UseSetting("ADVISOR_MEMORY_DEMO_SUBJECT", demoSubject);
             builder.UseSetting("ADVISOR_MEMORY_DEMO_USER_ID", MemoryTests.Tenant);
+            builder.UseSetting("ADVISOR_MEMORY_SHARED_SCOPE_ID", sharedScopeId);
         }
         builder.UseSetting("ADVISOR_MEMORY_OIDC_ISSUER", Issuer);
         builder.UseSetting("ADVISOR_MEMORY_OIDC_METADATA", Issuer + "/.well-known/openid-configuration");

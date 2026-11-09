@@ -36,6 +36,17 @@ public sealed record MemoryScope(string SourceId, string AgentId, string Partiti
         return new(sourceId, agentId, Convert.ToHexString(key).ToLowerInvariant());
     }
 
+    public static MemoryScope ForSharedDemo(
+        ClaimsPrincipal user, string sharedScopeId, string sourceId, string agentId)
+    {
+        if (user.Identity?.IsAuthenticated != true ||
+            !Guid.TryParse(sharedScopeId, out var scopeId) || scopeId == Guid.Empty)
+            throw new UnauthorizedAccessException("Shared demo memory requires an authenticated user and configured scope.");
+        var key = SHA256.HashData(Encoding.UTF8.GetBytes(
+            JsonSerializer.Serialize(new[] { sourceId, agentId, "shared-demo", scopeId.ToString("D") })));
+        return new(sourceId, agentId, Convert.ToHexString(key).ToLowerInvariant());
+    }
+
     private static Guid SingleGuidClaim(ClaimsPrincipal user, string name)
     {
         var values = user.FindAll(name).ToArray();

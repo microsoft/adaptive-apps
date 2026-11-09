@@ -72,7 +72,34 @@ on both deployments. PostgreSQL authenticates with separate database roles;
 it does not use this user claim or require Azure Storage/workload identity.
 The optional Table provider uses the AKS workload identity independently.
 
-### Keycloak-local demo without Entra access
+### Shared authenticated demo memory
+
+For a demo where memory belongs to the **application**, not an individual
+user, explicitly set `ADVISOR_MEMORY_IDENTITY_MODE=shared-demo` on both advisors.
+Set the same nonempty UUID in `ADVISOR_MEMORY_SHARED_SCOPE_ID` on both. Radius
+parameters are `advisorMemoryIdentityMode=shared-demo` and
+`advisorMemorySharedScopeId=<shared-uuid>`.
+
+**All authenticated advisor users can read the same facts, and all can append
+facts on the writable AKS deployment. There is no per-user privacy in this
+mode. Do not store private user information.** Local memory remains read-only.
+Each deployment still validates its own Keycloak issuer, JWT signature,
+audience, and expiry. Anonymous requests and the frontend's separate
+non-OIDC password login remain disallowed.
+
+Use your existing OIDC login on each system. Entra claims, matching subjects,
+matching usernames, and a special interactive demo account are not required.
+Database roles used by sync are entirely separate from browser users.
+The `trading-advisor` access-token audience is still required; an older session
+may need sign-out/sign-in to acquire that audience.
+
+Shared partitions hash `[source ID, agent ID, "shared-demo", shared UUID]`,
+separate from Entra and mapped-user demo partitions. Selecting shared mode
+does not migrate or delete facts from those other scopes. Re-save demo facts
+in the shared scope explicitly. This mode is never enabled automatically or
+used as a fallback for failed user-identity verification.
+
+### Optional mapped Keycloak-local demo without Entra access
 
 Set `ADVISOR_MEMORY_IDENTITY_MODE=keycloak-demo` explicitly on both advisors.
 Create a dedicated local user in each Keycloak realm and sign in using the
@@ -426,18 +453,20 @@ SELECT source_id, agent_id, completed_at, scanned_count FROM advisor_memory.sync
 
 ## Demonstration and verification
 
-1. Sign in through the same verified Entra identity on both systems, or use
-   the explicitly mapped Keycloak-local demo users described above.
+1. In `shared-demo` mode, use your normal OIDC login on each system. In Entra
+   mode, use the same verified Entra identity; in `keycloak-demo`, use the
+   explicitly mapped realm users.
 2. On AKS, send `Remember: The king has donkey ears!`.
 3. Run a successful sync pass and inspect `sync_status`.
 4. Stop the sync worker or disconnect its cloud network. Keep local Keycloak,
    PostgreSQL, and the local app available.
 5. Start a fresh local advisor interaction and send
    `What did I ask you to remember?`.
-6. Confirm another user cannot recall the fact and a local `Remember:` is
-   explicitly rejected.
+6. Confirm a local `Remember:` is explicitly rejected. In per-user modes,
+   another user cannot recall the fact. In `shared-demo`, another authenticated
+   advisor user intentionally can recall it; anonymous access must still fail.
 
-For the configured Keycloak-local demo, use the OIDC button on each frontend,
+Only for the optional `keycloak-demo` mode, use the OIDC button on each frontend,
 then sign in as the dedicated `advisor-demo` realm user. Each cluster retains
 its own password in `min-ai/advisor-memory-demo-login`; retrieve it only in
 your private terminal:
@@ -449,8 +478,9 @@ kubectl --context <local-or-aks-context> -n min-ai \
 printf '\n'
 ```
 
-Do not use the frontend's separate password-login form or an unrelated Entra
-user for this explicitly single-user demo. Sign out of previous sessions and
+Do not use the frontend's separate password-login form. The mapped-user
+`keycloak-demo` mode does not accept unrelated Entra users; `shared-demo` does
+accept any user with a valid advisor OIDC token. Sign out of previous sessions and
 use separate browser profiles for the two localhost deployments. Use the exact
 `Remember:` and `Recall memories` commands above; a model reply such as
 "Understood" to a different phrase is not a durable-save acknowledgment.

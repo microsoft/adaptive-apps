@@ -149,9 +149,12 @@ param advisorMemoryAgentId string = 'trading-advisor'
 @description('Entra tenant accepted in the advisor memory user claims, not necessarily the AKS subscription tenant.')
 param advisorMemoryEntraTenantId string = ''
 
-@description('Verified identity mode. keycloak-demo explicitly maps one local Keycloak subject per deployment; never an Entra fallback.')
-@allowed(['entra', 'keycloak-demo'])
+@description('Verified identity mode. keycloak-demo maps one subject; shared-demo deliberately shares memory among all authenticated advisor users. Never an automatic fallback.')
+@allowed(['entra', 'keycloak-demo', 'shared-demo'])
 param advisorMemoryIdentityMode string = 'entra'
+
+@description('In shared-demo mode, a reviewed UUID shared by both deployments. All authenticated advisor users share this memory; no per-user privacy.')
+param advisorMemorySharedScopeId string = ''
 
 @description('In keycloak-demo mode, this deployment Keycloak user UUID and a shared stable demo UUID. Never derive from username or email.')
 param advisorMemoryDemoSubject string = ''
@@ -578,6 +581,7 @@ var advisorMemoryEnv = advisorMemoryProvider == 'none' ? {} : {
   ADVISOR_MEMORY_AGENT_ID: { value: advisorMemoryAgentId }
   ADVISOR_MEMORY_ENTRA_TENANT_ID: { value: advisorMemoryEntraTenantId }
   ADVISOR_MEMORY_IDENTITY_MODE: { value: advisorMemoryIdentityMode }
+  ADVISOR_MEMORY_SHARED_SCOPE_ID: { value: advisorMemorySharedScopeId }
   ADVISOR_MEMORY_DEMO_SUBJECT: { value: advisorMemoryDemoSubject }
   ADVISOR_MEMORY_DEMO_USER_ID: { value: advisorMemoryDemoUserId }
   ADVISOR_MEMORY_OIDC_ISSUER: { value: effectiveOidcIssuer }
