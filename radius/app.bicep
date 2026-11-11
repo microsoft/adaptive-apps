@@ -150,6 +150,11 @@ param advisorMemoryProvider string = 'none'
 param advisorMemorySourceId string = 'trading-memory-v1'
 param advisorMemoryAgentId string = 'trading-advisor'
 
+@description('Maximum recent facts used by explicit recall and model context. Set to 1 for a latest-memory-only demo; older facts remain retained and synchronized.')
+@minValue(1)
+@maxValue(100)
+param advisorMemoryRecallLimit int = 100
+
 @description('Entra tenant accepted in the advisor memory user claims, not necessarily the AKS subscription tenant.')
 param advisorMemoryEntraTenantId string = ''
 
@@ -583,6 +588,7 @@ var aiAgentBaseEnv = {
 var advisorMemoryEnv = advisorMemoryProvider == 'none' ? {} : {
   ADVISOR_MEMORY_SOURCE_ID: { value: advisorMemorySourceId }
   ADVISOR_MEMORY_AGENT_ID: { value: advisorMemoryAgentId }
+  ADVISOR_MEMORY_RECALL_LIMIT: { value: string(advisorMemoryRecallLimit) }
   ADVISOR_MEMORY_ENTRA_TENANT_ID: { value: advisorMemoryEntraTenantId }
   ADVISOR_MEMORY_IDENTITY_MODE: { value: advisorMemoryIdentityMode }
   ADVISOR_MEMORY_SHARED_SCOPE_ID: { value: advisorMemorySharedScopeId }

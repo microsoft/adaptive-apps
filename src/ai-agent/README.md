@@ -24,6 +24,16 @@ With memory enabled, the advisor accepts these explicit commands:
   data. Facts are not system instructions. This is bounded exact-history
   retrieval, not semantic/vector search.
 
+For a single-memory demo, set `ADVISOR_MEMORY_RECALL_LIMIT=1` on **both**
+advisors (Radius: `advisorMemoryRecallLimit=1`). Explicit recall and model
+answers then use only the newest saved fact by creation time, with fact ID as
+a deterministic tie-breaker. Each successful `Remember:` makes that new fact
+the active memory; the local advisor sees it after synchronization. Older
+facts remain immutable in storage and are still synchronized, but are not
+supplied to the model or shown by recall. The default remains 100; values
+outside 1–100 or non-integers fail startup. This applies to existing facts
+immediately and does not clear or rewrite either database.
+
 The read-only local PostgreSQL provider rejects `Remember:` with HTTP 409. It
 never writes back to the cloud. Storage failures return HTTP 503 rather than pretending
 there are no memories. Missing tokens return 401; missing, duplicate, or

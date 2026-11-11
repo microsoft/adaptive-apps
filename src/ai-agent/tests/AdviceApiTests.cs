@@ -17,6 +17,35 @@ using Xunit;
 public sealed class AdviceApiTests
 {
     [Fact]
+    public async Task SingleMemoryConfigurationAppliesToAuthenticatedRecall()
+    {
+        await using var app = new AdvisorFactory(identityMode: "shared-demo", recallLimit: "1");
+        using var client = app.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", app.Token(includeIdentity: false));
+        foreach (var fact in new[] { "Boris said 1111", "Boris said 3456" })
+            Assert.Equal(HttpStatusCode.OK,
+                (await client.PostAsJsonAsync("/advice", new { question = $"Remember: {fact}" })).StatusCode);
+        app.Store.Facts[0] = app.Store.Facts[0] with { CreatedAt = DateTimeOffset.UtcNow.AddDays(-1) };
+        var response = await client.PostAsJsonAsync("/advice", new { question = "Recall memories" });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var text = await response.Content.ReadAsStringAsync();
+        Assert.Contains("Boris said 3456", text);
+        Assert.DoesNotContain("1111", text);
+        Assert.Equal(2, app.Store.Facts.Count);
+    }
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("101")]
+    [InlineData("invalid")]
+    public async Task InvalidRecallLimitFailsStartup(string limit)
+    {
+        await using var app = new AdvisorFactory(recallLimit: limit);
+        var error = Assert.Throws<InvalidOperationException>(() => app.CreateClient());
+        Assert.Contains("ADVISOR_MEMORY_RECALL_LIMIT", error.Message);
+    }
+
+    [Fact]
     public async Task SharedDemoDeliberatelySharesFactsBetweenAuthenticatedUsersButNeverAnonymousRequests()
     {
         await using var app = new AdvisorFactory(identityMode: "shared-demo");
@@ -190,7 +219,7 @@ public sealed class AdviceApiTests
 public sealed class AdvisorFactory(
     bool memoryEnabled = true, string? postgres = null, string? postgresReadOnly = null,
     string? identityMode = null, string demoSubject = MemoryTests.Owner,
-    string sharedScopeId = MemoryTests.Tenant) : WebApplicationFactory<Program>
+    string sharedScopeId = MemoryTests.Tenant, string? recallLimit = null) : WebApplicationFactory<Program>
 {
     private const string Issuer = "https://identity.test/realms/adaptive";
     private readonly RsaSecurityKey key = new(RSA.Create(2048));
@@ -205,6 +234,8 @@ public sealed class AdvisorFactory(
             builder.UseSetting("ADVISOR_MEMORY_POSTGRES_READ_ONLY", postgresReadOnly);
         builder.UseSetting("ADVISOR_MEMORY_SOURCE_ID", "demo-source");
         builder.UseSetting("ADVISOR_MEMORY_AGENT_ID", "trading-advisor");
+        if (recallLimit is not null)
+            builder.UseSetting("ADVISOR_MEMORY_RECALL_LIMIT", recallLimit);
         builder.UseSetting("ADVISOR_MEMORY_ENTRA_TENANT_ID", MemoryTests.Tenant);
         if (identityMode is not null)
         {

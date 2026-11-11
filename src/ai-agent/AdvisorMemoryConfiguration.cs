@@ -18,6 +18,9 @@ public static class AdvisorMemoryConfiguration
         string Required(string name) => MemoryCredentials.Required(builder.Configuration[name], name);
         var sourceId = Required("ADVISOR_MEMORY_SOURCE_ID");
         var agentId = Required("ADVISOR_MEMORY_AGENT_ID");
+        var recallLimitSetting = builder.Configuration["ADVISOR_MEMORY_RECALL_LIMIT"] ?? "100";
+        if (!int.TryParse(recallLimitSetting, out var recallLimit) || recallLimit is < 1 or > 100)
+            throw new InvalidOperationException("ADVISOR_MEMORY_RECALL_LIMIT must be an integer from 1 to 100.");
         var identityMode = builder.Configuration["ADVISOR_MEMORY_IDENTITY_MODE"] ?? "entra";
         if (identityMode is not ("entra" or "keycloak-demo" or "shared-demo"))
             throw new InvalidOperationException("ADVISOR_MEMORY_IDENTITY_MODE must be entra, keycloak-demo, or shared-demo.");
@@ -90,7 +93,7 @@ public static class AdvisorMemoryConfiguration
         }
         builder.Services.AddSingleton<IAdvisorMemoryService>(services => new AdvisorMemoryService(
             services.GetRequiredService<IMemoryStore>(), tenant, sourceId, agentId,
-            identityMode, demoSubject, demoUserId, sharedScopeId));
+            identityMode, demoSubject, demoUserId, sharedScopeId, recallLimit));
         return true;
     }
 }

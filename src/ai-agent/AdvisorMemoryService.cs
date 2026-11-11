@@ -11,7 +11,7 @@ public interface IAdvisorMemoryService
 public sealed class AdvisorMemoryService(
     IMemoryStore store, string tenantId, string sourceId, string agentId,
     string identityMode = "entra", string? demoSubject = null, string? demoUserId = null,
-    string? sharedScopeId = null) : IAdvisorMemoryService
+    string? sharedScopeId = null, int recallLimit = 100) : IAdvisorMemoryService
 {
     public async Task<(string? Answer, string Context)> PrepareAsync(
         ClaimsPrincipal user, string question, CancellationToken cancellationToken)
@@ -36,10 +36,12 @@ public sealed class AdvisorMemoryService(
             return ("Saved to your advisor memory.", "");
         }
 
-        var facts = await store.RecallAsync(scope, cancellationToken);
+        var storedFacts = await store.RecallAsync(scope, cancellationToken);
+        var facts = storedFacts.OrderByDescending(fact => fact.CreatedAt)
+            .ThenBy(fact => fact.Id, StringComparer.Ordinal).Take(recallLimit).ToArray();
         if (question.Equals("Recall memories", StringComparison.OrdinalIgnoreCase) ||
             question.TrimEnd('?', '.', '!').Equals("What did I ask you to remember", StringComparison.OrdinalIgnoreCase))
-            return (facts.Count == 0 ? "No advisor memories are available for your identity in this store."
+            return (facts.Length == 0 ? "No advisor memories are available for your identity in this store."
                 : "Your most recent advisor memories:\n" + string.Join("\n", facts.Select(fact => $"- {fact.Text}")), "");
 
         return (null, """

@@ -16,6 +16,34 @@ public sealed class MemoryTests
     public static MemoryScope Scope(string subject = Owner) =>
         MemoryScope.ForUser(User(subject), Tenant, "demo-source", "trading-advisor");
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SingleMemoryUsesOnlyNewestFactForRecallAndModelContextWithoutDeletingHistory(bool readOnly)
+    {
+        var store = new TestMemoryStore { ReadOnly = readOnly };
+        var now = DateTimeOffset.UtcNow;
+        store.Facts.AddRange([
+            new("demo-source", "trading-advisor", Scope().PartitionKey, "b", "Boris said 9999", now),
+            new("demo-source", "trading-advisor", Scope().PartitionKey, "a", "Boris said 3456", now),
+            new("demo-source", "trading-advisor", Scope().PartitionKey, "c", "Boris said 1111", now.AddDays(-1))
+        ]);
+        var service = new AdvisorMemoryService(store, Tenant, "demo-source", "trading-advisor", recallLimit: 1);
+        foreach (var question in new[] { "Recall memories", "What did I ask you to remember?", "What did Boris say?" })
+        {
+            var result = await service.PrepareAsync(User(), question, default);
+            var supplied = result.Answer ?? result.Context;
+            Assert.Contains("Boris said 3456", supplied);
+            Assert.DoesNotContain("9999", supplied);
+            Assert.DoesNotContain("1111", supplied);
+        }
+        Assert.Equal(3, store.Facts.Count);
+        var defaultService = new AdvisorMemoryService(store, Tenant, "demo-source", "trading-advisor");
+        Assert.Contains("Boris said 1111", (await defaultService.PrepareAsync(User(), "Recall memories", default)).Answer);
+        Assert.Null((await service.PrepareAsync(User(Other), "What did Boris say?", default)).Answer);
+        Assert.DoesNotContain("Boris", (await service.PrepareAsync(User(Other), "What did Boris say?", default)).Context);
+    }
+
     [Fact]
     public void IdentityIsPortableButUserAgentAndSourceAreIsolated()
     {
